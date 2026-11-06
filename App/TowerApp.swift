@@ -29,5 +29,7 @@ private struct MenuBarLabel: View {
         Text(countText).monospacedDigit()
       }
     }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(state.accessibilityLabel)
   }
 }

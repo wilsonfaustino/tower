@@ -114,7 +114,7 @@ private let searchQuery = """
   fragment PullRequestFields on PullRequest {
     number title url isDraft updatedAt headRefName additions deletions reviewDecision
     repository { name }
-    author { login }
+    author { __typename login }
     commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 1) {
       checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
     reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
@@ -147,7 +147,15 @@ private struct StateCount: Decodable {
 
 private struct PullRequestNode: Decodable {
   struct Name: Decodable { var name: String }
-  struct Login: Decodable { var login: String }
+  struct Author: Decodable {
+    var typename: String?
+    var login: String
+
+    enum CodingKeys: String, CodingKey {
+      case typename = "__typename"
+      case login
+    }
+  }
   struct Commits: Decodable { var nodes: [CommitNode] }
   struct CommitNode: Decodable { var commit: Commit }
   struct Commit: Decodable { var statusCheckRollup: Rollup? }
@@ -180,7 +188,7 @@ private struct PullRequestNode: Decodable {
   var deletions: Int?
   var reviewDecision: ReviewDecision?
   var repository: Name?
-  var author: Login?
+  var author: Author?
   var commits: Commits?
   var reviewRequests: ReviewRequests?
   var reviews: TotalCount?
@@ -196,7 +204,7 @@ private struct PullRequestNode: Decodable {
     let reviewers = reviewRequests?.nodes.compactMap(\.requestedReviewer) ?? []
     return PullRequest(
       repository: repository.name, number: number, title: title, url: url,
-      author: author?.login ?? "ghost", isDraft: isDraft ?? false, updatedAt: updatedAt,
+      author: author?.login ?? "ghost", authorIsBot: author?.typename == "Bot", isDraft: isDraft ?? false, updatedAt: updatedAt,
       headBranch: headRefName ?? "", reviewDecision: reviewDecision,
       checkState: rollup.flatMap { CheckState(rawValue: $0.state) },
       failedCheckCount: failedCheckRuns + failedStatusContexts,

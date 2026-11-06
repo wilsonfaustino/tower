@@ -41,9 +41,23 @@ enum Theme {
 
   static let textPrimary = Color(nsColor: .labelColor)
   // System secondary label fails AA on the light panel (3.8:1), so use these values instead.
-  static let textSecondary = Color(nsColor: dynamicColor(light: .black.withAlphaComponent(0.60), dark: .white.withAlphaComponent(0.62)))
-  static let surfaceHover = Color(nsColor: dynamicColor(light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.08)))
-  static let neutralBadgeFill = Color(nsColor: dynamicColor(light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.10)))
+  // Increase Contrast values are stronger so text and fills stay distinct on the panel material.
+  static let textSecondary = Color(
+    nsColor: dynamicColor(
+      light: .black.withAlphaComponent(0.60), dark: .white.withAlphaComponent(0.62),
+      highContrastLight: .black.withAlphaComponent(0.80), highContrastDark: .white.withAlphaComponent(0.85)))
+  static let surfaceHover = Color(
+    nsColor: dynamicColor(
+      light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.08),
+      highContrastLight: .black.withAlphaComponent(0.14), highContrastDark: .white.withAlphaComponent(0.18)))
+  static let neutralBadgeFill = Color(
+    nsColor: dynamicColor(
+      light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.10),
+      highContrastLight: .black.withAlphaComponent(0.14), highContrastDark: .white.withAlphaComponent(0.20)))
+
+  // Selection matches menus: the system selection color, not the accent, so any accent keeps contrast.
+  static let selectionFill = Color(nsColor: .selectedContentBackgroundColor)
+  static let selectionText = Color(nsColor: .alternateSelectedControlTextColor)
 
   static func statusText(_ variant: BadgeVariant) -> Color {
     switch variant {
@@ -72,9 +86,16 @@ enum Theme {
       blue: CGFloat(value & 0xFF) / 255, alpha: 1)
   }
 
-  private static func dynamicColor(light: NSColor, dark: NSColor) -> NSColor {
+  private static func dynamicColor(
+    light: NSColor, dark: NSColor, highContrastLight: NSColor? = nil, highContrastDark: NSColor? = nil
+  ) -> NSColor {
     NSColor(name: nil) { appearance in
-      appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+      switch appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua]) {
+      case .darkAqua: dark
+      case .accessibilityHighContrastDarkAqua: highContrastDark ?? dark
+      case .accessibilityHighContrastAqua: highContrastLight ?? light
+      default: light
+      }
     }
   }
 }

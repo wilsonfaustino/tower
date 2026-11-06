@@ -19,7 +19,7 @@ struct GitHubClientTests {
     let snapshot = try await client(transport: StubTransport { _ in (fixtureData, 200) }).fetch(now: now)
     #expect(snapshot.viewerLogin == "octo-me")
     #expect(snapshot.authoredPullRequests.count == 2)
-    #expect(snapshot.reviewRequests.count == 2)
+    #expect(snapshot.reviewRequests.count == 3)
     #expect(snapshot.reviewsSubmittedToday == 4)
     #expect(snapshot.mergedToday == 2)
     let failing = snapshot.authoredPullRequests[0]
@@ -44,6 +44,9 @@ struct GitHubClientTests {
     #expect(snapshot.reviewRequests[1].checkState == nil)
     #expect(snapshot.reviewRequests[1].requestedReviewerLogins == ["octo-me"])
     #expect(snapshot.authoredPullRequests[1].reviewRequestedAt == nil)
+    #expect(failing.authorIsBot == false)
+    #expect(snapshot.reviewRequests[2].author == "dependabot")
+    #expect(snapshot.reviewRequests[2].authorIsBot == true)
   }
 
   @Test func sendsBearerTokenToGraphQLEndpoint() async throws {

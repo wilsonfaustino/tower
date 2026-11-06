@@ -10,6 +10,7 @@ private func pullRequest(
   number: Int = 1,
   title: String = "Some change",
   author: String = "me",
+  authorIsBot: Bool = false,
   isDraft: Bool = false,
   updatedHoursAgo: Double = 1,
   headBranch: String = "feature/x",
@@ -26,7 +27,7 @@ private func pullRequest(
   PullRequest(
     repository: repository, number: number, title: title,
     url: URL(string: "https://github.com/acme/\(repository)/pull/\(number)")!,
-    author: author, isDraft: isDraft, updatedAt: now.addingTimeInterval(-updatedHoursAgo * hour),
+    author: author, authorIsBot: authorIsBot, isDraft: isDraft, updatedAt: now.addingTimeInterval(-updatedHoursAgo * hour),
     headBranch: headBranch, reviewDecision: reviewDecision, checkState: checkState,
     failedCheckCount: failedCheckCount, additions: additions, deletions: deletions,
     requestedReviewerLogins: requestedReviewerLogins, requestedTeamSlugs: requestedTeamSlugs,
@@ -108,6 +109,41 @@ struct QueueBuilderTests {
       pullRequest(author: "Ana", requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 25)
     ])
     #expect(items(sections, .review).first?.badge == Badge(text: "Waiting 1d", variant: .urgent))
+  }
+
+  @Test func oldTeamReviewRequestStaysNeutral() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "Ana", additions: 3, deletions: 1, requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 50)
+    ])
+    #expect(items(sections, .review).first?.badge == Badge(text: "+3 \u{2212}1", variant: .neutral))
+  }
+
+  @Test func botReviewRequestsCollapseIntoOneRow() throws {
+    let sections = queue(reviewRequests: [
+      pullRequest(repository: "api-notifier", number: 7, author: "dependabot", authorIsBot: true,
+                  requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 72),
+      pullRequest(repository: "api-config", number: 8, author: "dependabot", authorIsBot: true,
+                  requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 5),
+      pullRequest(repository: "api-config", number: 9, author: "dependabot", authorIsBot: true,
+                  requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30),
+      pullRequest(number: 10, author: "Ana", requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 1),
+    ])
+    let reviewItems = items(sections, .review)
+    #expect(reviewItems.count == 2)
+    let botItem = try #require(reviewItems.first { $0.id == "bots:dependabot" })
+    #expect(botItem.title == "3 Dependabot PRs")
+    #expect(botItem.meta == "2 repos · 3d")
+    #expect(botItem.badge == Badge(text: "Bot", variant: .neutral))
+    #expect(botItem.url == URL(string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20review-requested%3A%40me%20author%3Aapp%2Fdependabot"))
+    #expect(botItem.symbol == .review)
+  }
+
+  @Test func singleBotReviewRequestUsesSingular() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
+    ])
+    #expect(items(sections, .review).first?.title == "1 Renovate PR")
+    #expect(items(sections, .review).first?.meta == "1 repo · 2h")
   }
 
   @Test func teamReviewRequestShowsTeamInMeta() {

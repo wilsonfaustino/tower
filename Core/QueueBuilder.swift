@@ -31,8 +31,12 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
     }
   }
 
-  for pullRequest in input.reviewRequests {
+  for pullRequest in input.reviewRequests where !pullRequest.authorIsBot {
     itemsByKind[.review, default: []].append(reviewItem(pullRequest, viewerLogin: input.viewerLogin, now: now))
+  }
+  let botPullRequestsByAuthor = Dictionary(grouping: input.reviewRequests.filter(\.authorIsBot), by: \.author)
+  for (botLogin, pullRequests) in botPullRequestsByAuthor {
+    itemsByKind[.review, default: []].append(botReviewItem(botLogin: botLogin, pullRequests: pullRequests, now: now))
   }
 
   for ticket in input.jiraTickets {
@@ -62,18 +66,36 @@ private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: 
 private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Date) -> QueueItem {
   let requestedAt = pullRequest.reviewRequestedAt ?? pullRequest.updatedAt
   let waitingSeconds = now.timeIntervalSince(requestedAt)
+  let isDirectRequest = pullRequest.requestedReviewerLogins.contains(viewerLogin)
+  // A teammate can pick up a team request, so only direct requests turn urgent.
   let badge =
-    waitingSeconds >= urgentReviewAge
+    isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : Badge(text: "+\(pullRequest.additions) \u{2212}\(pullRequest.deletions)", variant: .neutral)
   var metaParts = ["\(pullRequest.repository) #\(pullRequest.number)", pullRequest.author]
-  if !pullRequest.requestedReviewerLogins.contains(viewerLogin), let teamSlug = pullRequest.requestedTeamSlugs.first {
+  if !isDirectRequest, let teamSlug = pullRequest.requestedTeamSlugs.first {
     metaParts.append("team \(teamSlug)")
   }
   metaParts.append(shortAge(from: requestedAt, now: now))
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, meta: metaParts.joined(separator: " · "),
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt)
+}
+
+// Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.
+private func botReviewItem(botLogin: String, pullRequests: [PullRequest], now: Date) -> QueueItem {
+  let oldestRequest = pullRequests.map { $0.reviewRequestedAt ?? $0.updatedAt }.min() ?? now
+  let repositoryCount = Set(pullRequests.map(\.repository)).count
+  let displayName = botLogin.replacingOccurrences(of: "[bot]", with: "").capitalized
+  let searchQuery = "is:pr is:open review-requested:@me author:app/\(botLogin)"
+  let urlSafeCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+  let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: urlSafeCharacters) ?? ""
+  return QueueItem(
+    id: "bots:\(botLogin)",
+    title: "\(pullRequests.count) \(displayName) \(pullRequests.count == 1 ? "PR" : "PRs")",
+    meta: "\(repositoryCount) \(repositoryCount == 1 ? "repo" : "repos") · \(shortAge(from: oldestRequest, now: now))",
+    url: URL(string: "https://github.com/pulls?q=\(encodedQuery)")!,
+    symbol: .review, badge: Badge(text: "Bot", variant: .neutral), sortDate: oldestRequest)
 }
 
 private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest], now: Date) -> QueueItem? {

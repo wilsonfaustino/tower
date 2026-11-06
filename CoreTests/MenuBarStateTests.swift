@@ -35,3 +35,19 @@ struct MenuBarStateTests {
     #expect(state.countText == "1")
   }
 }
+
+struct MenuBarStateAccessibilityTests {
+  @Test func normalLabelIsAppName() {
+    #expect(MenuBarState.normal.accessibilityLabel == "Tower")
+  }
+
+  @Test func urgentLabelCountsItems() {
+    #expect(MenuBarState.urgent(count: 1).accessibilityLabel == "Tower, 1 urgent item")
+    #expect(MenuBarState.urgent(count: 21).accessibilityLabel == "Tower, 21 urgent items")
+  }
+
+  @Test func failingLabelCountsItems() {
+    #expect(MenuBarState.failing(count: 1).accessibilityLabel == "Tower, 1 item to fix")
+    #expect(MenuBarState.failing(count: 3).accessibilityLabel == "Tower, 3 items to fix")
+  }
+}

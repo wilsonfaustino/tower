@@ -19,7 +19,8 @@
             "name": "app-web"
           },
           "author": {
-            "login": "octo-me"
+            "login": "octo-me",
+            "__typename": "User"
           },
           "commits": {
             "nodes": [
@@ -100,7 +101,8 @@
             "name": "app-api"
           },
           "author": {
-            "login": "octo-me"
+            "login": "octo-me",
+            "__typename": "User"
           },
           "commits": {
             "nodes": [
@@ -175,7 +177,8 @@
             "name": "app-web"
           },
           "author": {
-            "login": "ana"
+            "login": "ana",
+            "__typename": "User"
           },
           "commits": {
             "nodes": [
@@ -256,7 +259,8 @@
             "name": "ui-kit"
           },
           "author": {
-            "login": "rui"
+            "login": "rui",
+            "__typename": "User"
           },
           "commits": {
             "nodes": [
@@ -286,6 +290,88 @@
             "nodes": [
               {
                 "createdAt": "2027-01-15T08:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 77,
+          "title": "Bump requests from 2.31.0 to 2.32.0",
+          "url": "https://github.com/acme/api-notifier/pull/77",
+          "isDraft": false,
+          "updatedAt": "2027-01-14T12:00:00Z",
+          "headRefName": "dependabot/pip/requests-2.32.0",
+          "additions": 40,
+          "deletions": 5,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "repository": {
+            "name": "api-notifier"
+          },
+          "author": {
+            "__typename": "Bot",
+            "login": "dependabot"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "PENDING",
+                    "contexts": {
+                      "checkRunCountsByState": [
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "TIMED_OUT",
+                          "count": 0
+                        },
+                        {
+                          "state": "STARTUP_FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 4
+                        }
+                      ],
+                      "statusContextCountsByState": [
+                        {
+                          "state": "ERROR",
+                          "count": 0
+                        },
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "slug": "web-core"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "totalCount": 0
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2027-01-14T09:00:00Z"
               }
             ]
           }

@@ -23,6 +23,14 @@ public enum MenuBarState: Equatable, Sendable {
     }
   }
 
+  public var accessibilityLabel: String {
+    switch self {
+    case .normal: "Tower"
+    case .urgent(let count): "Tower, \(count) urgent \(count == 1 ? "item" : "items")"
+    case .failing(let count): "Tower, \(count) \(count == 1 ? "item" : "items") to fix"
+    }
+  }
+
   public var countText: String? {
     switch self {
     case .normal: nil

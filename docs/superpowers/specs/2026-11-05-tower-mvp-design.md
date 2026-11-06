@@ -57,11 +57,14 @@ Sections appear in this fixed order: **Fix, Review, Merge, Tidy**. Tower hides a
 | Section | Item | Source rule | Badge (variant) | Symbol |
 |---|---|---|---|---|
 | Fix | My PR, CI failing | Open PR, author is me, not draft, check rollup state is `FAILURE` or `ERROR` | "N checks failed" (failing) | `xmark.circle` |
-| Review | Review requested of me, waiting 1 day or more | Open PR, review requested of me or of one of my teams, request older than 24 h | "Waiting Nd" (urgent) | `eye` |
-| Review | Review requested of me, newer | Same, request newer than 24 h | diff size "+A −D" (neutral) | `eye` |
+| Review | Direct review request, waiting 1 day or more | Open PR, not by a bot, review requested of me directly, request older than 24 h | "Waiting Nd" (urgent) | `eye` |
+| Review | Other review request | Open PR, not by a bot, team request (any age) or direct request newer than 24 h | diff size "+A −D" (neutral) | `eye` |
+| Review | Bot PRs, one row per bot | Open PRs by a bot (GraphQL author type `Bot`) with a review requested of me or my team. Title "N Dependabot PRs", meta "N repos · age of oldest", opens the GitHub search `is:pr is:open review-requested:@me author:app/<bot>` | "Bot" (neutral) | `eye` |
 | Merge | My PR, approved | Open PR, author is me, review decision `APPROVED`, check rollup is not failing | "Approved" (ready) | `arrow.triangle.merge` |
 | Tidy | Ticket with no PR | Jira ticket from the query above, and no open PR of mine has the ticket key in its title or branch name | "No PR" (neutral) | `arrow.triangle.branch` |
-| Tidy | Ticket whose PR has no reviewer | Jira ticket from the query above, the matched PR has no requested reviewers and no reviews | "No reviewer" (neutral) | `person.badge.questionmark` |
+| Tidy | Ticket whose PR has no reviewer | Jira ticket from the query above, the matched PR has no requested reviewers and no reviews | "No reviewer" (neutral) | `person.crop.circle.badge.questionmark` |
+
+A teammate can pick up a team request, so only direct requests turn urgent (decided 2026-11-05, after 16 of 21 live requests were Dependabot PRs through a team).
 
 A Jira ticket whose matched PR has a reviewer does not appear. That PR already shows in Fix or Merge, or it waits on someone else.
 

@@ -57,11 +57,13 @@ struct PanelView: View {
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
       .help("Refresh")
+      .accessibilityLabel("Refresh")
       Button(action: showSettings) {
         Image(systemName: "gearshape")
       }
       .buttonStyle(.borderless)
       .help("Settings")
+      .accessibilityLabel("Settings")
     }
     .padding(.horizontal, Theme.Spacing.l)
     .padding(.vertical, Theme.Spacing.m)
@@ -88,7 +90,7 @@ struct PanelView: View {
       } else if store.sections.isEmpty {
         StateMessageView(
           symbol: "checkmark.seal", title: "Clear skies", message: "Nothing needs you right now.",
-          footnote: store.todaySummary.map { "Today: \($0.reviews) reviews · \($0.merges) merges" })
+          footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
       } else {
         ForEach(store.sections) { section in
           QueueSectionView(section: section, selectedItemId: selectedItemId, open: open)

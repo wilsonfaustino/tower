@@ -11,17 +11,19 @@ struct QueueRowView: View {
     HStack(spacing: Theme.Spacing.s) {
       Image(systemName: item.symbol.rawValue)
         .font(.system(size: Theme.Metrics.symbolSize))
-        .foregroundStyle(isSelected ? Color.white : symbolColor)
+        .foregroundStyle(isSelected ? Theme.selectionText : symbolColor)
         .frame(width: Theme.Metrics.iconColumn)
+        // SF Symbol descriptions ("show", "divide") would mislead; the badge text carries the meaning.
+        .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
         Text(item.title)
           .font(Theme.Fonts.rowTitle)
-          .foregroundStyle(isSelected ? Color.white : Theme.textPrimary)
+          .foregroundStyle(isSelected ? Theme.selectionText : Theme.textPrimary)
           .lineLimit(1)
           .truncationMode(.tail)
         Text(item.meta)
           .font(Theme.Fonts.rowMeta)
-          .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Theme.textSecondary)
+          .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
           .lineLimit(1)
       }
       Spacer(minLength: Theme.Spacing.s)
@@ -32,6 +34,7 @@ struct QueueRowView: View {
         Image(systemName: "arrow.up.right")
           .font(.system(size: Theme.Metrics.openArrowSize))
           .foregroundStyle(Theme.textSecondary)
+          .accessibilityHidden(true)
       }
     }
     .padding(.horizontal, Theme.Metrics.rowInset)
@@ -45,7 +48,7 @@ struct QueueRowView: View {
   }
 
   private var rowFill: Color {
-    if isSelected { return Color.accentColor }
+    if isSelected { return Theme.selectionFill }
     return isHovered ? Theme.surfaceHover : .clear
   }
 
@@ -64,9 +67,10 @@ struct BadgeView: View {
     Text(badge.text)
       .font(Theme.Fonts.badge)
       .monospacedDigit()
-      .foregroundStyle(isSelected ? Color.white : Theme.statusText(badge.variant))
+      .foregroundStyle(isSelected ? Theme.selectionText : Theme.statusText(badge.variant))
       .padding(.vertical, 2)
       .padding(.horizontal, 7)
-      .background(isSelected ? Color.white.opacity(0.22) : Theme.badgeFill(badge.variant), in: Capsule())
+      .background(isSelected ? Theme.selectionText.opacity(0.22) : Theme.badgeFill(badge.variant), in: Capsule())
+      .fixedSize()
   }
 }

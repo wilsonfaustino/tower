@@ -20,6 +20,7 @@ public struct PullRequest: Codable, Sendable, Equatable {
   public var title: String
   public var url: URL
   public var author: String
+  public var authorIsBot: Bool
   public var isDraft: Bool
   public var updatedAt: Date
   public var headBranch: String
@@ -34,7 +35,7 @@ public struct PullRequest: Codable, Sendable, Equatable {
   public var reviewRequestedAt: Date?
 
   public init(
-    repository: String, number: Int, title: String, url: URL, author: String, isDraft: Bool,
+    repository: String, number: Int, title: String, url: URL, author: String, authorIsBot: Bool, isDraft: Bool,
     updatedAt: Date, headBranch: String, reviewDecision: ReviewDecision?, checkState: CheckState?,
     failedCheckCount: Int, additions: Int, deletions: Int, requestedReviewerLogins: [String],
     requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?
@@ -44,6 +45,7 @@ public struct PullRequest: Codable, Sendable, Equatable {
     self.title = title
     self.url = url
     self.author = author
+    self.authorIsBot = authorIsBot
     self.isDraft = isDraft
     self.updatedAt = updatedAt
     self.headBranch = headBranch
@@ -95,12 +97,12 @@ public struct Badge: Equatable, Sendable {
   }
 }
 
-public enum RowSymbol: String, Sendable {
+public enum RowSymbol: String, CaseIterable, Sendable {
   case failing = "xmark.circle"
   case review = "eye"
   case merge = "arrow.triangle.merge"
   case noPullRequest = "arrow.triangle.branch"
-  case noReviewer = "person.badge.questionmark"
+  case noReviewer = "person.crop.circle.badge.questionmark"
 }
 
 public struct QueueItem: Identifiable, Equatable, Sendable {
