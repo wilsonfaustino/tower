@@ -5,6 +5,7 @@ import SwiftUI
 struct PanelView: View {
   let store: QueueStore
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.openSettings) private var openSettings
   @State private var selectedItemId: String?
   @State private var contentHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
@@ -56,6 +57,11 @@ struct PanelView: View {
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
       .help("Refresh")
+      Button(action: showSettings) {
+        Image(systemName: "gearshape")
+      }
+      .buttonStyle(.borderless)
+      .help("Settings")
     }
     .padding(.horizontal, Theme.Spacing.l)
     .padding(.vertical, Theme.Spacing.m)
@@ -67,6 +73,9 @@ struct PanelView: View {
         AuthBannerView(title: "GitHub sign-in expired", message: githubBannerMessage) {
           GitHubReconnect.open(ghPath: store.tokenProvider.ghPath)
         }
+      }
+      if store.jiraStatus == .failed(.authentication) {
+        AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
       }
       if !store.hasAnyData {
         if [store.githubStatus, store.jiraStatus].contains(.failed(.network)) {
@@ -93,6 +102,20 @@ struct PanelView: View {
     let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
     let jiraSentence = store.jiraStatus == .ok ? " Jira is current." : ""
     return "Showing PRs from \(minutes) min ago.\(jiraSentence)"
+  }
+
+  private var jiraBannerMessage: String {
+    guard let fetchedAt = store.jiraFetchedAt else { return "Check your Jira email and API token in Settings." }
+    let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
+    let githubSentence = store.githubStatus == .ok ? " GitHub is current." : ""
+    return "Showing tickets from \(minutes) min ago.\(githubSentence)"
+  }
+
+  // An agent app is not active while the panel shows, so bring it forward or Settings opens behind other windows.
+  private func showSettings() {
+    dismiss()
+    NSApp.activate()
+    openSettings()
   }
 
   private func subtitle(now: Date) -> String {

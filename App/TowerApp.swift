@@ -13,6 +13,9 @@ struct TowerApp: App {
         .task { store.start() }
     }
     .menuBarExtraStyle(.window)
+    Settings {
+      SettingsView(store: store)
+    }
   }
 }
 
