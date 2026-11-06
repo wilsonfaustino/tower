@@ -77,8 +77,9 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 ## Next steps
 
 1. **CircleCI pipelines:** show release pipelines that you started (from scripts or from the CircleCI UI) and that have no PR. The panel placement is still open; the proposal is a "Watch" section for running pipelines.
-2. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
-3. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases, CI.
+2. **CI and SonarQube:** a GitHub Actions workflow that builds and runs the tests on each PR, plus SonarQube analysis of the repo. PRs get checks.
+3. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
+4. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
 
 Update this list when an item ships or changes.
 
