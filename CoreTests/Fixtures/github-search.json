@@ -1,0 +1,388 @@
+{
+  "data": {
+    "viewer": {
+      "login": "octo-me"
+    },
+    "authored": {
+      "nodes": [
+        {
+          "number": 2184,
+          "title": "Migrate field map to MapLibre 4",
+          "url": "https://github.com/acme/app-web/pull/2184",
+          "isDraft": false,
+          "updatedAt": "2027-01-15T11:35:00Z",
+          "headRefName": "proj-1201-maplibre",
+          "additions": 120,
+          "deletions": 80,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "repository": {
+            "name": "app-web"
+          },
+          "author": {
+            "login": "octo-me",
+            "__typename": "User"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "FAILURE",
+                    "contexts": {
+                      "checkRunCountsByState": [
+                        {
+                          "state": "FAILURE",
+                          "count": 2
+                        },
+                        {
+                          "state": "TIMED_OUT",
+                          "count": 0
+                        },
+                        {
+                          "state": "STARTUP_FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 4
+                        }
+                      ],
+                      "statusContextCountsByState": [
+                        {
+                          "state": "ERROR",
+                          "count": 0
+                        },
+                        {
+                          "state": "FAILURE",
+                          "count": 1
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "ana"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "totalCount": 0
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2027-01-14T10:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 988,
+          "title": "Fix timezone drift on spray logs",
+          "url": "https://github.com/acme/app-api/pull/988",
+          "isDraft": false,
+          "updatedAt": "2027-01-13T12:00:00Z",
+          "headRefName": "fix-tz-drift",
+          "additions": 10,
+          "deletions": 2,
+          "reviewDecision": "APPROVED",
+          "repository": {
+            "name": "app-api"
+          },
+          "author": {
+            "login": "octo-me",
+            "__typename": "User"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS",
+                    "contexts": {
+                      "checkRunCountsByState": [
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "TIMED_OUT",
+                          "count": 0
+                        },
+                        {
+                          "state": "STARTUP_FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 4
+                        }
+                      ],
+                      "statusContextCountsByState": [
+                        {
+                          "state": "ERROR",
+                          "count": 0
+                        },
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": []
+          },
+          "reviews": {
+            "totalCount": 1
+          },
+          "timelineItems": {
+            "nodes": []
+          }
+        }
+      ]
+    },
+    "requested": {
+      "nodes": [
+        {
+          "number": 2179,
+          "title": "Add pest pressure filter to scouting list",
+          "url": "https://github.com/acme/app-web/pull/2179",
+          "isDraft": false,
+          "updatedAt": "2027-01-14T12:00:00Z",
+          "headRefName": "pest-filter",
+          "additions": 40,
+          "deletions": 5,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "repository": {
+            "name": "app-web"
+          },
+          "author": {
+            "login": "ana",
+            "__typename": "User"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "PENDING",
+                    "contexts": {
+                      "checkRunCountsByState": [
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "TIMED_OUT",
+                          "count": 0
+                        },
+                        {
+                          "state": "STARTUP_FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 4
+                        }
+                      ],
+                      "statusContextCountsByState": [
+                        {
+                          "state": "ERROR",
+                          "count": 0
+                        },
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "slug": "web-core"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "totalCount": 0
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2027-01-14T09:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 412,
+          "title": "Bump eslint config to v9",
+          "url": "https://github.com/acme/ui-kit/pull/412",
+          "isDraft": false,
+          "updatedAt": "2027-01-15T08:00:00Z",
+          "headRefName": "eslint-9",
+          "additions": 12,
+          "deletions": 4,
+          "reviewDecision": null,
+          "repository": {
+            "name": "ui-kit"
+          },
+          "author": {
+            "login": "rui",
+            "__typename": "User"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": null
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "octo-me"
+                }
+              },
+              {
+                "requestedReviewer": {}
+              }
+            ]
+          },
+          "reviews": {
+            "totalCount": 0
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2027-01-15T08:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 77,
+          "title": "Bump requests from 2.31.0 to 2.32.0",
+          "url": "https://github.com/acme/api-notifier/pull/77",
+          "isDraft": false,
+          "updatedAt": "2027-01-14T12:00:00Z",
+          "headRefName": "dependabot/pip/requests-2.32.0",
+          "additions": 40,
+          "deletions": 5,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "repository": {
+            "name": "api-notifier"
+          },
+          "author": {
+            "__typename": "Bot",
+            "login": "dependabot"
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "PENDING",
+                    "contexts": {
+                      "checkRunCountsByState": [
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "TIMED_OUT",
+                          "count": 0
+                        },
+                        {
+                          "state": "STARTUP_FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 4
+                        }
+                      ],
+                      "statusContextCountsByState": [
+                        {
+                          "state": "ERROR",
+                          "count": 0
+                        },
+                        {
+                          "state": "FAILURE",
+                          "count": 0
+                        },
+                        {
+                          "state": "SUCCESS",
+                          "count": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "slug": "web-core"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "totalCount": 0
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2027-01-14T09:00:00Z"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "reviewed": {
+      "issueCount": 4
+    },
+    "merged": {
+      "issueCount": 2
+    }
+  }
+}

@@ -1,0 +1,57 @@
+name: Tower
+options:
+  bundleIdPrefix: dev.wilsonfaustino
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  Tower:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - target: Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wilsonfaustino.Tower
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Tower
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+  Core:
+    type: framework
+    platform: macOS
+    sources: [Core]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wilsonfaustino.Tower.Core
+        GENERATE_INFOPLIST_FILE: YES
+  CoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      # Tests read fixtures from the source folder by path, so they stay out of the bundle.
+      - path: CoreTests
+        excludes: ["Fixtures/**"]
+    dependencies:
+      - target: Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wilsonfaustino.Tower.CoreTests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Tower:
+    build:
+      targets:
+        Tower: all
+        CoreTests: [test]
+    test:
+      targets: [CoreTests]

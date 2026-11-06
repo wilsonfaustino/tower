@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="a-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E4374"/>
+      <stop offset="1" stop-color="#111A31"/>
+    </linearGradient>
+    <linearGradient id="a-glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D3DCEC"/>
+    </linearGradient>
+    <radialGradient id="a-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC24D" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#FFC24D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g id="foreground">
+    <path d="M272 352H752L680 572H344Z" fill="url(#a-glass)" stroke="url(#a-glass)" stroke-width="16" stroke-linejoin="round"/>
+    <path d="M320 392H704L654 540H370Z" fill="#16213D"/>
+    <path d="M448 392L464 540M576 392L560 540" stroke="#E6ECF6" stroke-width="16"/>
+    <path d="M452 572H572L596 790H428Z" fill="url(#a-glass)"/>
+    <rect x="368" y="784" width="288" height="44" rx="22" fill="url(#a-glass)"/>
+    <rect x="500" y="290" width="24" height="70" rx="12" fill="url(#a-glass)"/>
+  </g>
+</svg>
