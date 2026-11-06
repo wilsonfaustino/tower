@@ -1,0 +1,23 @@
+{
+  "issues": [
+    {
+      "id": "10432",
+      "key": "PROJ-1432",
+      "fields": {
+        "summary": "Offline sync for trap counts",
+        "status": { "name": "In Progress" },
+        "updated": "2027-01-12T09:00:00.000+0000"
+      }
+    },
+    {
+      "id": "10440",
+      "key": "PROJ-1440",
+      "fields": {
+        "summary": "Export scouting report as PDF",
+        "status": { "name": "In Review" },
+        "updated": "2027-01-14T12:30:00.000-0300"
+      }
+    }
+  ],
+  "isLast": true
+}
