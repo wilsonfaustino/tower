@@ -1,14 +1,30 @@
+import Core
 import SwiftUI
 
 @main
 struct TowerApp: App {
+  @State private var store = QueueStore()
+
   var body: some Scene {
     MenuBarExtra {
-      Text("Tower")
-        .padding()
+      PanelView(store: store)
     } label: {
-      Image("MenuBarCab")
+      MenuBarLabel(state: store.menuBarState)
+        .task { store.start() }
     }
     .menuBarExtraStyle(.window)
+  }
+}
+
+private struct MenuBarLabel: View {
+  let state: MenuBarState
+
+  var body: some View {
+    HStack(spacing: 2) {
+      Image(state.imageName)
+      if let countText = state.countText {
+        Text(countText).monospacedDigit()
+      }
+    }
   }
 }
