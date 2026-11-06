@@ -9,9 +9,11 @@ public struct GhCLITokenProvider: GitHubTokenProvider {
   public static let defaultCandidatePaths = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
 
   public let candidatePaths: [String]
+  private let timeout: Duration
 
-  public init(candidatePaths: [String] = defaultCandidatePaths) {
+  public init(candidatePaths: [String] = defaultCandidatePaths, timeout: Duration = GhRunner.defaultTimeout) {
     self.candidatePaths = candidatePaths
+    self.timeout = timeout
   }
 
   public var ghPath: String? {
@@ -22,9 +24,12 @@ public struct GhCLITokenProvider: GitHubTokenProvider {
     guard let ghPath else { throw .authentication }
     let output: GhRunner.Output
     do {
-      output = try await GhRunner.run(path: ghPath, arguments: ["auth", "token"], readsStandardError: false)
+      output = try await GhRunner.run(path: ghPath, arguments: ["auth", "token"], readsStandardError: false, timeout: timeout)
+    } catch .timedOut {
+      // A hung gh (an unanswered keychain prompt) says nothing about the sign-in.
+      throw .unexpected("gh timed out")
     } catch {
-      throw .authentication
+      throw .unexpected("gh could not start")
     }
     let token = String(decoding: output.standardOutput, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     guard output.exitStatus == 0, !token.isEmpty else { throw .authentication }
@@ -63,8 +68,8 @@ public struct GitHubClient: Sendable {
 
   public func fetch(now: Date) async throws(SourceFailure) -> GitHubSnapshot {
     let token = try await tokenProvider.token()
-    let todayParts = Calendar.current.dateComponents([.year, .month, .day], from: now)
-    let today = String(format: "%04d-%02d-%02d", todayParts.year ?? 0, todayParts.month ?? 0, todayParts.day ?? 0)
+    // GitHub reads a bare date as UTC, so send the local start of day with its offset.
+    let today = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: now))
     let variables = [
       "authoredQuery": "is:pr is:open author:@me archived:false",
       "requestedQuery": "is:pr is:open review-requested:@me archived:false",
@@ -93,6 +98,13 @@ public struct GitHubClient: Sendable {
       reviewsSubmittedToday: payload.reviewed.issueCount,
       mergedToday: payload.merged.issueCount)
   }
+
+  private static let timestampFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
+    return formatter
+  }()
 
   private static let decoder: JSONDecoder = {
     let decoder = JSONDecoder()

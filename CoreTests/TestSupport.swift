@@ -27,3 +27,11 @@ func fixture(_ name: String) throws -> Data {
 func isoDate(_ text: String) -> Date {
   try! Date(text, strategy: .iso8601)
 }
+
+// Start of the local day with its UTC offset, for example "2027-01-15T00:00:00-03:00".
+func localStartOfDayTimestamp(_ date: Date) -> String {
+  let formatter = DateFormatter()
+  formatter.locale = Locale(identifier: "en_US_POSIX")
+  formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
+  return formatter.string(from: Calendar.current.startOfDay(for: date))
+}

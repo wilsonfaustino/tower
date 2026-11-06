@@ -27,7 +27,7 @@ enum JiraSettingsKeys {
   private(set) var githubFetchedAt: Date?
   private(set) var jiraFetchedAt: Date?
   private(set) var isRefreshing = false
-  private var jiraTickets: [JiraTicket]?
+  private(set) var jiraTickets: [JiraTicket]?
 
   let tokenProvider = GhCLITokenProvider()
   private let transport = URLSessionTransport()
@@ -35,8 +35,6 @@ enum JiraSettingsKeys {
     directory: URL.applicationSupportDirectory.appendingPathComponent("Tower", isDirectory: true))
   private var pollingTask: Task<Void, Never>?
   private var activationObserver: NSObjectProtocol?
-
-  var hasAnyData: Bool { githubSnapshot != nil || jiraTickets != nil }
 
   var todaySummary: (reviews: Int, merges: Int)? {
     githubSnapshot.map { ($0.reviewsSubmittedToday, $0.mergedToday) }

@@ -30,7 +30,11 @@ struct PanelView: View {
     .focusable()
     .focusEffectDisabled()
     .focused($isListFocused)
-    .onAppear { isListFocused = true }
+    .onAppear {
+      isListFocused = true
+      // The panel may open without activating the app, so the activation refresh can miss the Reconnect return.
+      if store.hasAuthenticationFailure { Task { await store.refresh() } }
+    }
     .onKeyPress(.downArrow) { moveSelection(by: 1) }
     .onKeyPress(.upArrow) { moveSelection(by: -1) }
     .onKeyPress(.return) {
@@ -79,22 +83,30 @@ struct PanelView: View {
       if store.jiraStatus == .failed(.authentication) {
         AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
       }
-      if !store.hasAnyData {
-        if [store.githubStatus, store.jiraStatus].contains(.failed(.network)) {
-          StateMessageView(
-            symbol: "wifi.slash", title: "Can't reach GitHub or Jira", message: "Tower retries every 2 minutes.",
-            actionTitle: "Try now") { Task { await store.refresh() } }
-        } else if store.githubStatus == .idle {
-          ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, Theme.Spacing.xl)
-        }
-      } else if store.sections.isEmpty {
-        StateMessageView(
-          symbol: "checkmark.seal", title: "Clear skies", message: "Nothing needs you right now.",
-          footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
-      } else {
+      switch panelContent(
+        github: store.githubStatus, jira: store.jiraStatus, githubHasData: store.githubSnapshot != nil,
+        jiraHasData: store.jiraTickets != nil, hasItems: !store.sections.isEmpty)
+      {
+      case .queue:
         ForEach(store.sections) { section in
           QueueSectionView(section: section, selectedItemId: selectedItemId, open: open)
         }
+      case .empty:
+        StateMessageView(
+          symbol: "checkmark.seal", title: "Clear skies", message: "Nothing needs you right now.",
+          footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
+      case .offline:
+        StateMessageView(
+          symbol: "wifi.slash", title: "Can't reach GitHub or Jira", message: "Tower retries every 2 minutes.",
+          actionTitle: "Try now") { Task { await store.refresh() } }
+      case .failed(let message):
+        StateMessageView(
+          symbol: "exclamationmark.triangle", title: "Update failed", message: message,
+          actionTitle: "Try now") { Task { await store.refresh() } }
+      case .loading:
+        ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, Theme.Spacing.xl)
+      case .bannerOnly:
+        EmptyView()
       }
     }
   }
@@ -121,17 +133,9 @@ struct PanelView: View {
   }
 
   private func subtitle(now: Date) -> String {
-    let configuredStatuses = [store.githubStatus, store.jiraStatus].filter { $0 != .failed(.notConfigured) }
-    if !configuredStatuses.isEmpty && configuredStatuses.allSatisfy({ $0 == .failed(.network) }) { return "Offline" }
-    if store.githubStatus == .failed(.authentication), let fetchedAt = store.githubFetchedAt {
-      return "PRs from \(shortAge(from: fetchedAt, now: now)) ago"
-    }
-    if store.jiraStatus == .failed(.authentication), let fetchedAt = store.jiraFetchedAt {
-      return "Tickets from \(shortAge(from: fetchedAt, now: now)) ago"
-    }
-    guard let fetchedAt = [store.githubFetchedAt, store.jiraFetchedAt].compactMap({ $0 }).min() else { return "Updating" }
-    let age = shortAge(from: fetchedAt, now: now)
-    return age == "now" ? "Updated just now" : "Updated \(age) ago"
+    panelSubtitle(
+      github: store.githubStatus, jira: store.jiraStatus, githubFetchedAt: store.githubFetchedAt,
+      jiraFetchedAt: store.jiraFetchedAt, now: now)
   }
 
   private var allItems: [QueueItem] { store.sections.flatMap(\.items) }

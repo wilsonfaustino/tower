@@ -65,11 +65,19 @@ struct GitHubClientTests {
     _ = try await client(transport: transport).fetch(now: now)
     let body = try #require(transport.requests.first?.httpBody)
     let variables = try #require((try JSONSerialization.jsonObject(with: body) as? [String: Any])?["variables"] as? [String: String])
-    let todayParts = Calendar.current.dateComponents([.year, .month, .day], from: now)
-    let today = String(format: "%04d-%02d-%02d", todayParts.year!, todayParts.month!, todayParts.day!)
+    let today = localStartOfDayTimestamp(now)
     #expect(variables["authoredQuery"] == "is:pr is:open author:@me archived:false")
     #expect(variables["requestedQuery"] == "is:pr is:open review-requested:@me archived:false")
     #expect(variables["mergedQuery"] == "is:pr author:@me merged:>=\(today)")
+    #expect(variables["reviewedQuery"] == "is:pr reviewed-by:@me -author:@me updated:>=\(today)")
+  }
+
+  @Test func hangingGhIsUnexpectedFailureNotSignIn() async throws {
+    let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("tower-slow-gh-\(UUID().uuidString)")
+    try "#!/bin/sh\nsleep 5\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+    let provider = GhCLITokenProvider(candidatePaths: [scriptURL.path], timeout: .milliseconds(200))
+    await #expect(throws: SourceFailure.unexpected("gh timed out")) { try await provider.token() }
   }
 
   @Test func unauthorizedResponseIsAuthenticationFailure() async {

@@ -3,9 +3,9 @@ import os
 
 // Runs gh without blocking a thread while it runs, and stops it after a time limit.
 // Both pipes drain while gh runs, so a full pipe cannot stop gh.
-enum GhRunner {
+public enum GhRunner {
   // gh can wait for ever, for example on a keychain prompt that nobody answers.
-  static let defaultTimeout: Duration = .seconds(30)
+  public static let defaultTimeout: Duration = .seconds(30)
 
   struct Output: Sendable {
     let exitStatus: Int32
