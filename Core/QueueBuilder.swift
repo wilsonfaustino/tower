@@ -5,12 +5,17 @@ public struct QueueInput: Sendable {
   public var authoredPullRequests: [PullRequest]
   public var reviewRequests: [PullRequest]
   public var jiraTickets: [JiraTicket]
+  public var pipelines: [Pipeline]
 
-  public init(viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket]) {
+  public init(
+    viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
+    pipelines: [Pipeline]
+  ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
     self.reviewRequests = reviewRequests
     self.jiraTickets = jiraTickets
+    self.pipelines = pipelines
   }
 }
 
@@ -43,6 +48,13 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
     if let item = tidyItem(ticket, authoredPullRequests: input.authoredPullRequests, now: now) {
       itemsByKind[.tidy, default: []].append(item)
     }
+  }
+
+  // GitHub checks cover PR branches. Take the newest per key before reading the state, so a passing re-run clears a failure.
+  let recentPipelines = input.pipelines.filter { !$0.hasPullRequest && now.timeIntervalSince($0.createdAt) <= pipelineWindow }
+  let newestPipelines = Dictionary(grouping: recentPipelines, by: \.itemId).values.compactMap { $0.max { $0.createdAt < $1.createdAt } }
+  for pipeline in newestPipelines where pipeline.state == .failed {
+    itemsByKind[.fix, default: []].append(pipelineItem(pipeline, now: now))
   }
 
   return SectionKind.allCases.compactMap { kind in
@@ -121,4 +133,17 @@ private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest],
 
 extension PullRequest {
   var hasNoReviewer: Bool { requestedReviewerLogins.isEmpty && requestedTeamSlugs.isEmpty && reviewCount == 0 }
+}
+
+extension Pipeline {
+  // A manual release (api) and a merge (webhook) on the same branch are separate rows.
+  var itemId: String { "pipeline:\(projectSlug):\(ref):\(triggerType)" }
+}
+
+private func pipelineItem(_ pipeline: Pipeline, now: Date) -> QueueItem {
+  let repository = pipeline.projectSlug.split(separator: "/").last.map(String.init) ?? pipeline.projectSlug
+  return QueueItem(
+    id: pipeline.itemId, title: "\(repository) \(pipeline.ref)",
+    meta: "#\(pipeline.number) · \(pipeline.refIsTag ? "tag" : "branch") · \(shortAge(from: pipeline.createdAt, now: now))",
+    url: pipeline.url, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: pipeline.createdAt)
 }

@@ -18,16 +18,33 @@ enum JiraSettingsKeys {
   }
 }
 
+enum CircleCISettingsKeys {
+  static let projectSlugs = "circleciProjectSlugs"
+
+  static func load() -> CircleCISettings? {
+    let slugs = (UserDefaults.standard.string(forKey: projectSlugs) ?? "")
+      .split(whereSeparator: \.isNewline)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
+    guard let token = KeychainStore.read(account: KeychainStore.circleciTokenAccount), !token.isEmpty, !slugs.isEmpty
+    else { return nil }
+    return CircleCISettings(apiToken: token, projectSlugs: slugs)
+  }
+}
+
 @MainActor @Observable final class QueueStore {
   private(set) var sections: [QueueSection] = []
   private(set) var menuBarState: MenuBarState = .normal
   private(set) var githubStatus: SourceStatus = .idle
   private(set) var jiraStatus: SourceStatus = .idle
+  private(set) var circleciStatus: SourceStatus = .idle
   private(set) var githubSnapshot: GitHubSnapshot?
   private(set) var githubFetchedAt: Date?
   private(set) var jiraFetchedAt: Date?
+  private(set) var circleciFetchedAt: Date?
   private(set) var isRefreshing = false
   private(set) var jiraTickets: [JiraTicket]?
+  private(set) var pipelines: [Pipeline]?
 
   let tokenProvider = GhCLITokenProvider()
   private let transport = URLSessionTransport()
@@ -50,6 +67,10 @@ enum JiraSettingsKeys {
       jiraTickets = cached.value
       jiraFetchedAt = cached.fetchedAt
     }
+    if let cached = cache.load([Pipeline].self, name: "circleci") {
+      pipelines = cached.value
+      circleciFetchedAt = cached.fetchedAt
+    }
     rebuild()
     pollingTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -69,11 +90,12 @@ enum JiraSettingsKeys {
     }
   }
 
-  // GitHub comes first, so its stale label wins in the subtitle.
+  // GitHub comes first, then Jira, then CircleCI, so the earlier stale label wins in the subtitle.
   var panelSources: [PanelSource] {
     [
       PanelSource(status: githubStatus, hasData: githubSnapshot != nil, fetchedAt: githubFetchedAt, staleLabel: "PRs"),
       PanelSource(status: jiraStatus, hasData: jiraTickets != nil, fetchedAt: jiraFetchedAt, staleLabel: "Tickets"),
+      PanelSource(status: circleciStatus, hasData: pipelines != nil, fetchedAt: circleciFetchedAt, staleLabel: "Pipelines"),
     ]
   }
 
@@ -88,8 +110,10 @@ enum JiraSettingsKeys {
     let now = Date()
     let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport)
     let jiraClient = JiraClient(settings: JiraSettingsKeys.load(), transport: transport)
+    let circleciClient = CircleCIClient(settings: CircleCISettingsKeys.load(), transport: transport)
     async let githubResult = Result { () async throws(SourceFailure) -> GitHubSnapshot in try await githubClient.fetch(now: now) }
     async let jiraResult = Result { () async throws(SourceFailure) -> [JiraTicket] in try await jiraClient.fetch() }
+    async let circleciResult = Result { () async throws(SourceFailure) -> [Pipeline] in try await circleciClient.fetch(now: now) }
 
     switch await githubResult {
     case .success(let snapshot):
@@ -110,6 +134,16 @@ enum JiraSettingsKeys {
       jiraStatus = .failed(failure)
       if failure == .notConfigured { jiraTickets = nil }
     }
+    switch await circleciResult {
+    case .success(let fetchedPipelines):
+      pipelines = fetchedPipelines
+      circleciFetchedAt = now
+      circleciStatus = .ok
+      try? cache.save(Cached(value: fetchedPipelines, fetchedAt: now), name: "circleci")
+    case .failure(let failure):
+      circleciStatus = .failed(failure)
+      if failure == .notConfigured { pipelines = nil }
+    }
     rebuild()
   }
 
@@ -118,7 +152,8 @@ enum JiraSettingsKeys {
       viewerLogin: githubSnapshot?.viewerLogin ?? "",
       authoredPullRequests: githubSnapshot?.authoredPullRequests ?? [],
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
-      jiraTickets: jiraTickets ?? [])
+      jiraTickets: jiraTickets ?? [],
+      pipelines: pipelines ?? [])
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }

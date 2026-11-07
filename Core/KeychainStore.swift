@@ -4,6 +4,7 @@ import Security
 public enum KeychainStore {
   private static let service = "dev.wilsonfaustino.Tower"
   public static let jiraTokenAccount = "jira-api-token"
+  public static let circleciTokenAccount = "circleci-api-token"
 
   public static func read(account: String) -> String? {
     var query = baseQuery(account: account)
