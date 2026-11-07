@@ -5,7 +5,7 @@ import Testing
 private let ageCases: [(elapsedSeconds: Double, expected: String)] = [
   (30, "now"),
   (25 * 60, "25m"),
-  (4 * 3600, "5h"),
+  (4 * 3600, "4h"),
   (26 * 3600, "1d"),
   (3 * 86400, "3d"),
 ]
