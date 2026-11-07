@@ -10,14 +10,15 @@ MVP, in daily use by the author. Builds are ad-hoc signed. Notarized releases co
 
 ## What Tower shows
 
-The panel has four sections in a fixed urgency order. Tower hides a section that has no items.
+The panel has six sections in a fixed urgency order. Tower hides a section that has no items.
 
 | Section | Items |
 |---|---|
-| Fix | Your open PRs with failing checks |
+| Fix | Your open PRs with failing checks, and your failed CircleCI pipelines that have no PR |
 | Review | PRs that ask for your review. Bot PRs (Dependabot, Renovate) collapse into one row per bot. Only direct requests older than 24 hours are urgent. |
 | Merge | Your approved PRs with no failing checks |
 | Tidy | Your in-progress Jira tickets with no PR, or whose PR has no reviewer |
+| Watch | Your running CircleCI pipelines that have no PR. Pipelines on hold for approval are urgent. |
 | Waiting | Your other open PRs: drafts, and PRs that wait for review. PRs with changes requested are urgent. Merged PRs leave the list. |
 
 The menu bar icon changes shape, not color: a beacon and a count for urgent items, a filled cab and a count for items to fix.
@@ -77,10 +78,9 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 
 ## Next steps
 
-1. **CircleCI pipelines:** show release pipelines that you started (from scripts or from the CircleCI UI) and that have no PR. The panel placement is still open; the proposal is a "Watch" section for running pipelines.
-2. **CI and SonarQube:** a GitHub Actions workflow that builds and runs the tests on each PR, plus SonarQube analysis of the repo. PRs get checks.
-3. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
-4. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
+1. **CI and SonarQube:** a GitHub Actions workflow that builds and runs the tests on each PR, plus SonarQube analysis of the repo. PRs get checks.
+2. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
+3. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
 
 Update this list when an item ships or changes.
 
