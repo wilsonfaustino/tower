@@ -22,13 +22,10 @@ enum CircleCISettingsKeys {
   static let projectSlugs = "circleciProjectSlugs"
 
   static func load() -> CircleCISettings? {
-    let slugs = (UserDefaults.standard.string(forKey: projectSlugs) ?? "")
-      .split(whereSeparator: \.isNewline)
-      .map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty }
-    guard let token = KeychainStore.read(account: KeychainStore.circleciTokenAccount), !token.isEmpty, !slugs.isEmpty
-    else { return nil }
-    return CircleCISettings(apiToken: token, projectSlugs: slugs)
+    let slugs = (UserDefaults.standard.string(forKey: projectSlugs) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+    guard let token = KeychainStore.read(account: KeychainStore.circleciTokenAccount), !token.isEmpty else { return nil }
+    let settings = CircleCISettings(apiToken: token, projectSlugs: slugs)
+    return settings.projectSlugs.isEmpty ? nil : settings
   }
 }
 
