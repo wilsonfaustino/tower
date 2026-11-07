@@ -103,12 +103,26 @@ struct CircleCIClientTests {
     let workflowData = try! fixture("circleci-workflows-success.json")
     let transport = StubTransport { request in
       let path = request.url!.path()
-      if path.contains("/app-api/") { return (Data(), 404) }
+      if path.contains("/app-api/") { return (Data(), 500) }
       return (path.hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
     }
     let twoProjects = CircleCISettings(apiToken: "circle-token", projectSlugs: ["gh/acme/app-web", "gh/acme/app-api"])
-    await #expect(throws: SourceFailure.unexpected("HTTP 404")) {
+    await #expect(throws: SourceFailure.unexpected("HTTP 500")) {
       try await CircleCIClient(settings: twoProjects, transport: transport).fetch(now: now)
+    }
+  }
+
+  @Test func unknownProjectSlugNamesTheSlug() async {
+    let pageData = try! fixture("circleci-pipelines-mine.json")
+    let workflowData = try! fixture("circleci-workflows-success.json")
+    let transport = StubTransport { request in
+      let path = request.url!.path()
+      if path.contains("/app-typo/") { return (Data(), 404) }
+      return (path.hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
+    }
+    let typoProject = CircleCISettings(apiToken: "circle-token", projectSlugs: ["gh/acme/app-web", "gh/acme/app-typo"])
+    await #expect(throws: SourceFailure.unexpected("gh/acme/app-typo not found")) {
+      try await CircleCIClient(settings: typoProject, transport: transport).fetch(now: now)
     }
   }
 

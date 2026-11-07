@@ -30,7 +30,12 @@ public struct CircleCIClient: Sendable {
     guard let settings, !settings.apiToken.isEmpty, !settings.projectSlugs.isEmpty else { throw .notConfigured }
     var pipelines: [Pipeline] = []
     for slug in settings.projectSlugs {
-      let page: PipelinePage = try await get("project/\(slug)/pipeline/mine", token: settings.apiToken)
+      let page: PipelinePage
+      do {
+        page = try await get("project/\(slug)/pipeline/mine", token: settings.apiToken)
+      } catch .unexpected("HTTP 404") {
+        throw .unexpected("\(slug) not found")
+      }
       for item in page.items where now.timeIntervalSince(item.createdAt) <= pipelineWindow {
         let state: PipelineState
         // The pipeline state reads "created" for running, finished and failed pipelines alike.

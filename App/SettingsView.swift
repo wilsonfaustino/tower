@@ -10,6 +10,8 @@ struct SettingsView: View {
   @State private var isTestingJira = false
   @AppStorage(CircleCISettingsKeys.projectSlugs) private var circleciProjectSlugs = ""
   @State private var circleciToken = KeychainStore.read(account: KeychainStore.circleciTokenAccount) ?? ""
+  @State private var circleciTestResult: String?
+  @State private var isTestingCircleCI = false
 
   var body: some View {
     Form {
@@ -40,6 +42,13 @@ struct SettingsView: View {
         Text("One project slug per line, like gh/org/repo.")
           .font(.caption)
           .foregroundStyle(Theme.textSecondary)
+        HStack {
+          Button("Test connection", action: testCircleCI)
+            .disabled(isTestingCircleCI)
+          if let circleciTestResult {
+            Text(circleciTestResult).foregroundStyle(Theme.textSecondary)
+          }
+        }
       }
     }
     .formStyle(.grouped)
@@ -60,7 +69,12 @@ struct SettingsView: View {
 
   private func failureText(_ failure: SourceFailure, source: String) -> String {
     switch failure {
-    case .authentication: source == "GitHub" ? "Not signed in. Run gh auth login." : "Sign-in failed. Check email and token."
+    case .authentication:
+      switch source {
+      case "GitHub": "Not signed in. Run gh auth login."
+      case "CircleCI": "Token rejected. Check the API token."
+      default: "Sign-in failed. Check email and token."
+      }
     case .network: "Can't reach \(source)"
     case .notConfigured: "Not set up"
     case .unexpected(let message): message
@@ -98,6 +112,23 @@ struct SettingsView: View {
         jiraTestResult = failureText(error, source: "Jira")
       }
       isTestingJira = false
+    }
+  }
+
+  private func testCircleCI() {
+    saveCircleCIToken()
+    isTestingCircleCI = true
+    circleciTestResult = nil
+    let settings = CircleCISettingsKeys.load()
+    Task {
+      do throws(SourceFailure) {
+        _ = try await CircleCIClient(settings: settings, transport: URLSessionTransport()).fetch(now: Date())
+        circleciTestResult = "Connected · \(settings?.projectSlugs.count ?? 0) projects"
+        await store.refresh()
+      } catch {
+        circleciTestResult = failureText(error, source: "CircleCI")
+      }
+      isTestingCircleCI = false
     }
   }
 }

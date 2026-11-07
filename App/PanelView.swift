@@ -83,6 +83,11 @@ struct PanelView: View {
       if store.jiraStatus == .failed(.authentication) {
         AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
       }
+      if store.circleciStatus == .failed(.authentication) {
+        AuthBannerView(
+          title: "CircleCI token expired", message: circleciBannerMessage, actionTitle: "Open Settings",
+          reconnect: showSettings)
+      }
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
       case .queue:
         ForEach(store.sections) { section in
@@ -94,7 +99,8 @@ struct PanelView: View {
           footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
       case .offline:
         StateMessageView(
-          symbol: "wifi.slash", title: "Can't reach GitHub or Jira", message: "Tower retries every 2 minutes.",
+          symbol: "wifi.slash",
+          title: store.circleciStatus == .failed(.notConfigured) ? "Can't reach GitHub or Jira" : "Can't reach GitHub, Jira or CircleCI", message: "Tower retries every 2 minutes.",
           actionTitle: "Try now") { Task { await store.refresh() } }
       case .failed(let message):
         StateMessageView(
@@ -111,15 +117,29 @@ struct PanelView: View {
   private var githubBannerMessage: String {
     guard let fetchedAt = store.githubFetchedAt else { return "Run gh auth login to show your PRs." }
     let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
-    let jiraSentence = store.jiraStatus == .ok ? " Jira is current." : ""
-    return "Showing PRs from \(minutes) min ago.\(jiraSentence)"
+    return "Showing PRs from \(minutes) min ago.\(currentSentence(jira: true, circleci: true))"
   }
 
   private var jiraBannerMessage: String {
     guard let fetchedAt = store.jiraFetchedAt else { return "Check your Jira email and API token in Settings." }
     let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
-    let githubSentence = store.githubStatus == .ok ? " GitHub is current." : ""
-    return "Showing tickets from \(minutes) min ago.\(githubSentence)"
+    return "Showing tickets from \(minutes) min ago.\(currentSentence(github: true, circleci: true))"
+  }
+
+  private var circleciBannerMessage: String {
+    guard let fetchedAt = store.circleciFetchedAt else { return "Check your CircleCI API token in Settings." }
+    let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
+    return "Showing pipelines from \(minutes) min ago.\(currentSentence(github: true, jira: true))"
+  }
+
+  // Names the other sources that fetched on the last refresh, like " GitHub and Jira are current."
+  private func currentSentence(github: Bool = false, jira: Bool = false, circleci: Bool = false) -> String {
+    var names: [String] = []
+    if github && store.githubStatus == .ok { names.append("GitHub") }
+    if jira && store.jiraStatus == .ok { names.append("Jira") }
+    if circleci && store.circleciStatus == .ok { names.append("CircleCI") }
+    guard !names.isEmpty else { return "" }
+    return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
   }
 
   // An agent app is not active while the panel shows, so bring it forward or Settings opens behind other windows.
