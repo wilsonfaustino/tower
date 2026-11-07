@@ -70,7 +70,7 @@ struct CircleCIClientTests {
     let twoProjects = CircleCISettings(apiToken: "circle-token", projectSlugs: ["gh/acme/app-web", "gh/acme/app-api"])
     _ = try await CircleCIClient(settings: twoProjects, transport: transport).fetch(now: now)
     let pipelineRequests = transport.requests.filter { $0.url!.path().hasSuffix("/pipeline/mine") }
-    #expect(pipelineRequests.map(\.url!.absoluteString) == [
+    #expect(Set(pipelineRequests.map(\.url!.absoluteString)) == [
       "https://circleci.com/api/v2/project/gh/acme/app-web/pipeline/mine",
       "https://circleci.com/api/v2/project/gh/acme/app-api/pipeline/mine",
     ])
@@ -126,6 +126,22 @@ struct CircleCIClientTests {
     }
   }
 
+  @Test func slugThatCannotFormURLNamesTheSlugWithoutRequest() async {
+    let transport = StubTransport { _ in (Data(), 200) }
+    let badSlug = CircleCISettings(apiToken: "circle-token", projectSlugs: ["gh/acme/app web"])
+    await #expect(throws: SourceFailure.unexpected("gh/acme/app web not found")) {
+      try await CircleCIClient(settings: badSlug, transport: transport).fetch(now: now)
+    }
+    #expect(transport.requests.isEmpty)
+  }
+
+  @Test func slugWhitespaceIsTrimmed() async throws {
+    let transport = fixtureTransport()
+    let paddedSlug = CircleCISettings(apiToken: "circle-token", projectSlugs: ["  gh/acme/app-web \t"])
+    _ = try await CircleCIClient(settings: paddedSlug, transport: transport).fetch(now: now)
+    #expect(transport.requests.first?.url?.absoluteString == "https://circleci.com/api/v2/project/gh/acme/app-web/pipeline/mine")
+  }
+
   @Test func skipsPipelinesOlderThanOneDay() async throws {
     let transport = fixtureTransport()
     let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: isoDate("2027-01-15T21:00:00Z"))
@@ -158,9 +174,12 @@ struct CircleCIClientTests {
     (["error"], .failed),
     (["failing", "success"], .failed),
     (["unauthorized"], .failed),
-    (["not_run"], .running),
-    (["on_hold", "failed"], .onHold),
-    ([], .running),
+    (["not_run"], .succeeded),
+    (["success", "not_run"], .succeeded),
+    (["on_hold", "failed"], .failed),
+    (["on_hold", "running"], .onHold),
+    (["running", "not_run"], .running),
+    ([], .succeeded),
   ])
   func workflowStatusesMapToState(statuses: [String], expectedState: PipelineState) async throws {
     let pageData = try fixture("circleci-pipelines-mine.json")

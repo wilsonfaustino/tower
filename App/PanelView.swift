@@ -100,7 +100,9 @@ struct PanelView: View {
       case .offline:
         StateMessageView(
           symbol: "wifi.slash",
-          title: store.circleciStatus == .failed(.notConfigured) ? "Can't reach GitHub or Jira" : "Can't reach GitHub, Jira or CircleCI", message: "Tower retries every 2 minutes.",
+          title: store.circleciStatus == .failed(.notConfigured)
+            ? "Can't reach GitHub or Jira" : "Can't reach GitHub, Jira or CircleCI",
+          message: "Tower retries every 2 minutes.",
           actionTitle: "Try now") { Task { await store.refresh() } }
       case .failed(let message):
         StateMessageView(

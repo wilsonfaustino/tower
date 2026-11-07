@@ -67,7 +67,8 @@ enum CircleCISettingsKeys {
       jiraTickets = cached.value
       jiraFetchedAt = cached.fetchedAt
     }
-    if let cached = cache.load([Pipeline].self, name: "circleci") {
+    // Without CircleCI settings, an old cache would show a stale fetch age.
+    if CircleCISettingsKeys.load() != nil, let cached = cache.load([Pipeline].self, name: "circleci") {
       pipelines = cached.value
       circleciFetchedAt = cached.fetchedAt
     }
@@ -143,7 +144,10 @@ enum CircleCISettingsKeys {
       try? cache.save(Cached(value: fetchedPipelines, fetchedAt: now), name: "circleci")
     case .failure(let failure):
       circleciStatus = .failed(failure)
-      if failure == .notConfigured { pipelines = nil }
+      if failure == .notConfigured {
+        pipelines = nil
+        circleciFetchedAt = nil
+      }
     }
     rebuild()
   }

@@ -16,7 +16,6 @@ let pipelineWindow: TimeInterval = 24 * 3600
 public struct CircleCIClient: Sendable {
   private static let baseURL = URL(string: "https://circleci.com/api/v2")!
   private static let failedStatuses: Set<String> = ["failed", "error", "failing", "unauthorized"]
-  private static let runningStatuses: Set<String> = ["running", "not_run"]
 
   private let settings: CircleCISettings?
   private let transport: HTTPTransport
@@ -27,40 +26,80 @@ public struct CircleCIClient: Sendable {
   }
 
   public func fetch(now: Date) async throws(SourceFailure) -> [Pipeline] {
-    guard let settings, !settings.apiToken.isEmpty, !settings.projectSlugs.isEmpty else { throw .notConfigured }
-    var pipelines: [Pipeline] = []
-    for slug in settings.projectSlugs {
-      let page: PipelinePage
-      do {
-        page = try await get("project/\(slug)/pipeline/mine", token: settings.apiToken)
-      } catch .unexpected("HTTP 404") {
-        throw .unexpected("\(slug) not found")
-      }
-      for item in page.items where now.timeIntervalSince(item.createdAt) <= pipelineWindow {
-        let state: PipelineState
-        // The pipeline state reads "created" for running, finished and failed pipelines alike.
-        if item.state == "errored" {
-          state = .failed
-        } else {
-          let workflows: WorkflowList = try await get("pipeline/\(item.id)/workflow", token: settings.apiToken)
-          state = Self.state(workflowStatuses: workflows.items.map(\.status))
-        }
-        pipelines.append(Pipeline(
-          projectSlug: item.projectSlug, number: item.number, ref: item.vcs.tag ?? item.vcs.branch ?? "",
-          refIsTag: item.vcs.tag != nil, triggerType: item.trigger.type,
-          hasPullRequest: !(item.vcs.reviewUrl ?? "").isEmpty, createdAt: item.createdAt, state: state,
-          url: Self.webURL(slug: item.projectSlug, number: item.number)))
-      }
+    let slugs = (settings?.projectSlugs ?? [])
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    guard let settings, !settings.apiToken.isEmpty, !slugs.isEmpty else { throw .notConfigured }
+    let token = settings.apiToken
+    let pipelinesBySlug = try await Self.concurrentMap(slugs) { slug throws(SourceFailure) in
+      try await fetchProject(slug: slug, token: token, now: now)
     }
-    return pipelines
+    return pipelinesBySlug.flatMap(\.self)
   }
 
-  // A pipeline with no workflows yet counts as running.
+  private func fetchProject(slug: String, token: String, now: Date) async throws(SourceFailure) -> [Pipeline] {
+    guard let pageURL = Self.apiURL("project/\(slug)/pipeline/mine") else { throw .unexpected("\(slug) not found") }
+    let page: PipelinePage
+    do {
+      page = try await get(pageURL, token: token)
+    } catch .unexpected("HTTP 404") {
+      throw .unexpected("\(slug) not found")
+    }
+    let recentItems = page.items.filter { now.timeIntervalSince($0.createdAt) <= pipelineWindow }
+    return try await Self.concurrentMap(recentItems) { item throws(SourceFailure) in
+      let state: PipelineState
+      // The pipeline state reads "created" for running, finished and failed pipelines alike.
+      if item.state == "errored" {
+        state = .failed
+      } else {
+        guard let workflowURL = Self.apiURL("pipeline/\(item.id)/workflow") else {
+          throw .unexpected("CircleCI response did not decode")
+        }
+        let workflows: WorkflowList = try await get(workflowURL, token: token)
+        state = Self.state(workflowStatuses: workflows.items.map(\.status))
+      }
+      return Pipeline(
+        projectSlug: item.projectSlug, number: item.number, ref: item.vcs.tag ?? item.vcs.branch ?? "",
+        refIsTag: item.vcs.tag != nil, triggerType: item.trigger.type,
+        hasPullRequest: !(item.vcs.reviewUrl ?? "").isEmpty, createdAt: item.createdAt, state: state,
+        url: Self.webURL(slug: item.projectSlug, number: item.number))
+    }
+  }
+
+  // Runs the requests at the same time and keeps the input order. The first failure in input order wins.
+  private static func concurrentMap<Input: Sendable, Output: Sendable>(
+    _ inputs: [Input], _ transform: @escaping @Sendable (Input) async throws(SourceFailure) -> Output
+  ) async throws(SourceFailure) -> [Output] {
+    let results = await withTaskGroup(of: (Int, Result<Output, SourceFailure>).self) { group in
+      for (index, input) in inputs.enumerated() {
+        group.addTask {
+          do throws(SourceFailure) {
+            return (index, .success(try await transform(input)))
+          } catch {
+            return (index, .failure(error))
+          }
+        }
+      }
+      var resultsByIndex = [Result<Output, SourceFailure>?](repeating: nil, count: inputs.count)
+      for await (index, result) in group { resultsByIndex[index] = result }
+      return resultsByIndex
+    }
+    var outputs: [Output] = []
+    for result in results { outputs.append(try result!.get()) }
+    return outputs
+  }
+
+  // Canceled and not_run workflows are final and do not change the state.
   private static func state(workflowStatuses statuses: [String]) -> PipelineState {
-    if statuses.contains("on_hold") { return .onHold }
     if statuses.contains(where: failedStatuses.contains) { return .failed }
-    if statuses.isEmpty || statuses.contains(where: runningStatuses.contains) { return .running }
+    if statuses.contains("on_hold") { return .onHold }
+    if statuses.contains("running") { return .running }
     return .succeeded
+  }
+
+  // A slug with characters a URL cannot hold, such as a space, gives nil.
+  private static func apiURL(_ path: String) -> URL? {
+    URL(string: "\(baseURL.absoluteString)/\(path)", encodingInvalidCharacters: false)
   }
 
   // The web app spells the VCS prefix out: "gh/acme/app-web" opens at "pipelines/github/acme/app-web".
@@ -71,8 +110,8 @@ public struct CircleCIClient: Sendable {
     return URL(string: "https://app.circleci.com/pipelines/\(parts.joined(separator: "/"))/\(number)")!
   }
 
-  private func get<Response: Decodable>(_ path: String, token: String) async throws(SourceFailure) -> Response {
-    var request = URLRequest(url: URL(string: "\(Self.baseURL.absoluteString)/\(path)")!)
+  private func get<Response: Decodable>(_ url: URL, token: String) async throws(SourceFailure) -> Response {
+    var request = URLRequest(url: url)
     request.setValue(token, forHTTPHeaderField: "Circle-Token")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     let data = try await sendMapped(request, transport: transport)
