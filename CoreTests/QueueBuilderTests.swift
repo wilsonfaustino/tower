@@ -118,7 +118,7 @@ struct QueueBuilderTests {
 
   @Test func changesRequestedPullRequestShowsBadgeInWaiting() {
     let sections = queue(authored: [pullRequest(reviewDecision: .changesRequested)])
-    #expect(items(sections, .waiting).first?.badge == Badge(text: "Changes requested", variant: .neutral))
+    #expect(items(sections, .waiting).first?.badge == Badge(text: "Changes requested", variant: .urgent))
   }
 
   @Test func approvedGreenPullRequestGoesToMerge() {

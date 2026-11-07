@@ -37,7 +37,7 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
       itemsByKind[.merge, default: []].append(
         authoredItem(pullRequest, symbol: .merge, badge: Badge(text: "Approved", variant: .ready), now: now))
     } else {
-      let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .neutral) : nil
+      let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .urgent) : nil
       itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .waiting, badge: badge, now: now))
     }
   }
