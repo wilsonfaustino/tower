@@ -6,7 +6,7 @@ public struct CircleCISettings: Equatable, Sendable {
 
   public init(apiToken: String, projectSlugs: [String]) {
     self.apiToken = apiToken
-    self.projectSlugs = projectSlugs
+    self.projectSlugs = projectSlugs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
   }
 }
 
@@ -16,6 +16,9 @@ let pipelineWindow: TimeInterval = 24 * 3600
 public struct CircleCIClient: Sendable {
   private static let baseURL = URL(string: "https://circleci.com/api/v2")!
   private static let failedStatuses: Set<String> = ["failed", "error", "failing", "unauthorized"]
+  private static let setupPipelineStates: Set<String> = ["setup-pending", "setup", "pending"]
+  // Keeps a burst of workflow requests small for an owner with many recent pipelines.
+  private static let maxWorkflowRequestsInFlight = 4
 
   private let settings: CircleCISettings?
   private let transport: HTTPTransport
@@ -26,18 +29,22 @@ public struct CircleCIClient: Sendable {
   }
 
   public func fetch(now: Date) async throws(SourceFailure) -> [Pipeline] {
-    let slugs = (settings?.projectSlugs ?? [])
-      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
-    guard let settings, !settings.apiToken.isEmpty, !slugs.isEmpty else { throw .notConfigured }
+    guard let settings, !settings.apiToken.isEmpty, !settings.projectSlugs.isEmpty else { throw .notConfigured }
     let token = settings.apiToken
-    let pipelinesBySlug = try await Self.concurrentMap(slugs) { slug throws(SourceFailure) in
+    let candidatesBySlug = try await Self.concurrentMap(settings.projectSlugs) { slug throws(SourceFailure) in
       try await fetchProject(slug: slug, token: token, now: now)
     }
-    return pipelinesBySlug.flatMap(\.self)
+    let candidates = candidatesBySlug.flatMap(\.self)
+    // The queue shows only the newest pipeline per key, and none when that one has a PR.
+    let newestPipelines = newestPipelinePerKey(candidates.map(\.pipeline))
+    let newestCandidates = candidates.filter { newestPipelines.contains($0.pipeline) }
+    return try await Self.concurrentMap(newestCandidates, maxConcurrent: Self.maxWorkflowRequestsInFlight) {
+      candidate throws(SourceFailure) in
+      try await withWorkflowState(candidate, token: token)
+    }
   }
 
-  private func fetchProject(slug: String, token: String, now: Date) async throws(SourceFailure) -> [Pipeline] {
+  private func fetchProject(slug: String, token: String, now: Date) async throws(SourceFailure) -> [Candidate] {
     guard let pageURL = Self.apiURL("project/\(slug)/pipeline/mine") else { throw .unexpected("\(slug) not found") }
     let page: PipelinePage
     do {
@@ -45,33 +52,47 @@ public struct CircleCIClient: Sendable {
     } catch .unexpected("HTTP 404") {
       throw .unexpected("\(slug) not found")
     }
-    let recentItems = page.items.filter { now.timeIntervalSince($0.createdAt) <= pipelineWindow }
-    return try await Self.concurrentMap(recentItems) { item throws(SourceFailure) in
-      let state: PipelineState
-      // The pipeline state reads "created" for running, finished and failed pipelines alike.
-      if item.state == "errored" {
-        state = .failed
-      } else {
-        guard let workflowURL = Self.apiURL("pipeline/\(item.id)/workflow") else {
-          throw .unexpected("CircleCI response did not decode")
-        }
-        let workflows: WorkflowList = try await get(workflowURL, token: token)
-        state = Self.state(workflowStatuses: workflows.items.map(\.status))
-      }
-      return Pipeline(
+    return page.items.filter { now.timeIntervalSince($0.createdAt) <= pipelineWindow }.map { item in
+      // The workflow state replaces this placeholder state.
+      let pipeline = Pipeline(
         projectSlug: item.projectSlug, number: item.number, ref: item.vcs.tag ?? item.vcs.branch ?? "",
         refIsTag: item.vcs.tag != nil, triggerType: item.trigger.type,
-        hasPullRequest: !(item.vcs.reviewUrl ?? "").isEmpty, createdAt: item.createdAt, state: state,
+        hasPullRequest: !(item.vcs.reviewUrl ?? "").isEmpty, createdAt: item.createdAt, state: .succeeded,
         url: Self.webURL(slug: item.projectSlug, number: item.number))
+      return Candidate(id: item.id, pipelineState: item.state, pipeline: pipeline)
     }
   }
 
-  // Runs the requests at the same time and keeps the input order. The first failure in input order wins.
+  // A pipeline with a PR leaves the queue, so it keeps the placeholder state without a workflow request.
+  private func withWorkflowState(_ candidate: Candidate, token: String) async throws(SourceFailure) -> Pipeline {
+    var pipeline = candidate.pipeline
+    if pipeline.hasPullRequest { return pipeline }
+    // The pipeline state reads "created" for running, finished and failed pipelines alike.
+    if candidate.pipelineState == "errored" {
+      pipeline.state = .failed
+      return pipeline
+    }
+    guard let workflowURL = Self.apiURL("pipeline/\(candidate.id)/workflow") else {
+      throw .unexpected("CircleCI response did not decode")
+    }
+    let workflows: WorkflowList = try await get(workflowURL, token: token)
+    if workflows.items.isEmpty {
+      // No workflows means setup still runs, or the config filters removed every workflow.
+      pipeline.state = Self.setupPipelineStates.contains(candidate.pipelineState) ? .running : .succeeded
+    } else {
+      pipeline.state = Self.state(workflowStatuses: workflows.items.map(\.status))
+    }
+    return pipeline
+  }
+
+  // Runs up to maxConcurrent requests at a time and keeps the input order. The first failure in input order wins.
   private static func concurrentMap<Input: Sendable, Output: Sendable>(
-    _ inputs: [Input], _ transform: @escaping @Sendable (Input) async throws(SourceFailure) -> Output
+    _ inputs: [Input], maxConcurrent: Int = .max,
+    _ transform: @escaping @Sendable (Input) async throws(SourceFailure) -> Output
   ) async throws(SourceFailure) -> [Output] {
     let results = await withTaskGroup(of: (Int, Result<Output, SourceFailure>).self) { group in
-      for (index, input) in inputs.enumerated() {
+      func addTask(index: Int) {
+        let input = inputs[index]
         group.addTask {
           do throws(SourceFailure) {
             return (index, .success(try await transform(input)))
@@ -80,8 +101,19 @@ public struct CircleCIClient: Sendable {
           }
         }
       }
+      var nextIndex = 0
+      while nextIndex < min(maxConcurrent, inputs.count) {
+        addTask(index: nextIndex)
+        nextIndex += 1
+      }
       var resultsByIndex = [Result<Output, SourceFailure>?](repeating: nil, count: inputs.count)
-      for await (index, result) in group { resultsByIndex[index] = result }
+      for await (index, result) in group {
+        resultsByIndex[index] = result
+        if nextIndex < inputs.count {
+          addTask(index: nextIndex)
+          nextIndex += 1
+        }
+      }
       return resultsByIndex
     }
     var outputs: [Output] = []
@@ -132,6 +164,12 @@ public struct CircleCIClient: Sendable {
     }
     return decoder
   }()
+}
+
+private struct Candidate: Sendable {
+  var id: String
+  var pipelineState: String
+  var pipeline: Pipeline
 }
 
 private struct PipelinePage: Decodable {

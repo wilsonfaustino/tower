@@ -122,3 +122,20 @@ struct ThreeSourcePanelStateTests {
     #expect(panelSubtitle(sources: sources, now: now) == "Tickets from 9m ago")
   }
 }
+
+struct OfflineTitleTests {
+  @Test func namesOnlyTheOfflineSource() {
+    let sources = [("GitHub", SourceStatus.ok), ("Jira", .failed(.notConfigured)), ("CircleCI", .failed(.network))]
+    #expect(offlineTitle(sources: sources) == "Can't reach CircleCI")
+  }
+
+  @Test func joinsTwoOfflineSourcesWithOr() {
+    let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .ok)]
+    #expect(offlineTitle(sources: sources) == "Can't reach GitHub or Jira")
+  }
+
+  @Test func joinsThreeOfflineSourcesInOrder() {
+    let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .failed(.network))]
+    #expect(offlineTitle(sources: sources) == "Can't reach GitHub, Jira or CircleCI")
+  }
+}

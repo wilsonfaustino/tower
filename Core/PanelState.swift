@@ -35,3 +35,11 @@ public func panelSubtitle(sources: [PanelSource], now: Date) -> String {
   let age = shortAge(from: oldestFetch, now: now)
   return age == "now" ? "Updated just now" : "Updated \(age) ago"
 }
+
+// Names only the sources that cannot connect: "GitHub", "GitHub or Jira", "GitHub, Jira or CircleCI".
+public func offlineTitle(sources: [(name: String, status: SourceStatus)]) -> String {
+  let offlineNames = sources.filter { $0.status == .failed(.network) }.map(\.name)
+  guard let lastName = offlineNames.last else { return "Can't reach the network" }
+  let leadingNames = offlineNames.dropLast()
+  return "Can't reach " + (leadingNames.isEmpty ? lastName : "\(leadingNames.joined(separator: ", ")) or \(lastName)")
+}

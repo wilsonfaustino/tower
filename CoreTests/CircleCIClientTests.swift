@@ -26,7 +26,9 @@ private func fixtureTransport() -> StubTransport {
 }
 
 // One pipeline/mine page that holds only the manual release, with its pipeline state and workflow list replaced.
-private func releaseState(workflowFixture: String = "circleci-workflows-success.json", pipelineState: String = "created") async throws -> PipelineState {
+private func releaseState(
+  workflowFixture: String = "circleci-workflows-success.json", workflowData: Data? = nil, pipelineState: String = "created"
+) async throws -> PipelineState {
   var page = try #require(try JSONSerialization.jsonObject(with: fixture("circleci-pipelines-mine.json")) as? [String: Any])
   var items = try #require(page["items"] as? [[String: Any]])
   var release = items[2]
@@ -34,11 +36,52 @@ private func releaseState(workflowFixture: String = "circleci-workflows-success.
   items = [release]
   page["items"] = items
   let pageData = try JSONSerialization.data(withJSONObject: page)
-  let workflowData = try fixture(workflowFixture)
+  let workflowData = try workflowData ?? fixture(workflowFixture)
   let transport = StubTransport { request in
     (request.url!.path().hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
   }
   return try #require(try await CircleCIClient(settings: settings, transport: transport).fetch(now: now).first).state
+}
+
+// One pipeline/mine page built from fixture items, each with its fields replaced.
+private func pageData(_ itemChanges: [[String: Any]]) throws -> Data {
+  var page = try #require(try JSONSerialization.jsonObject(with: fixture("circleci-pipelines-mine.json")) as? [String: Any])
+  let template = try #require((page["items"] as? [[String: Any]])?[1])
+  page["items"] = itemChanges.map { template.merging($0) { _, changed in changed } }
+  return try JSONSerialization.data(withJSONObject: page)
+}
+
+private func vcs(branch: String, reviewUrl: String? = nil) -> [String: Any] {
+  var vcs: [String: Any] = ["branch": branch]
+  if let reviewUrl { vcs["review_url"] = reviewUrl }
+  return vcs
+}
+
+// Holds each request for a moment and records the most requests in flight at once.
+private final class SlowTransport: HTTPTransport, @unchecked Sendable {
+  private let lock = NSLock()
+  private var inFlightCount = 0
+  private var recordedMaxInFlight = 0
+  private let pageData: Data
+  private let workflowData: Data
+
+  init(pageData: Data, workflowData: Data) {
+    self.pageData = pageData
+    self.workflowData = workflowData
+  }
+
+  var maxInFlight: Int { lock.withLock { recordedMaxInFlight } }
+
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    lock.withLock {
+      inFlightCount += 1
+      recordedMaxInFlight = max(recordedMaxInFlight, inFlightCount)
+    }
+    try await Task.sleep(for: .milliseconds(20))
+    lock.withLock { inFlightCount -= 1 }
+    let data = request.url!.path().hasSuffix("/pipeline/mine") ? pageData : workflowData
+    return (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+  }
 }
 
 private func workflowList(statuses: [String]) throws -> Data {
@@ -188,6 +231,57 @@ struct CircleCIClientTests {
       (request.url!.path().hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
     }
     let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
-    #expect(pipelines.map(\.state) == [expectedState, expectedState, expectedState])
+    #expect(pipelines.filter { !$0.hasPullRequest }.map(\.state) == [expectedState, expectedState])
+  }
+
+  @Test(arguments: [
+    ("setup-pending", PipelineState.running),
+    ("setup", .running),
+    ("pending", .running),
+    ("created", .succeeded),
+    ("errored", .failed),
+  ])
+  func pipelineWithoutWorkflowsMapsFromPipelineState(pipelineState: String, expectedState: PipelineState) async throws {
+    #expect(try await releaseState(workflowData: try workflowList(statuses: []), pipelineState: pipelineState) == expectedState)
+  }
+
+  @Test func skipsWorkflowRequestForPipelineWithPullRequest() async throws {
+    let transport = fixtureTransport()
+    _ = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(!transport.requests.contains { $0.url!.path().contains("017c68cd-10e2-44b1-82f2-aacb59609b9c") })
+  }
+
+  @Test func readsWorkflowsOnlyForNewestPipelinePerKey() async throws {
+    let page = try pageData([
+      ["id": "newer", "number": 2, "created_at": "2027-01-15T11:00:00.000Z", "vcs": vcs(branch: "main")],
+      ["id": "older", "number": 1, "created_at": "2027-01-15T10:00:00.000Z", "vcs": vcs(branch: "main")],
+    ])
+    let workflowData = try workflowList(statuses: ["success"])
+    let transport = StubTransport { request in (request.url!.path().hasSuffix("/pipeline/mine") ? page : workflowData, 200) }
+    let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(pipelines.map(\.number) == [2])
+    #expect(transport.requests.filter { $0.url!.path().hasSuffix("/workflow") }.map { $0.url!.path() } == ["/api/v2/pipeline/newer/workflow"])
+  }
+
+  @Test func newerPullRequestPipelineSkipsWorkflowsForTheKey() async throws {
+    let page = try pageData([
+      ["id": "newer", "number": 2, "created_at": "2027-01-15T11:00:00.000Z",
+       "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")],
+      ["id": "older", "number": 1, "created_at": "2027-01-15T10:00:00.000Z", "vcs": vcs(branch: "feature/x")],
+    ])
+    let transport = StubTransport { _ in (page, 200) }
+    let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(pipelines.map(\.number) == [2])
+    #expect(transport.requests.count == 1)
+  }
+
+  @Test func capsWorkflowRequestsInFlight() async throws {
+    let page = try pageData((1...10).map { index in
+      ["id": "pipeline-\(index)", "number": index, "vcs": vcs(branch: "branch-\(index)")]
+    })
+    let transport = SlowTransport(pageData: page, workflowData: try workflowList(statuses: ["success"]))
+    let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(pipelines.count == 10)
+    #expect(transport.maxInFlight == 4)
   }
 }

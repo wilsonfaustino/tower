@@ -287,6 +287,14 @@ struct PipelineQueueTests {
     #expect(queue(pipelines: [pipeline(ref: "feature/x", triggerType: "webhook", hasPullRequest: true)]).isEmpty)
   }
 
+  @Test func newerPullRequestPipelineHidesOlderFailureOnSameKey() {
+    let sections = queue(pipelines: [
+      pipeline(number: 2, ref: "feature/x", triggerType: "webhook", hasPullRequest: true, createdHoursAgo: 1, state: .succeeded),
+      pipeline(number: 1, ref: "feature/x", triggerType: "webhook", createdHoursAgo: 2, state: .failed),
+    ])
+    #expect(sections.isEmpty)
+  }
+
   @Test func failedPipelineCountsInMenuBar() {
     let sections = queue(
       reviewRequests: [pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)],
