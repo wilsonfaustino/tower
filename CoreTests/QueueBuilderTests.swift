@@ -224,9 +224,35 @@ struct PipelineQueueTests {
     #expect(items(queue(pipelines: [pipeline(number: 6000, createdHoursAgo: 2)]), .fix).first?.meta == "#6000 · branch · 2h")
   }
 
-  @Test(arguments: [PipelineState.succeeded, .running, .onHold])
-  func pipelineThatHasNotFailedGivesNoRow(state: PipelineState) {
-    #expect(queue(pipelines: [pipeline(state: state)]).isEmpty)
+  @Test func succeededPipelineGivesNoRow() {
+    #expect(queue(pipelines: [pipeline(state: .succeeded)]).isEmpty)
+  }
+
+  @Test func runningPipelineGoesToWatch() {
+    let sections = queue(pipelines: [pipeline(number: 1842, ref: "v2.14.0", refIsTag: true, createdHoursAgo: 0.1, state: .running)])
+    #expect(sections.map(\.kind) == [.watch])
+    #expect(items(sections, .watch) == [
+      QueueItem(
+        id: "pipeline:gh/acme/app-web:v2.14.0:api", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
+        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .running,
+        badge: Badge(text: "Running", variant: .neutral), sortDate: now.addingTimeInterval(-0.1 * hour))
+    ])
+  }
+
+  @Test func onHoldPipelineGoesToWatchAsUrgent() {
+    let watchItems = items(queue(pipelines: [pipeline(state: .onHold)]), .watch)
+    #expect(watchItems.map(\.symbol) == [.approvalHold])
+    #expect(watchItems.map(\.badge) == [Badge(text: "Needs approval", variant: .urgent)])
+  }
+
+  @Test func watchComesAfterTidy() {
+    let sections = queue(tickets: [ticket(key: "PROJ-9")], pipelines: [pipeline(state: .running)])
+    #expect(sections.map(\.kind) == [.tidy, .watch])
+  }
+
+  @Test func watchIsHiddenWhenNoPipelineIsRunningOrOnHold() {
+    let sections = queue(pipelines: [pipeline(state: .failed), pipeline(triggerType: "webhook", state: .succeeded)])
+    #expect(sections.map(\.kind) == [.fix])
   }
 
   @Test func newerSucceededPipelineClearsOlderFailure() {
@@ -266,5 +292,11 @@ struct PipelineQueueTests {
       reviewRequests: [pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)],
       pipelines: [pipeline()])
     #expect(MenuBarState(sections: sections) == .failing(count: 1))
+  }
+
+  @Test func approvalHoldAddsToMenuBarUrgentCount() {
+    let urgentReview = pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)
+    #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview])) == .urgent(count: 1))
+    #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview], pipelines: [pipeline(state: .onHold)])) == .urgent(count: 2))
   }
 }
