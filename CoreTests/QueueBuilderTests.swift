@@ -99,8 +99,26 @@ struct QueueBuilderTests {
     #expect(items(sections, .merge).isEmpty)
   }
 
-  @Test func draftFailingPullRequestIsHidden() {
-    #expect(queue(authored: [pullRequest(isDraft: true, checkState: .failure, failedCheckCount: 1)]).isEmpty)
+  @Test func draftPullRequestGoesToWaitingEvenWhenFailing() {
+    let sections = queue(authored: [pullRequest(isDraft: true, checkState: .failure, failedCheckCount: 1)])
+    #expect(sections.map(\.kind) == [.waiting])
+    #expect(items(sections, .waiting).first?.badge == Badge(text: "Draft", variant: .neutral))
+  }
+
+  @Test func openPullRequestWithoutApprovalGoesToWaiting() {
+    let sections = queue(authored: [
+      pullRequest(repository: "app-api", number: 45, updatedHoursAgo: 3, reviewDecision: .reviewRequired, checkState: nil)
+    ])
+    let waitingItems = items(sections, .waiting)
+    #expect(sections.map(\.kind) == [.waiting])
+    #expect(waitingItems.first?.meta == "app-api #45 · 3h")
+    #expect(waitingItems.first?.symbol == .waiting)
+    #expect(waitingItems.first?.badge == nil)
+  }
+
+  @Test func changesRequestedPullRequestShowsBadgeInWaiting() {
+    let sections = queue(authored: [pullRequest(reviewDecision: .changesRequested)])
+    #expect(items(sections, .waiting).first?.badge == Badge(text: "Changes requested", variant: .neutral))
   }
 
   @Test func approvedGreenPullRequestGoesToMerge() {
@@ -201,10 +219,11 @@ struct QueueBuilderTests {
         pullRequest(number: 1, reviewDecision: .approved),
         pullRequest(number: 2, updatedHoursAgo: 1, checkState: .failure, failedCheckCount: 1),
         pullRequest(number: 3, updatedHoursAgo: 5, checkState: .failure, failedCheckCount: 1),
+        pullRequest(number: 5),
       ],
       reviewRequests: [pullRequest(number: 4, author: "Ana", requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 2)],
       tickets: [ticket(key: "PROJ-9")])
-    #expect(sections.map(\.kind) == [.fix, .review, .merge, .tidy])
+    #expect(sections.map(\.kind) == [.fix, .review, .merge, .tidy, .waiting])
     #expect(items(sections, .fix).map(\.id) == ["pr:app-web#3", "pr:app-web#2"])
   }
 }

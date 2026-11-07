@@ -32,6 +32,7 @@ extension SectionKind {
     case .merge: "Merge"
     case .tidy: "Tidy"
     case .watch: "Watch"
+    case .waiting: "Waiting"
     }
   }
 }

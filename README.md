@@ -18,6 +18,7 @@ The panel has four sections in a fixed urgency order. Tower hides a section that
 | Review | PRs that ask for your review. Bot PRs (Dependabot, Renovate) collapse into one row per bot. Only direct requests older than 24 hours are urgent. |
 | Merge | Your approved PRs with no failing checks |
 | Tidy | Your in-progress Jira tickets with no PR, or whose PR has no reviewer |
+| Waiting | Your other open PRs: drafts, and PRs that wait for review. Merged PRs leave the list. |
 
 The menu bar icon changes shape, not color: a beacon and a count for urgent items, a filled cab and a count for items to fix.
 
