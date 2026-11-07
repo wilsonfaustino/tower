@@ -22,3 +22,15 @@ struct RefreshPolicyTests {
     #expect(nextRefreshInterval(sources: [source(.failed(.authentication)), source(.failed(.network))]) == .seconds(300))
   }
 }
+
+struct ThreeSourceRefreshPolicyTests {
+  @Test func allThreeOfflineRetriesSooner() {
+    #expect(
+      nextRefreshInterval(sources: [source(.failed(.network)), source(.failed(.network)), source(.failed(.network))])
+        == .seconds(120))
+  }
+
+  @Test func healthyThirdSourceUsesNormalInterval() {
+    #expect(nextRefreshInterval(sources: [source(.failed(.network)), source(.failed(.network)), source(.ok)]) == .seconds(300))
+  }
+}

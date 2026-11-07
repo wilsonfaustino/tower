@@ -83,3 +83,34 @@ struct PanelSubtitleTests {
     #expect(subtitle(github: .idle, githubMinutesAgo: nil) == "Updating")
   }
 }
+
+struct ThreeSourcePanelStateTests {
+  private func minutesAgo(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
+
+  @Test func thirdSourceOfflineWithoutDataBlocksClearSkies() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.network), hasData: false, fetchedAt: nil, staleLabel: "Pipelines"),
+    ]
+    #expect(panelContent(sources: sources, hasItems: false) == .offline)
+  }
+
+  @Test func authFailureOnThirdSourceNamesItsStaleLabel() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(5), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Pipelines from 5m ago")
+  }
+
+  @Test func earlierSourceAuthFailureWinsOverLaterOne() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(9), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(5), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Tickets from 9m ago")
+  }
+}
