@@ -55,7 +55,7 @@ enum JiraSettingsKeys {
       while !Task.isCancelled {
         guard let self else { return }
         await self.refresh()
-        try? await Task.sleep(for: nextRefreshInterval(github: self.githubStatus, jira: self.jiraStatus))
+        try? await Task.sleep(for: nextRefreshInterval(sources: self.panelSources))
       }
     }
     // Reconnect sends the owner to Terminal or Settings. Refresh when Tower comes back.
@@ -67,6 +67,14 @@ enum JiraSettingsKeys {
         Task { await self.refresh() }
       }
     }
+  }
+
+  // GitHub comes first, so its stale label wins in the subtitle.
+  var panelSources: [PanelSource] {
+    [
+      PanelSource(status: githubStatus, hasData: githubSnapshot != nil, fetchedAt: githubFetchedAt, staleLabel: "PRs"),
+      PanelSource(status: jiraStatus, hasData: jiraTickets != nil, fetchedAt: jiraFetchedAt, staleLabel: "Tickets"),
+    ]
   }
 
   var hasAuthenticationFailure: Bool {
