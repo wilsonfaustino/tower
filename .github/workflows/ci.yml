@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   build-and-test:
@@ -38,18 +39,19 @@ jobs:
             -enableCodeCoverage YES -resultBundlePath build/Test.xcresult test
 
       - name: Convert coverage
-        run: scripts/xccov-to-sonarqube-generic.sh build/Test.xcresult > coverage.xml
+        run: scripts/xccov-to-sonarqube-generic.sh build/Test.xcresult > build/coverage.xml
 
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage
-          path: coverage.xml
+          path: build/coverage.xml
 
   sonarqube:
     needs: build-and-test
     # Fork PRs get no secrets, so skip analysis there.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    # Coverage paths are absolute, so analysis runs on macOS with the same workspace path.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -58,6 +60,7 @@ jobs:
       - uses: actions/download-artifact@v8.0.2
         with:
           name: coverage
+          path: build
 
       - uses: SonarSource/sonarqube-scan-action@v8.4.1
         env:

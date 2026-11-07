@@ -60,7 +60,7 @@ xcodebuild -scheme Tower -destination 'platform=macOS' test
 
 The tests use Swift Testing and cover the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. They do not call the network.
 
-GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh`. The `sonarqube` job sends the code and the coverage to SonarQube Cloud. It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
+GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `Core` coverage to SonarQube Cloud. It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
 
 ## Release
 
