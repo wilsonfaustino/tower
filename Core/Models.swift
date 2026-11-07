@@ -77,6 +77,37 @@ public struct JiraTicket: Codable, Sendable, Equatable {
   }
 }
 
+public enum PipelineState: String, Codable, Sendable {
+  case running, onHold, failed, succeeded
+}
+
+public struct Pipeline: Codable, Sendable, Equatable {
+  public var projectSlug: String
+  public var number: Int
+  public var ref: String
+  public var refIsTag: Bool
+  public var triggerType: String
+  public var hasPullRequest: Bool
+  public var createdAt: Date
+  public var state: PipelineState
+  public var url: URL
+
+  public init(
+    projectSlug: String, number: Int, ref: String, refIsTag: Bool, triggerType: String, hasPullRequest: Bool,
+    createdAt: Date, state: PipelineState, url: URL
+  ) {
+    self.projectSlug = projectSlug
+    self.number = number
+    self.ref = ref
+    self.refIsTag = refIsTag
+    self.triggerType = triggerType
+    self.hasPullRequest = hasPullRequest
+    self.createdAt = createdAt
+    self.state = state
+    self.url = url
+  }
+}
+
 public enum SectionKind: Int, CaseIterable, Comparable, Sendable {
   case fix, review, merge, tidy
 

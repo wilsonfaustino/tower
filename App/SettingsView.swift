@@ -8,6 +8,8 @@ struct SettingsView: View {
   @State private var jiraToken = KeychainStore.read(account: KeychainStore.jiraTokenAccount) ?? ""
   @State private var jiraTestResult: String?
   @State private var isTestingJira = false
+  @AppStorage(CircleCISettingsKeys.projectSlugs) private var circleciProjectSlugs = ""
+  @State private var circleciToken = KeychainStore.read(account: KeychainStore.circleciTokenAccount) ?? ""
 
   var body: some View {
     Form {
@@ -27,10 +29,25 @@ struct SettingsView: View {
           }
         }
       }
+      Section("CircleCI") {
+        SecureField("API token", text: $circleciToken)
+          .onSubmit(saveCircleCIToken)
+        LabeledContent("Projects") {
+          TextEditor(text: $circleciProjectSlugs)
+            .font(.body.monospaced())
+            .frame(minHeight: 60)
+        }
+        Text("One project slug per line, like gh/org/repo.")
+          .font(.caption)
+          .foregroundStyle(Theme.textSecondary)
+      }
     }
     .formStyle(.grouped)
     .frame(width: 420)
-    .onDisappear(perform: saveToken)
+    .onDisappear {
+      saveToken()
+      saveCircleCIToken()
+    }
   }
 
   private var githubStatusText: String {
@@ -56,6 +73,15 @@ struct SettingsView: View {
       KeychainStore.delete(account: KeychainStore.jiraTokenAccount)
     } else {
       try? KeychainStore.write(trimmedToken, account: KeychainStore.jiraTokenAccount)
+    }
+  }
+
+  private func saveCircleCIToken() {
+    let trimmedToken = circleciToken.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedToken.isEmpty {
+      KeychainStore.delete(account: KeychainStore.circleciTokenAccount)
+    } else {
+      try? KeychainStore.write(trimmedToken, account: KeychainStore.circleciTokenAccount)
     }
   }
 

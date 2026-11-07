@@ -1,0 +1,27 @@
+{
+  "items": [
+    {
+      "created_at": "2027-01-15T09:44:25.166Z",
+      "id": "ab430a84-e501-4529-b4c9-20cc4c4a75e6",
+      "name": "trunk-based",
+      "pipeline_id": "80f96bcb-62b4-4eee-9b92-24d709a8b5c3",
+      "pipeline_number": 6000,
+      "project_slug": "gh/acme/app-web",
+      "started_by": "00000000-0000-0000-0000-000000000001",
+      "status": "failed",
+      "stopped_at": "2027-01-15T10:04:41.076Z"
+    },
+    {
+      "created_at": "2027-01-15T09:43:17.162Z",
+      "id": "262f2e5e-3e74-4042-be62-cf155eccd8d9",
+      "name": "setup",
+      "pipeline_id": "80f96bcb-62b4-4eee-9b92-24d709a8b5c3",
+      "pipeline_number": 6000,
+      "project_slug": "gh/acme/app-web",
+      "started_by": "00000000-0000-0000-0000-000000000001",
+      "status": "success",
+      "stopped_at": "2027-01-15T09:44:25.212Z",
+      "tag": "setup"
+    }
+  ]
+}
