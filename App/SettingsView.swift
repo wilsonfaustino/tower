@@ -119,14 +119,14 @@ struct SettingsView: View {
     saveCircleCIToken()
     isTestingCircleCI = true
     circleciTestResult = nil
-    let settings = CircleCISettingsKeys.load()
+    let projectCount = CircleCISettingsKeys.load()?.projectSlugs.count ?? 0
     Task {
-      do throws(SourceFailure) {
-        _ = try await CircleCIClient(settings: settings, transport: URLSessionTransport()).fetch(now: Date())
-        circleciTestResult = "Connected · \(settings?.projectSlugs.count ?? 0) projects"
-        await store.refresh()
-      } catch {
-        circleciTestResult = failureText(error, source: "CircleCI")
+      await store.refresh()
+      switch store.circleciStatus {
+      case .failed(let failure):
+        circleciTestResult = failureText(failure, source: "CircleCI")
+      default:
+        circleciTestResult = "Connected · \(projectCount) \(projectCount == 1 ? "project" : "projects")"
       }
       isTestingCircleCI = false
     }
