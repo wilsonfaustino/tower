@@ -31,6 +31,7 @@ struct StateMessageView: View {
 struct AuthBannerView: View {
   let title: String
   let message: String
+  var actionTitle = "Reconnect"
   let reconnect: () -> Void
 
   var body: some View {
@@ -45,7 +46,7 @@ struct AuthBannerView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       Spacer(minLength: Theme.Spacing.s)
-      Button("Reconnect", action: reconnect)
+      Button(actionTitle, action: reconnect)
     }
     .padding(Theme.Spacing.m)
     .background(Theme.surfaceHover, in: RoundedRectangle(cornerRadius: Theme.Radius.banner))

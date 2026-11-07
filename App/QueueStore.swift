@@ -101,6 +101,7 @@ enum CircleCISettingsKeys {
 
   var hasAuthenticationFailure: Bool {
     githubStatus == .failed(.authentication) || jiraStatus == .failed(.authentication)
+      || circleciStatus == .failed(.authentication)
   }
 
   func refresh() async {
