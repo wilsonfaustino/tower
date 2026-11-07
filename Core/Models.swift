@@ -109,7 +109,7 @@ public struct Pipeline: Codable, Sendable, Equatable {
 }
 
 public enum SectionKind: Int, CaseIterable, Comparable, Sendable {
-  case fix, review, merge, tidy, watch
+  case fix, review, merge, tidy, watch, waiting
 
   public static func < (lhs: SectionKind, rhs: SectionKind) -> Bool { lhs.rawValue < rhs.rawValue }
 }
@@ -136,6 +136,7 @@ public enum RowSymbol: String, CaseIterable, Sendable {
   case noReviewer = "person.crop.circle.badge.questionmark"
   case running = "airplane.departure"
   case approvalHold = "hand.raised"
+  case waiting = "hourglass"
 }
 
 public struct QueueItem: Identifiable, Equatable, Sendable {

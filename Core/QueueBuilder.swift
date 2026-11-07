@@ -25,14 +25,20 @@ private let urgentReviewAge: TimeInterval = 24 * 3600
 public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   var itemsByKind: [SectionKind: [QueueItem]] = [:]
 
-  for pullRequest in input.authoredPullRequests where !pullRequest.isDraft {
-    if pullRequest.isFailing {
+  for pullRequest in input.authoredPullRequests {
+    if pullRequest.isDraft {
+      itemsByKind[.waiting, default: []].append(
+        authoredItem(pullRequest, symbol: .waiting, badge: Badge(text: "Draft", variant: .neutral), now: now))
+    } else if pullRequest.isFailing {
       let checkWord = pullRequest.failedCheckCount == 1 ? "check" : "checks"
       itemsByKind[.fix, default: []].append(
         authoredItem(pullRequest, symbol: .failing, badge: Badge(text: "\(pullRequest.failedCheckCount) \(checkWord) failed", variant: .failing), now: now))
     } else if pullRequest.reviewDecision == .approved {
       itemsByKind[.merge, default: []].append(
         authoredItem(pullRequest, symbol: .merge, badge: Badge(text: "Approved", variant: .ready), now: now))
+    } else {
+      let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .urgent) : nil
+      itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .waiting, badge: badge, now: now))
     }
   }
 
@@ -81,7 +87,7 @@ extension PullRequest {
   var itemId: String { "pr:\(repository)#\(number)" }
 }
 
-private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: Badge, now: Date) -> QueueItem {
+private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: Badge?, now: Date) -> QueueItem {
   QueueItem(
     id: pullRequest.itemId, title: pullRequest.title,
     meta: "\(pullRequest.repository) #\(pullRequest.number) · \(shortAge(from: pullRequest.updatedAt, now: now))",
