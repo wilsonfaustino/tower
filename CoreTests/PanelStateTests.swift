@@ -8,7 +8,12 @@ private func content(
   github: SourceStatus, jira: SourceStatus = .failed(.notConfigured),
   githubHasData: Bool = false, jiraHasData: Bool = false, hasItems: Bool = false
 ) -> PanelContent {
-  panelContent(github: github, jira: jira, githubHasData: githubHasData, jiraHasData: jiraHasData, hasItems: hasItems)
+  panelContent(
+    sources: [
+      PanelSource(status: github, hasData: githubHasData, fetchedAt: nil, staleLabel: "PRs"),
+      PanelSource(status: jira, hasData: jiraHasData, fetchedAt: nil, staleLabel: "Tickets"),
+    ],
+    hasItems: hasItems)
 }
 
 struct PanelContentTests {
@@ -48,8 +53,13 @@ struct PanelContentTests {
 struct PanelSubtitleTests {
   private func subtitle(github: SourceStatus, jira: SourceStatus = .failed(.notConfigured), githubMinutesAgo: Double? = 2) -> String {
     panelSubtitle(
-      github: github, jira: jira, githubFetchedAt: githubMinutesAgo.map { now.addingTimeInterval(-$0 * 60) },
-      jiraFetchedAt: nil, now: now)
+      sources: [
+        PanelSource(
+          status: github, hasData: false, fetchedAt: githubMinutesAgo.map { now.addingTimeInterval(-$0 * 60) },
+          staleLabel: "PRs"),
+        PanelSource(status: jira, hasData: false, fetchedAt: nil, staleLabel: "Tickets"),
+      ],
+      now: now)
   }
 
   @Test func currentSourcesShowUpdatedAge() {

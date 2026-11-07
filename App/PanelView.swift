@@ -83,10 +83,7 @@ struct PanelView: View {
       if store.jiraStatus == .failed(.authentication) {
         AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
       }
-      switch panelContent(
-        github: store.githubStatus, jira: store.jiraStatus, githubHasData: store.githubSnapshot != nil,
-        jiraHasData: store.jiraTickets != nil, hasItems: !store.sections.isEmpty)
-      {
+      switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
       case .queue:
         ForEach(store.sections) { section in
           QueueSectionView(section: section, selectedItemId: selectedItemId, open: open)
@@ -133,9 +130,7 @@ struct PanelView: View {
   }
 
   private func subtitle(now: Date) -> String {
-    panelSubtitle(
-      github: store.githubStatus, jira: store.jiraStatus, githubFetchedAt: store.githubFetchedAt,
-      jiraFetchedAt: store.jiraFetchedAt, now: now)
+    panelSubtitle(sources: store.panelSources, now: now)
   }
 
   private var allItems: [QueueItem] { store.sections.flatMap(\.items) }
