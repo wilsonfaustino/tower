@@ -105,6 +105,14 @@ struct ThreeSourcePanelStateTests {
     #expect(panelSubtitle(sources: sources, now: now) == "Pipelines from 5m ago")
   }
 
+  @Test func unconfiguredSourceFetchDateDoesNotSetTheAge() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .failed(.notConfigured), hasData: false, fetchedAt: minutesAgo(90), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Updated 1m ago")
+  }
+
   @Test func earlierSourceAuthFailureWinsOverLaterOne() {
     let sources = [
       PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),

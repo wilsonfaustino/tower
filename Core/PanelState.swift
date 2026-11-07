@@ -31,7 +31,7 @@ public func panelSubtitle(sources: [PanelSource], now: Date) -> String {
   let configuredStatuses = sources.filter(\.isConfigured).map(\.status)
   if configuredStatuses.contains(.failed(.network)) { return "Offline" }
   if configuredStatuses.contains(where: { if case .failed = $0 { true } else { false } }) { return "Update failed" }
-  guard let oldestFetch = sources.compactMap(\.fetchedAt).min() else { return "Updating" }
+  guard let oldestFetch = sources.filter(\.isConfigured).compactMap(\.fetchedAt).min() else { return "Updating" }
   let age = shortAge(from: oldestFetch, now: now)
   return age == "now" ? "Updated just now" : "Updated \(age) ago"
 }
