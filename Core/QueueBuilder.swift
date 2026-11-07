@@ -53,8 +53,20 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   // GitHub checks cover PR branches. Take the newest per key before reading the state, so a passing re-run clears a failure.
   let recentPipelines = input.pipelines.filter { !$0.hasPullRequest && now.timeIntervalSince($0.createdAt) <= pipelineWindow }
   let newestPipelines = Dictionary(grouping: recentPipelines, by: \.itemId).values.compactMap { $0.max { $0.createdAt < $1.createdAt } }
-  for pipeline in newestPipelines where pipeline.state == .failed {
-    itemsByKind[.fix, default: []].append(pipelineItem(pipeline, now: now))
+  for pipeline in newestPipelines {
+    switch pipeline.state {
+    case .failed:
+      itemsByKind[.fix, default: []].append(
+        pipelineItem(pipeline, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), now: now))
+    case .running:
+      itemsByKind[.watch, default: []].append(
+        pipelineItem(pipeline, symbol: .running, badge: Badge(text: "Running", variant: .neutral), now: now))
+    case .onHold:
+      itemsByKind[.watch, default: []].append(
+        pipelineItem(pipeline, symbol: .approvalHold, badge: Badge(text: "Needs approval", variant: .urgent), now: now))
+    case .succeeded:
+      break
+    }
   }
 
   return SectionKind.allCases.compactMap { kind in
@@ -140,10 +152,10 @@ extension Pipeline {
   var itemId: String { "pipeline:\(projectSlug):\(ref):\(triggerType)" }
 }
 
-private func pipelineItem(_ pipeline: Pipeline, now: Date) -> QueueItem {
+private func pipelineItem(_ pipeline: Pipeline, symbol: RowSymbol, badge: Badge, now: Date) -> QueueItem {
   let repository = pipeline.projectSlug.split(separator: "/").last.map(String.init) ?? pipeline.projectSlug
   return QueueItem(
     id: pipeline.itemId, title: "\(repository) \(pipeline.ref)",
     meta: "#\(pipeline.number) · \(pipeline.refIsTag ? "tag" : "branch") · \(shortAge(from: pipeline.createdAt, now: now))",
-    url: pipeline.url, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: pipeline.createdAt)
+    url: pipeline.url, symbol: symbol, badge: badge, sortDate: pipeline.createdAt)
 }
