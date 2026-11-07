@@ -31,6 +31,7 @@ extension SectionKind {
     case .review: "Review"
     case .merge: "Merge"
     case .tidy: "Tidy"
+    case .watch: "Watch"
     }
   }
 }

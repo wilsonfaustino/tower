@@ -8,7 +8,12 @@ private func content(
   github: SourceStatus, jira: SourceStatus = .failed(.notConfigured),
   githubHasData: Bool = false, jiraHasData: Bool = false, hasItems: Bool = false
 ) -> PanelContent {
-  panelContent(github: github, jira: jira, githubHasData: githubHasData, jiraHasData: jiraHasData, hasItems: hasItems)
+  panelContent(
+    sources: [
+      PanelSource(status: github, hasData: githubHasData, fetchedAt: nil, staleLabel: "PRs"),
+      PanelSource(status: jira, hasData: jiraHasData, fetchedAt: nil, staleLabel: "Tickets"),
+    ],
+    hasItems: hasItems)
 }
 
 struct PanelContentTests {
@@ -48,8 +53,13 @@ struct PanelContentTests {
 struct PanelSubtitleTests {
   private func subtitle(github: SourceStatus, jira: SourceStatus = .failed(.notConfigured), githubMinutesAgo: Double? = 2) -> String {
     panelSubtitle(
-      github: github, jira: jira, githubFetchedAt: githubMinutesAgo.map { now.addingTimeInterval(-$0 * 60) },
-      jiraFetchedAt: nil, now: now)
+      sources: [
+        PanelSource(
+          status: github, hasData: false, fetchedAt: githubMinutesAgo.map { now.addingTimeInterval(-$0 * 60) },
+          staleLabel: "PRs"),
+        PanelSource(status: jira, hasData: false, fetchedAt: nil, staleLabel: "Tickets"),
+      ],
+      now: now)
   }
 
   @Test func currentSourcesShowUpdatedAge() {
@@ -71,5 +81,61 @@ struct PanelSubtitleTests {
 
   @Test func noFetchYetShowsUpdating() {
     #expect(subtitle(github: .idle, githubMinutesAgo: nil) == "Updating")
+  }
+}
+
+struct ThreeSourcePanelStateTests {
+  private func minutesAgo(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
+
+  @Test func thirdSourceOfflineWithoutDataBlocksClearSkies() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.network), hasData: false, fetchedAt: nil, staleLabel: "Pipelines"),
+    ]
+    #expect(panelContent(sources: sources, hasItems: false) == .offline)
+  }
+
+  @Test func authFailureOnThirdSourceNamesItsStaleLabel() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(5), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Pipelines from 5m ago")
+  }
+
+  @Test func unconfiguredSourceFetchDateDoesNotSetTheAge() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .failed(.notConfigured), hasData: false, fetchedAt: minutesAgo(90), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Updated 1m ago")
+  }
+
+  @Test func earlierSourceAuthFailureWinsOverLaterOne() {
+    let sources = [
+      PanelSource(status: .ok, hasData: true, fetchedAt: minutesAgo(1), staleLabel: "PRs"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(9), staleLabel: "Tickets"),
+      PanelSource(status: .failed(.authentication), hasData: true, fetchedAt: minutesAgo(5), staleLabel: "Pipelines"),
+    ]
+    #expect(panelSubtitle(sources: sources, now: now) == "Tickets from 9m ago")
+  }
+}
+
+struct OfflineTitleTests {
+  @Test func namesOnlyTheOfflineSource() {
+    let sources = [("GitHub", SourceStatus.ok), ("Jira", .failed(.notConfigured)), ("CircleCI", .failed(.network))]
+    #expect(offlineTitle(sources: sources) == "Can't reach CircleCI")
+  }
+
+  @Test func joinsTwoOfflineSourcesWithOr() {
+    let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .ok)]
+    #expect(offlineTitle(sources: sources) == "Can't reach GitHub or Jira")
+  }
+
+  @Test func joinsThreeOfflineSourcesInOrder() {
+    let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .failed(.network))]
+    #expect(offlineTitle(sources: sources) == "Can't reach GitHub, Jira or CircleCI")
   }
 }

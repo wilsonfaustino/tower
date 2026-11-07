@@ -1,0 +1,80 @@
+{
+  "items": [
+    {
+      "created_at": "2027-01-15T11:02:34.621Z",
+      "errors": [],
+      "id": "017c68cd-10e2-44b1-82f2-aacb59609b9c",
+      "number": 6053,
+      "project_slug": "gh/acme/app-web",
+      "state": "created",
+      "trigger": {
+        "actor": { "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4", "login": "octo-owner" },
+        "received_at": "2027-01-15T11:02:33.735Z",
+        "type": "webhook"
+      },
+      "updated_at": "2027-01-15T11:03:33.765Z",
+      "vcs": {
+        "branch": "fix-e2e-cleanup",
+        "commit": { "body": "", "subject": "Merge branch 'main' into fix-e2e-cleanup" },
+        "origin_repository_url": "https://github.com/acme/app-web",
+        "provider_name": "GitHub",
+        "review_id": "1024",
+        "review_url": "https://github.com/acme/app-web/pull/1024",
+        "revision": "dad552c37e51d4d8c0245942f12060d5fc68bf68",
+        "target_repository_url": "https://github.com/acme/app-web"
+      },
+      "warnings": []
+    },
+    {
+      "created_at": "2027-01-15T09:43:16.805Z",
+      "errors": [],
+      "id": "80f96bcb-62b4-4eee-9b92-24d709a8b5c3",
+      "number": 6000,
+      "project_slug": "gh/acme/app-web",
+      "state": "created",
+      "trigger": {
+        "actor": { "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4", "login": "octo-owner" },
+        "received_at": "2027-01-15T09:43:16.414Z",
+        "type": "webhook"
+      },
+      "updated_at": "2027-01-15T09:44:25.106Z",
+      "vcs": {
+        "branch": "main",
+        "commit": { "body": "", "subject": "chore: remove unused flags (#1243)" },
+        "origin_repository_url": "https://github.com/acme/app-web",
+        "provider_name": "GitHub",
+        "review_id": "",
+        "review_url": "",
+        "revision": "e701bb82613ea60cdaf369474c15dd50b4827aef",
+        "target_repository_url": "https://github.com/acme/app-web"
+      },
+      "warnings": []
+    },
+    {
+      "created_at": "2027-01-14T20:12:44.208Z",
+      "errors": [],
+      "id": "ecb77895-f2fd-4135-8535-a7d83b9c27fd",
+      "number": 5952,
+      "project_slug": "gh/acme/app-web",
+      "state": "created",
+      "trigger": {
+        "actor": { "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4", "login": "octo-owner" },
+        "received_at": "2027-01-14T20:12:43.368Z",
+        "type": "api"
+      },
+      "updated_at": "2027-01-14T20:13:10.417Z",
+      "vcs": {
+        "branch": "main",
+        "commit": { "body": "", "subject": "feat: gate cursor path behind flag (#1239)" },
+        "origin_repository_url": "https://github.com/acme/app-web",
+        "provider_name": "GitHub",
+        "review_id": "",
+        "review_url": "",
+        "revision": "08ad5455ce38d36d4302b28cebdf15a1de5e1d5d",
+        "target_repository_url": "https://github.com/acme/app-web"
+      },
+      "warnings": []
+    }
+  ],
+  "next_page_token": "AO9ui98vFiR3YSJPMX0Ip23QLaPmCn"
+}

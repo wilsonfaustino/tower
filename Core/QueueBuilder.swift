@@ -5,12 +5,17 @@ public struct QueueInput: Sendable {
   public var authoredPullRequests: [PullRequest]
   public var reviewRequests: [PullRequest]
   public var jiraTickets: [JiraTicket]
+  public var pipelines: [Pipeline]
 
-  public init(viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket]) {
+  public init(
+    viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
+    pipelines: [Pipeline]
+  ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
     self.reviewRequests = reviewRequests
     self.jiraTickets = jiraTickets
+    self.pipelines = pipelines
   }
 }
 
@@ -42,6 +47,26 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   for ticket in input.jiraTickets {
     if let item = tidyItem(ticket, authoredPullRequests: input.authoredPullRequests, now: now) {
       itemsByKind[.tidy, default: []].append(item)
+    }
+  }
+
+  // Take the newest per key before reading the state, so a passing re-run clears a failure.
+  // GitHub checks cover PR branches, so a key whose newest pipeline has a PR gives no row.
+  let recentPipelines = input.pipelines.filter { now.timeIntervalSince($0.createdAt) <= pipelineWindow }
+  let newestPipelines = newestPipelinePerKey(recentPipelines).filter { !$0.hasPullRequest }
+  for pipeline in newestPipelines {
+    switch pipeline.state {
+    case .failed:
+      itemsByKind[.fix, default: []].append(
+        pipelineItem(pipeline, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), now: now))
+    case .running:
+      itemsByKind[.watch, default: []].append(
+        pipelineItem(pipeline, symbol: .running, badge: Badge(text: "Running", variant: .neutral), now: now))
+    case .onHold:
+      itemsByKind[.watch, default: []].append(
+        pipelineItem(pipeline, symbol: .approvalHold, badge: Badge(text: "Needs approval", variant: .urgent), now: now))
+    case .succeeded:
+      break
     }
   }
 
@@ -121,4 +146,23 @@ private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest],
 
 extension PullRequest {
   var hasNoReviewer: Bool { requestedReviewerLogins.isEmpty && requestedTeamSlugs.isEmpty && reviewCount == 0 }
+}
+
+extension Pipeline {
+  // A manual release (api) and a merge (webhook) on the same branch are separate rows.
+  var itemId: String { "pipeline:\(projectSlug):\(ref):\(triggerType)" }
+}
+
+// Keeps the input order.
+func newestPipelinePerKey(_ pipelines: [Pipeline]) -> [Pipeline] {
+  let newestByKey = Dictionary(grouping: pipelines, by: \.itemId).mapValues { $0.max { $0.createdAt < $1.createdAt }! }
+  return pipelines.filter { newestByKey[$0.itemId] == $0 }
+}
+
+private func pipelineItem(_ pipeline: Pipeline, symbol: RowSymbol, badge: Badge, now: Date) -> QueueItem {
+  let repository = pipeline.projectSlug.split(separator: "/").last.map(String.init) ?? pipeline.projectSlug
+  return QueueItem(
+    id: pipeline.itemId, title: "\(repository) \(pipeline.ref)",
+    meta: "#\(pipeline.number) · \(pipeline.refIsTag ? "tag" : "branch") · \(shortAge(from: pipeline.createdAt, now: now))",
+    url: pipeline.url, symbol: symbol, badge: badge, sortDate: pipeline.createdAt)
 }

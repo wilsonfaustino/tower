@@ -42,11 +42,29 @@ private func ticket(key: String, statusName: String = "In Progress", updatedHour
     url: URL(string: "https://acme.atlassian.net/browse/\(key)")!)
 }
 
+private func pipeline(
+  projectSlug: String = "gh/acme/app-web",
+  number: Int = 1842,
+  ref: String = "main",
+  refIsTag: Bool = false,
+  triggerType: String = "api",
+  hasPullRequest: Bool = false,
+  createdHoursAgo: Double = 0.1,
+  state: PipelineState = .failed
+) -> Pipeline {
+  Pipeline(
+    projectSlug: projectSlug, number: number, ref: ref, refIsTag: refIsTag, triggerType: triggerType,
+    hasPullRequest: hasPullRequest, createdAt: now.addingTimeInterval(-createdHoursAgo * hour), state: state,
+    url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/\(number)")!)
+}
+
 private func queue(
-  authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = []
+  authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = []
 ) -> [QueueSection] {
   buildQueue(
-    QueueInput(viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets),
+    QueueInput(
+      viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
+      pipelines: pipelines),
     now: now)
 }
 
@@ -188,5 +206,105 @@ struct QueueBuilderTests {
       tickets: [ticket(key: "PROJ-9")])
     #expect(sections.map(\.kind) == [.fix, .review, .merge, .tidy])
     #expect(items(sections, .fix).map(\.id) == ["pr:app-web#3", "pr:app-web#2"])
+  }
+}
+
+struct PipelineQueueTests {
+  @Test func failedPipelineGoesToFix() {
+    let sections = queue(pipelines: [pipeline(number: 1842, ref: "v2.14.0", refIsTag: true, triggerType: "webhook", createdHoursAgo: 0.1)])
+    #expect(items(sections, .fix) == [
+      QueueItem(
+        id: "pipeline:gh/acme/app-web:v2.14.0:webhook", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
+        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .failing,
+        badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: now.addingTimeInterval(-0.1 * hour))
+    ])
+  }
+
+  @Test func branchPipelineMetaSaysBranch() {
+    #expect(items(queue(pipelines: [pipeline(number: 6000, createdHoursAgo: 2)]), .fix).first?.meta == "#6000 · branch · 2h")
+  }
+
+  @Test func succeededPipelineGivesNoRow() {
+    #expect(queue(pipelines: [pipeline(state: .succeeded)]).isEmpty)
+  }
+
+  @Test func runningPipelineGoesToWatch() {
+    let sections = queue(pipelines: [pipeline(number: 1842, ref: "v2.14.0", refIsTag: true, createdHoursAgo: 0.1, state: .running)])
+    #expect(sections.map(\.kind) == [.watch])
+    #expect(items(sections, .watch) == [
+      QueueItem(
+        id: "pipeline:gh/acme/app-web:v2.14.0:api", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
+        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .running,
+        badge: Badge(text: "Running", variant: .neutral), sortDate: now.addingTimeInterval(-0.1 * hour))
+    ])
+  }
+
+  @Test func onHoldPipelineGoesToWatchAsUrgent() {
+    let watchItems = items(queue(pipelines: [pipeline(state: .onHold)]), .watch)
+    #expect(watchItems.map(\.symbol) == [.approvalHold])
+    #expect(watchItems.map(\.badge) == [Badge(text: "Needs approval", variant: .urgent)])
+  }
+
+  @Test func watchComesAfterTidy() {
+    let sections = queue(tickets: [ticket(key: "PROJ-9")], pipelines: [pipeline(state: .running)])
+    #expect(sections.map(\.kind) == [.tidy, .watch])
+  }
+
+  @Test func watchIsHiddenWhenNoPipelineIsRunningOrOnHold() {
+    let sections = queue(pipelines: [pipeline(state: .failed), pipeline(triggerType: "webhook", state: .succeeded)])
+    #expect(sections.map(\.kind) == [.fix])
+  }
+
+  @Test func newerSucceededPipelineClearsOlderFailure() {
+    let sections = queue(pipelines: [
+      pipeline(number: 2, createdHoursAgo: 1, state: .succeeded),
+      pipeline(number: 1, createdHoursAgo: 2, state: .failed),
+    ])
+    #expect(sections.isEmpty)
+  }
+
+  @Test func newestFailurePerKeyWins() {
+    let sections = queue(pipelines: [
+      pipeline(number: 1, createdHoursAgo: 3),
+      pipeline(number: 2, createdHoursAgo: 1),
+    ])
+    #expect(items(sections, .fix).map(\.meta) == ["#2 · branch · 1h"])
+  }
+
+  @Test func mergeOnMainDoesNotHideManualReleaseOnMain() {
+    let sections = queue(pipelines: [
+      pipeline(number: 2, triggerType: "webhook", createdHoursAgo: 1, state: .succeeded),
+      pipeline(number: 1, triggerType: "api", createdHoursAgo: 2, state: .failed),
+    ])
+    #expect(items(sections, .fix).map(\.id) == ["pipeline:gh/acme/app-web:main:api"])
+  }
+
+  @Test func pipelineOlderThanOneDayIsDropped() {
+    #expect(queue(pipelines: [pipeline(createdHoursAgo: 25)]).isEmpty)
+  }
+
+  @Test func pipelineWithPullRequestIsDropped() {
+    #expect(queue(pipelines: [pipeline(ref: "feature/x", triggerType: "webhook", hasPullRequest: true)]).isEmpty)
+  }
+
+  @Test func newerPullRequestPipelineHidesOlderFailureOnSameKey() {
+    let sections = queue(pipelines: [
+      pipeline(number: 2, ref: "feature/x", triggerType: "webhook", hasPullRequest: true, createdHoursAgo: 1, state: .succeeded),
+      pipeline(number: 1, ref: "feature/x", triggerType: "webhook", createdHoursAgo: 2, state: .failed),
+    ])
+    #expect(sections.isEmpty)
+  }
+
+  @Test func failedPipelineCountsInMenuBar() {
+    let sections = queue(
+      reviewRequests: [pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)],
+      pipelines: [pipeline()])
+    #expect(MenuBarState(sections: sections) == .failing(count: 1))
+  }
+
+  @Test func approvalHoldAddsToMenuBarUrgentCount() {
+    let urgentReview = pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)
+    #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview])) == .urgent(count: 1))
+    #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview], pipelines: [pipeline(state: .onHold)])) == .urgent(count: 2))
   }
 }

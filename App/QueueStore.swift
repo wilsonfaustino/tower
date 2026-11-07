@@ -18,16 +18,30 @@ enum JiraSettingsKeys {
   }
 }
 
+enum CircleCISettingsKeys {
+  static let projectSlugs = "circleciProjectSlugs"
+
+  static func load() -> CircleCISettings? {
+    let slugs = (UserDefaults.standard.string(forKey: projectSlugs) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+    guard let token = KeychainStore.read(account: KeychainStore.circleciTokenAccount), !token.isEmpty else { return nil }
+    let settings = CircleCISettings(apiToken: token, projectSlugs: slugs)
+    return settings.projectSlugs.isEmpty ? nil : settings
+  }
+}
+
 @MainActor @Observable final class QueueStore {
   private(set) var sections: [QueueSection] = []
   private(set) var menuBarState: MenuBarState = .normal
   private(set) var githubStatus: SourceStatus = .idle
   private(set) var jiraStatus: SourceStatus = .idle
+  private(set) var circleciStatus: SourceStatus = .idle
   private(set) var githubSnapshot: GitHubSnapshot?
   private(set) var githubFetchedAt: Date?
   private(set) var jiraFetchedAt: Date?
+  private(set) var circleciFetchedAt: Date?
   private(set) var isRefreshing = false
   private(set) var jiraTickets: [JiraTicket]?
+  private(set) var pipelines: [Pipeline]?
 
   let tokenProvider = GhCLITokenProvider()
   private let transport = URLSessionTransport()
@@ -50,12 +64,17 @@ enum JiraSettingsKeys {
       jiraTickets = cached.value
       jiraFetchedAt = cached.fetchedAt
     }
+    // Without CircleCI settings, an old cache would show a stale fetch age.
+    if CircleCISettingsKeys.load() != nil, let cached = cache.load([Pipeline].self, name: "circleci") {
+      pipelines = cached.value
+      circleciFetchedAt = cached.fetchedAt
+    }
     rebuild()
     pollingTask = Task { [weak self] in
       while !Task.isCancelled {
         guard let self else { return }
         await self.refresh()
-        try? await Task.sleep(for: nextRefreshInterval(github: self.githubStatus, jira: self.jiraStatus))
+        try? await Task.sleep(for: nextRefreshInterval(sources: self.panelSources))
       }
     }
     // Reconnect sends the owner to Terminal or Settings. Refresh when Tower comes back.
@@ -69,8 +88,18 @@ enum JiraSettingsKeys {
     }
   }
 
+  // GitHub comes first, then Jira, then CircleCI, so the earlier stale label wins in the subtitle.
+  var panelSources: [PanelSource] {
+    [
+      PanelSource(status: githubStatus, hasData: githubSnapshot != nil, fetchedAt: githubFetchedAt, staleLabel: "PRs"),
+      PanelSource(status: jiraStatus, hasData: jiraTickets != nil, fetchedAt: jiraFetchedAt, staleLabel: "Tickets"),
+      PanelSource(status: circleciStatus, hasData: pipelines != nil, fetchedAt: circleciFetchedAt, staleLabel: "Pipelines"),
+    ]
+  }
+
   var hasAuthenticationFailure: Bool {
     githubStatus == .failed(.authentication) || jiraStatus == .failed(.authentication)
+      || circleciStatus == .failed(.authentication)
   }
 
   func refresh() async {
@@ -80,8 +109,10 @@ enum JiraSettingsKeys {
     let now = Date()
     let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport)
     let jiraClient = JiraClient(settings: JiraSettingsKeys.load(), transport: transport)
+    let circleciClient = CircleCIClient(settings: CircleCISettingsKeys.load(), transport: transport)
     async let githubResult = Result { () async throws(SourceFailure) -> GitHubSnapshot in try await githubClient.fetch(now: now) }
     async let jiraResult = Result { () async throws(SourceFailure) -> [JiraTicket] in try await jiraClient.fetch() }
+    async let circleciResult = Result { () async throws(SourceFailure) -> [Pipeline] in try await circleciClient.fetch(now: now) }
 
     switch await githubResult {
     case .success(let snapshot):
@@ -102,6 +133,19 @@ enum JiraSettingsKeys {
       jiraStatus = .failed(failure)
       if failure == .notConfigured { jiraTickets = nil }
     }
+    switch await circleciResult {
+    case .success(let fetchedPipelines):
+      pipelines = fetchedPipelines
+      circleciFetchedAt = now
+      circleciStatus = .ok
+      try? cache.save(Cached(value: fetchedPipelines, fetchedAt: now), name: "circleci")
+    case .failure(let failure):
+      circleciStatus = .failed(failure)
+      if failure == .notConfigured {
+        pipelines = nil
+        circleciFetchedAt = nil
+      }
+    }
     rebuild()
   }
 
@@ -110,7 +154,8 @@ enum JiraSettingsKeys {
       viewerLogin: githubSnapshot?.viewerLogin ?? "",
       authoredPullRequests: githubSnapshot?.authoredPullRequests ?? [],
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
-      jiraTickets: jiraTickets ?? [])
+      jiraTickets: jiraTickets ?? [],
+      pipelines: pipelines ?? [])
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }

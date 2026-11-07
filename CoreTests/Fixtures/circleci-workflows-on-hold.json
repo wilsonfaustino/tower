@@ -1,0 +1,27 @@
+{
+  "items": [
+    {
+      "created_at": "2027-01-14T20:13:10.485Z",
+      "id": "ab5d9618-5c36-4df1-8648-dbec8ff09e11",
+      "name": "release",
+      "pipeline_id": "ecb77895-f2fd-4135-8535-a7d83b9c27fd",
+      "pipeline_number": 5952,
+      "project_slug": "gh/acme/app-web",
+      "started_by": "00000000-0000-0000-0000-000000000001",
+      "status": "on_hold",
+      "stopped_at": null
+    },
+    {
+      "created_at": "2027-01-14T20:12:44.517Z",
+      "id": "ccdf5734-6359-458e-a52e-94eea6d17966",
+      "name": "setup",
+      "pipeline_id": "ecb77895-f2fd-4135-8535-a7d83b9c27fd",
+      "pipeline_number": 5952,
+      "project_slug": "gh/acme/app-web",
+      "started_by": "00000000-0000-0000-0000-000000000001",
+      "status": "success",
+      "stopped_at": "2027-01-14T20:13:11.136Z",
+      "tag": "setup"
+    }
+  ]
+}
