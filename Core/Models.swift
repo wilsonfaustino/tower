@@ -112,6 +112,17 @@ public enum SectionKind: Int, CaseIterable, Comparable, Sendable {
   case fix, review, merge, tidy, watch, waiting
 
   public static func < (lhs: SectionKind, rhs: SectionKind) -> Bool { lhs.rawValue < rhs.rawValue }
+
+  public var title: String {
+    switch self {
+    case .fix: "Fix"
+    case .review: "Review"
+    case .merge: "Merge"
+    case .tidy: "Tidy"
+    case .watch: "Watch"
+    case .waiting: "Waiting"
+    }
+  }
 }
 
 public enum BadgeVariant: Sendable {
