@@ -54,8 +54,7 @@ struct QueueRowView: View {
 
   // Neutral rows stay gray; only failing, urgent and ready rows take the status color.
   private var symbolColor: Color {
-    guard let variant = item.badge?.variant, variant != .neutral else { return Theme.textSecondary }
-    return Theme.statusText(variant)
+    Theme.statusText(item.badge?.variant ?? .neutral)
   }
 }
 
