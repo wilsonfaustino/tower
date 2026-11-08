@@ -3,20 +3,21 @@ import SwiftUI
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
   let store = QueueStore()
-  private lazy var settingsWindowController = SettingsWindowController { [store] in
+  private lazy var settingsWindowController = injectedSettingsWindowController ?? SettingsWindowController { [store] in
     let hostingController = NSHostingController(rootView: SettingsView(store: store))
     hostingController.sizingOptions = .preferredContentSize
     return hostingController
   }
   private var statusItemController: StatusItemController?
-  private var openSettingsOverride: (() -> Void)?
+  private let injectedSettingsWindowController: SettingsWindowController?
 
   override init() {
+    injectedSettingsWindowController = nil
     super.init()
   }
 
-  init(openSettings: @escaping () -> Void) {
-    openSettingsOverride = openSettings
+  init(settingsWindowController: SettingsWindowController) {
+    injectedSettingsWindowController = settingsWindowController
     super.init()
   }
 
@@ -29,11 +30,7 @@ import SwiftUI
   }
 
   func showSettings() {
-    if let openSettingsOverride {
-      openSettingsOverride()
-    } else {
-      settingsWindowController.show()
-    }
+    settingsWindowController.show()
   }
 
   // The icon can hide behind the notch or be hidden by the user, so launching Tower again opens Settings.
