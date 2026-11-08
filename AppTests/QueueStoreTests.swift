@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import Foundation
 import Testing
@@ -174,5 +175,56 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     let summary = try #require(store.todaySummary)
     #expect(summary.reviews == snapshot.reviewsSubmittedToday)
     #expect(summary.merges == snapshot.mergedToday)
+  }
+}
+
+// The stub transport answers on another thread, so wait in short steps instead of one yield.
+@MainActor private func waitUntil(_ condition: () -> Bool) async throws {
+  for _ in 0..<200 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+}
+
+@MainActor struct QueueStoreStartTests {
+  @Test func startLoadsTheCacheAndRefreshes() async throws {
+    let cacheDirectory = temporaryDirectory()
+    await makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory).refresh()
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    store.start()
+    #expect(store.jiraTickets?.count == 2)
+    try await waitUntil { store.jiraStatus != .idle }
+    #expect(store.jiraStatus == .ok)
+  }
+
+  @Test func becomingActiveAfterAnAuthenticationFailureRefreshesAgain() async throws {
+    let transport = try routingTransport(jira: 401)
+    let store = makeStore(transport: transport, circleci: nil)
+    store.start()
+    try await waitUntil { store.jiraStatus != .idle && !store.isRefreshing }
+    #expect(store.hasAuthenticationFailure)
+    let requestCount = transport.requests.count
+    store.start()
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+    try await waitUntil { transport.requests.count > requestCount && !store.isRefreshing }
+    #expect(transport.requests.count > requestCount)
+  }
+}
+
+@MainActor struct QueueStoreBannerMessageTests {
+  @Test func withoutDataTheBannerSaysHowToFixIt() async throws {
+    let store = makeStore(token: .failure(.authentication), transport: try routingTransport(jira: 401, circleci: 401))
+    await store.refresh()
+    let now = Date()
+    #expect(store.githubBannerMessage(now: now) == "Run gh auth login to show your PRs.")
+    #expect(store.jiraBannerMessage(now: now) == "Check your Jira email and API token in Settings.")
+    #expect(store.circleciBannerMessage(now: now) == "Check your CircleCI API token in Settings.")
+  }
+
+  @Test func withDataTheBannerGivesTheAgeAndTheCurrentSources() async throws {
+    let store = makeStore(transport: try routingTransport())
+    await store.refresh()
+    let fetchedAt = try #require(store.githubFetchedAt)
+    let now = fetchedAt.addingTimeInterval(300)
+    #expect(store.githubBannerMessage(now: now) == "Showing PRs from 5 min ago. Jira and CircleCI are current.")
+    #expect(store.jiraBannerMessage(now: now) == "Showing tickets from 5 min ago. GitHub and CircleCI are current.")
+    #expect(store.circleciBannerMessage(now: now) == "Showing pipelines from 5 min ago. GitHub and Jira are current.")
   }
 }

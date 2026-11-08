@@ -16,7 +16,8 @@ struct SettingsView: View {
   var body: some View {
     Form {
       Section("GitHub") {
-        LabeledContent("Status", value: githubStatusText)
+        LabeledContent(
+          "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
@@ -57,10 +58,6 @@ struct SettingsView: View {
       saveToken()
       saveCircleCIToken()
     }
-  }
-
-  private var githubStatusText: String {
-    settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin)
   }
 
   private func saveToken() {

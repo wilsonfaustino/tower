@@ -76,16 +76,16 @@ struct PanelView: View {
   @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
       if store.githubStatus == .failed(.authentication) {
-        AuthBannerView(title: "GitHub sign-in expired", message: githubBannerMessage) {
+        AuthBannerView(title: "GitHub sign-in expired", message: store.githubBannerMessage(now: Date())) {
           GitHubReconnect.open(ghPath: GhCLITokenProvider().ghPath)
         }
       }
       if store.jiraStatus == .failed(.authentication) {
-        AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
+        AuthBannerView(title: "Jira sign-in expired", message: store.jiraBannerMessage(now: Date()), reconnect: showSettings)
       }
       if store.circleciStatus == .failed(.authentication) {
         AuthBannerView(
-          title: "CircleCI token expired", message: circleciBannerMessage, actionTitle: "Open Settings",
+          title: "CircleCI token expired", message: store.circleciBannerMessage(now: Date()), actionTitle: "Open Settings",
           reconnect: showSettings)
       }
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
@@ -117,27 +117,6 @@ struct PanelView: View {
     }
   }
 
-  private var githubBannerMessage: String {
-    authBannerMessage(
-      itemsLabel: "PRs", fetchedAt: store.githubFetchedAt, now: Date(),
-      missingDataMessage: "Run gh auth login to show your PRs.",
-      otherSources: [("Jira", store.jiraStatus), ("CircleCI", store.circleciStatus)])
-  }
-
-  private var jiraBannerMessage: String {
-    authBannerMessage(
-      itemsLabel: "tickets", fetchedAt: store.jiraFetchedAt, now: Date(),
-      missingDataMessage: "Check your Jira email and API token in Settings.",
-      otherSources: [("GitHub", store.githubStatus), ("CircleCI", store.circleciStatus)])
-  }
-
-  private var circleciBannerMessage: String {
-    authBannerMessage(
-      itemsLabel: "pipelines", fetchedAt: store.circleciFetchedAt, now: Date(),
-      missingDataMessage: "Check your CircleCI API token in Settings.",
-      otherSources: [("GitHub", store.githubStatus), ("Jira", store.jiraStatus)])
-  }
-
   private func showSettings() {
     close()
     openSettings()
@@ -165,6 +144,29 @@ struct PanelView: View {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = false
     NSWorkspace.shared.open(item.url, configuration: configuration)
+  }
+}
+
+extension QueueStore {
+  func githubBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "PRs", fetchedAt: githubFetchedAt, now: now,
+      missingDataMessage: "Run gh auth login to show your PRs.",
+      otherSources: [("Jira", jiraStatus), ("CircleCI", circleciStatus)])
+  }
+
+  func jiraBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "tickets", fetchedAt: jiraFetchedAt, now: now,
+      missingDataMessage: "Check your Jira email and API token in Settings.",
+      otherSources: [("GitHub", githubStatus), ("CircleCI", circleciStatus)])
+  }
+
+  func circleciBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "pipelines", fetchedAt: circleciFetchedAt, now: now,
+      missingDataMessage: "Check your CircleCI API token in Settings.",
+      otherSources: [("GitHub", githubStatus), ("Jira", jiraStatus)])
   }
 }
 
