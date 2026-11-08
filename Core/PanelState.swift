@@ -31,7 +31,7 @@ public func panelSubtitle(sources: [PanelSource], now: Date) -> String {
   let configuredStatuses = sources.filter(\.isConfigured).map(\.status)
   if configuredStatuses.contains(.failed(.network)) { return "Offline" }
   if configuredStatuses.contains(where: { if case .failed = $0 { true } else { false } }) { return "Update failed" }
-  guard let oldestFetch = sources.filter(\.isConfigured).compactMap(\.fetchedAt).min() else { return "Updating" }
+  guard let oldestFetch = sources.filter(\.isConfigured).compactMap(\.fetchedAt).min() else { return "Updating…" }
   let age = shortAge(from: oldestFetch, now: now)
   return age == "now" ? "Updated just now" : "Updated \(age) ago"
 }
@@ -39,7 +39,7 @@ public func panelSubtitle(sources: [PanelSource], now: Date) -> String {
 // Names only the sources that cannot connect: "GitHub", "GitHub or Jira", "GitHub, Jira or CircleCI".
 public func offlineTitle(sources: [(name: String, status: SourceStatus)]) -> String {
   let offlineNames = sources.filter { $0.status == .failed(.network) }.map(\.name)
-  guard let lastName = offlineNames.last else { return "Can't reach the network" }
+  guard let lastName = offlineNames.last else { return "Can’t reach the network" }
   let leadingNames = offlineNames.dropLast()
-  return "Can't reach " + (leadingNames.isEmpty ? lastName : "\(leadingNames.joined(separator: ", ")) or \(lastName)")
+  return "Can’t reach " + (leadingNames.isEmpty ? lastName : "\(leadingNames.joined(separator: ", ")) or \(lastName)")
 }

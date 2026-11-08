@@ -30,12 +30,12 @@ struct QueueRowView: View {
       if let badge = item.badge {
         BadgeView(badge: badge, isSelected: isSelected)
       }
-      if isHovered && !isSelected {
-        Image(systemName: "arrow.up.right")
-          .font(.system(size: Theme.Metrics.openArrowSize))
-          .foregroundStyle(Theme.textSecondary)
-          .accessibilityHidden(true)
-      }
+      // Always in the layout so hover does not change the row width or the title truncation.
+      Image(systemName: "arrow.up.right")
+        .font(.system(size: Theme.Metrics.openArrowSize))
+        .foregroundStyle(Theme.textSecondary)
+        .opacity(isHovered && !isSelected ? 1 : 0)
+        .accessibilityHidden(true)
     }
     .padding(.horizontal, Theme.Metrics.rowInset)
     .frame(minHeight: Theme.Metrics.rowMinHeight)
@@ -44,7 +44,7 @@ struct QueueRowView: View {
     .onHover { isHovered = $0 }
     .onTapGesture(perform: open)
     .accessibilityElement(children: .combine)
-    .accessibilityAddTraits(.isButton)
+    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
   }
 
   private var rowFill: Color {

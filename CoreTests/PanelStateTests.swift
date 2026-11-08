@@ -80,7 +80,7 @@ struct PanelSubtitleTests {
   }
 
   @Test func noFetchYetShowsUpdating() {
-    #expect(subtitle(github: .idle, githubMinutesAgo: nil) == "Updating")
+    #expect(subtitle(github: .idle, githubMinutesAgo: nil) == "Updating…")
   }
 }
 
@@ -126,16 +126,16 @@ struct ThreeSourcePanelStateTests {
 struct OfflineTitleTests {
   @Test func namesOnlyTheOfflineSource() {
     let sources = [("GitHub", SourceStatus.ok), ("Jira", .failed(.notConfigured)), ("CircleCI", .failed(.network))]
-    #expect(offlineTitle(sources: sources) == "Can't reach CircleCI")
+    #expect(offlineTitle(sources: sources) == "Can’t reach CircleCI")
   }
 
   @Test func joinsTwoOfflineSourcesWithOr() {
     let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .ok)]
-    #expect(offlineTitle(sources: sources) == "Can't reach GitHub or Jira")
+    #expect(offlineTitle(sources: sources) == "Can’t reach GitHub or Jira")
   }
 
   @Test func joinsThreeOfflineSourcesInOrder() {
     let sources = [("GitHub", SourceStatus.failed(.network)), ("Jira", .failed(.network)), ("CircleCI", .failed(.network))]
-    #expect(offlineTitle(sources: sources) == "Can't reach GitHub, Jira or CircleCI")
+    #expect(offlineTitle(sources: sources) == "Can’t reach GitHub, Jira or CircleCI")
   }
 }

@@ -104,7 +104,7 @@ struct SettingsView: View {
 
 func settingsGitHubStatusText(status: SourceStatus, viewerLogin: String?) -> String {
   switch status {
-  case .idle: "Checking"
+  case .idle: "Checking…"
   case .ok: "Signed in as \(viewerLogin ?? "unknown") via gh"
   case .failed(let failure): settingsFailureText(failure, source: "GitHub")
   }
@@ -118,7 +118,7 @@ func settingsFailureText(_ failure: SourceFailure, source: String) -> String {
     case "CircleCI": "Token rejected. Check the API token."
     default: "Sign-in failed. Check email and token."
     }
-  case .network: "Can't reach \(source)"
+  case .network: "Can’t reach \(source)"
   case .notConfigured: "Not set up"
   case .unexpected(let message): message
   }
