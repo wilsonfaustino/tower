@@ -95,8 +95,8 @@ public struct GitHubClient: Sendable {
     }
     return GitHubSnapshot(
       viewerLogin: payload.viewer.login,
-      authoredPullRequests: payload.authored.nodes.compactMap { $0.pullRequest },
-      reviewRequests: payload.requested.nodes.compactMap { $0.pullRequest },
+      authoredPullRequests: payload.authored.nodes.compactMap { $0?.pullRequest },
+      reviewRequests: payload.requested.nodes.compactMap { $0?.pullRequest },
       reviewsSubmittedToday: payload.reviewed.issueCount,
       mergedToday: payload.merged.issueCount)
   }
@@ -147,7 +147,8 @@ private struct GraphQLResponse: Decodable {
     var merged: Count
   }
   struct Viewer: Decodable { var login: String }
-  struct Search: Decodable { var nodes: [PullRequestNode] }
+  // A node GitHub cannot return (for example a PR behind SAML) comes back as null next to an errors entry.
+  struct Search: Decodable { var nodes: [PullRequestNode?] }
   struct Count: Decodable { var issueCount: Int }
 
   var data: Payload?
