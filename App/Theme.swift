@@ -16,11 +16,13 @@ enum Theme {
   enum Radius {
     static let row: CGFloat = 8
     static let banner: CGFloat = 10
+    static let panel: CGFloat = 12
   }
 
   enum Metrics {
     static let panelWidth: CGFloat = 380
     static let panelMaxHeight: CGFloat = 560
+    static let panelGap: CGFloat = 4
     static let rowMinHeight: CGFloat = 40
     static let rowInset: CGFloat = 6
     static let iconColumn: CGFloat = 20

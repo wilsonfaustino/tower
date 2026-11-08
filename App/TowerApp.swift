@@ -1,35 +1,12 @@
-import Core
 import SwiftUI
 
 @main
 struct TowerApp: App {
-  @State private var store = QueueStore()
+  @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
   var body: some Scene {
-    MenuBarExtra {
-      PanelView(store: store)
-    } label: {
-      MenuBarLabel(state: store.menuBarState)
-        .task { store.start() }
-    }
-    .menuBarExtraStyle(.window)
     Settings {
-      SettingsView(store: store)
+      SettingsView(store: appDelegate.store)
     }
-  }
-}
-
-private struct MenuBarLabel: View {
-  let state: MenuBarState
-
-  var body: some View {
-    HStack(spacing: 2) {
-      Image(state.imageName)
-      if let countText = state.countText {
-        Text(countText).monospacedDigit()
-      }
-    }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(state.accessibilityLabel)
   }
 }
