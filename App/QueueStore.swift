@@ -7,12 +7,13 @@ enum JiraSettingsKeys {
   static let siteURL = "jiraSiteURL"
   static let email = "jiraEmail"
 
-  static func load() -> JiraSettings? {
-    let defaults = UserDefaults.standard
+  static func load(
+    defaults: UserDefaults = .standard, readToken: (String) -> String? = KeychainStore.read(account:)
+  ) -> JiraSettings? {
     guard
       let siteText = defaults.string(forKey: siteURL), let site = URL(string: siteText), site.host() != nil,
       let email = defaults.string(forKey: email), !email.isEmpty,
-      let token = KeychainStore.read(account: KeychainStore.jiraTokenAccount), !token.isEmpty
+      let token = readToken(KeychainStore.jiraTokenAccount), !token.isEmpty
     else { return nil }
     return JiraSettings(siteURL: site, email: email, apiToken: token)
   }
@@ -21,9 +22,11 @@ enum JiraSettingsKeys {
 enum CircleCISettingsKeys {
   static let projectSlugs = "circleciProjectSlugs"
 
-  static func load() -> CircleCISettings? {
-    let slugs = (UserDefaults.standard.string(forKey: projectSlugs) ?? "").split(whereSeparator: \.isNewline).map(String.init)
-    guard let token = KeychainStore.read(account: KeychainStore.circleciTokenAccount), !token.isEmpty else { return nil }
+  static func load(
+    defaults: UserDefaults = .standard, readToken: (String) -> String? = KeychainStore.read(account:)
+  ) -> CircleCISettings? {
+    let slugs = (defaults.string(forKey: projectSlugs) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+    guard let token = readToken(KeychainStore.circleciTokenAccount), !token.isEmpty else { return nil }
     let settings = CircleCISettings(apiToken: token, projectSlugs: slugs)
     return settings.projectSlugs.isEmpty ? nil : settings
   }
@@ -44,12 +47,27 @@ enum CircleCISettingsKeys {
   private(set) var jiraTickets: [JiraTicket]?
   private(set) var pipelines: [Pipeline]?
 
-  let tokenProvider = GhCLITokenProvider()
-  private let transport = URLSessionTransport()
-  private let cache = SourceCache(
-    directory: URL.applicationSupportDirectory.appendingPathComponent("Tower", isDirectory: true))
+  private let tokenProvider: any GitHubTokenProvider
+  private let transport: any HTTPTransport
+  private let cache: SourceCache
+  private let loadJiraSettings: () -> JiraSettings?
+  private let loadCircleCISettings: () -> CircleCISettings?
   private var pollingTask: Task<Void, Never>?
   private var activationObserver: NSObjectProtocol?
+
+  init(
+    tokenProvider: any GitHubTokenProvider = GhCLITokenProvider(),
+    transport: any HTTPTransport = URLSessionTransport(),
+    cacheDirectory: URL = URL.applicationSupportDirectory.appendingPathComponent("Tower", isDirectory: true),
+    loadJiraSettings: @escaping () -> JiraSettings? = { JiraSettingsKeys.load() },
+    loadCircleCISettings: @escaping () -> CircleCISettings? = { CircleCISettingsKeys.load() }
+  ) {
+    self.tokenProvider = tokenProvider
+    self.transport = transport
+    cache = SourceCache(directory: cacheDirectory)
+    self.loadJiraSettings = loadJiraSettings
+    self.loadCircleCISettings = loadCircleCISettings
+  }
 
   var todaySummary: (reviews: Int, merges: Int)? {
     githubSnapshot.map { ($0.reviewsSubmittedToday, $0.mergedToday) }
@@ -57,20 +75,7 @@ enum CircleCISettingsKeys {
 
   func start() {
     guard pollingTask == nil else { return }
-    if let cached = cache.load(GitHubSnapshot.self, name: "github") {
-      githubSnapshot = cached.value
-      githubFetchedAt = cached.fetchedAt
-    }
-    if let cached = cache.load([JiraTicket].self, name: "jira") {
-      jiraTickets = cached.value
-      jiraFetchedAt = cached.fetchedAt
-    }
-    // Without CircleCI settings, an old cache would show a stale fetch age.
-    if CircleCISettingsKeys.load() != nil, let cached = cache.load([Pipeline].self, name: "circleci") {
-      pipelines = cached.value
-      circleciFetchedAt = cached.fetchedAt
-    }
-    rebuild()
+    loadCache()
     pollingTask = Task { [weak self] in
       while !Task.isCancelled {
         guard let self else { return }
@@ -87,6 +92,23 @@ enum CircleCISettingsKeys {
         Task { await self.refresh() }
       }
     }
+  }
+
+  func loadCache() {
+    if let cached = cache.load(GitHubSnapshot.self, name: "github") {
+      githubSnapshot = cached.value
+      githubFetchedAt = cached.fetchedAt
+    }
+    if let cached = cache.load([JiraTicket].self, name: "jira") {
+      jiraTickets = cached.value
+      jiraFetchedAt = cached.fetchedAt
+    }
+    // Without CircleCI settings, an old cache would show a stale fetch age.
+    if loadCircleCISettings() != nil, let cached = cache.load([Pipeline].self, name: "circleci") {
+      pipelines = cached.value
+      circleciFetchedAt = cached.fetchedAt
+    }
+    rebuild()
   }
 
   // GitHub comes first, then Jira, then CircleCI, so the earlier stale label wins in the subtitle.
@@ -109,8 +131,8 @@ enum CircleCISettingsKeys {
     defer { isRefreshing = false }
     let now = Date()
     let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport)
-    let jiraClient = JiraClient(settings: JiraSettingsKeys.load(), transport: transport)
-    let circleciClient = CircleCIClient(settings: CircleCISettingsKeys.load(), transport: transport)
+    let jiraClient = JiraClient(settings: loadJiraSettings(), transport: transport)
+    let circleciClient = CircleCIClient(settings: loadCircleCISettings(), transport: transport)
     async let githubResult = Result { () async throws(SourceFailure) -> GitHubSnapshot in try await githubClient.fetch(now: now) }
     async let jiraResult = Result { () async throws(SourceFailure) -> [JiraTicket] in try await jiraClient.fetch() }
     async let circleciResult = Result { () async throws(SourceFailure) -> [Pipeline] in try await circleciClient.fetch(now: now) }

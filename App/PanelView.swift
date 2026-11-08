@@ -77,7 +77,7 @@ struct PanelView: View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
       if store.githubStatus == .failed(.authentication) {
         AuthBannerView(title: "GitHub sign-in expired", message: githubBannerMessage) {
-          GitHubReconnect.open(ghPath: store.tokenProvider.ghPath)
+          GitHubReconnect.open(ghPath: GhCLITokenProvider().ghPath)
         }
       }
       if store.jiraStatus == .failed(.authentication) {
