@@ -71,6 +71,16 @@ import Testing
     }
   }
 
+  @Test func resizeKeepsThePanelOpenAndCloseHidesIt() {
+    withController { controller, _ in
+      controller.showPanel()
+      controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+      #expect(controller.isPanelVisible)
+      controller.closePanel()
+      #expect(!controller.isPanelVisible)
+    }
+  }
+
   @Test func buttonFollowsStoreChanges() async {
     let store = QueueStore()
     let controller = StatusItemController(store: store, openSettings: {}, quit: {})
