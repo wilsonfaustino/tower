@@ -60,3 +60,25 @@ import Testing
     }
   }
 }
+
+@MainActor struct StatusItemPanelTests {
+  @Test func panelClosesWhenItLosesKeyStatus() {
+    withController { controller, _ in
+      controller.showPanel()
+      #expect(controller.isPanelVisible)
+      controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+      #expect(!controller.isPanelVisible)
+    }
+  }
+
+  @Test func buttonFollowsStoreChanges() async {
+    let store = QueueStore()
+    let controller = StatusItemController(store: store, openSettings: {}, quit: {})
+    store.menuBarState = .failing(count: 3)
+    // The observation re-arms on the next main actor turn.
+    for _ in 0..<10 where controller.statusItem.button?.title != "3" { await Task.yield() }
+    #expect(controller.statusItem.button?.title == "3")
+    #expect(controller.statusItem.button?.accessibilityLabel() == "Tower, 3 items to fix")
+    NSStatusBar.system.removeStatusItem(controller.statusItem)
+  }
+}
