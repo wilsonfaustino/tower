@@ -16,6 +16,8 @@ public struct JiraClient: Sendable {
   // Status names differ by ticket type, so filter on the status category only.
   private static let jql = "assignee = currentUser() AND statusCategory = \"In Progress\" ORDER BY updated ASC"
   private static let maxResults = 50
+  // Caps the fetch at 250 tickets, so a response that always sends a token cannot loop.
+  private static let maxPages = 5
 
   private let settings: JiraSettings?
   private let transport: HTTPTransport
@@ -33,18 +35,25 @@ public struct JiraClient: Sendable {
     request.setValue("Basic \(credentials)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.httpBody = try? JSONSerialization.data(withJSONObject: [
-      "jql": Self.jql, "fields": ["summary", "status", "updated"], "maxResults": Self.maxResults,
-    ] as [String: Any])
+    var issues: [SearchResponse.Issue] = []
+    var nextPageToken: String?
+    for _ in 0..<Self.maxPages {
+      var body: [String: Any] = ["jql": Self.jql, "fields": ["summary", "status", "updated"], "maxResults": Self.maxResults]
+      body["nextPageToken"] = nextPageToken
+      request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-    let data = try await sendMapped(request, transport: transport)
-    let response: SearchResponse
-    do {
-      response = try Self.decoder.decode(SearchResponse.self, from: data)
-    } catch {
-      throw .unexpected("Jira response did not decode")
+      let data = try await sendMapped(request, transport: transport)
+      let response: SearchResponse
+      do {
+        response = try Self.decoder.decode(SearchResponse.self, from: data)
+      } catch {
+        throw .unexpected("Jira response did not decode")
+      }
+      issues += response.issues
+      nextPageToken = response.nextPageToken
+      if response.isLast == true || nextPageToken == nil { break }
     }
-    return response.issues.map { issue in
+    return issues.map { issue in
       JiraTicket(
         key: issue.key, summary: issue.fields.summary, statusName: issue.fields.status.name,
         updatedAt: issue.fields.updated, url: settings.siteURL.appending(path: "browse/\(issue.key)"))
@@ -75,4 +84,6 @@ private struct SearchResponse: Decodable {
   struct Status: Decodable { var name: String }
 
   var issues: [Issue]
+  var nextPageToken: String?
+  var isLast: Bool?
 }

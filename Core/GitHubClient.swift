@@ -89,12 +89,14 @@ public struct GitHubClient: Sendable {
     } catch {
       throw .unexpected("GitHub response did not decode")
     }
-    if let message = response.errors?.first?.message { throw .unexpected(message) }
-    guard let payload = response.data else { throw .unexpected("GitHub response has no data") }
+    // GraphQL can return data and errors together; one failed field should not hide the PRs that did load.
+    guard let payload = response.data else {
+      throw .unexpected(response.errors?.first?.message ?? "GitHub response has no data")
+    }
     return GitHubSnapshot(
       viewerLogin: payload.viewer.login,
-      authoredPullRequests: payload.authored.nodes.compactMap { $0.pullRequest },
-      reviewRequests: payload.requested.nodes.compactMap { $0.pullRequest },
+      authoredPullRequests: payload.authored.nodes.compactMap { $0?.pullRequest },
+      reviewRequests: payload.requested.nodes.compactMap { $0?.pullRequest },
       reviewsSubmittedToday: payload.reviewed.issueCount,
       mergedToday: payload.merged.issueCount)
   }
@@ -145,7 +147,8 @@ private struct GraphQLResponse: Decodable {
     var merged: Count
   }
   struct Viewer: Decodable { var login: String }
-  struct Search: Decodable { var nodes: [PullRequestNode] }
+  // A node GitHub cannot return (for example a PR behind SAML) comes back as null next to an errors entry.
+  struct Search: Decodable { var nodes: [PullRequestNode?] }
   struct Count: Decodable { var issueCount: Int }
 
   var data: Payload?

@@ -98,6 +98,30 @@ struct GitHubClientTests {
     }
   }
 
+  @Test func graphQLErrorsWithDataKeepTheSnapshot() async throws {
+    var response = try #require(try JSONSerialization.jsonObject(with: fixture("github-search.json")) as? [String: Any])
+    response["errors"] = [["message": "Resource protected by organization SAML enforcement"]]
+    let body = try JSONSerialization.data(withJSONObject: response)
+    let snapshot = try await client(transport: StubTransport { _ in (body, 200) }).fetch(now: now)
+    #expect(snapshot.viewerLogin == "octo-me")
+    #expect(snapshot.authoredPullRequests.count == 2)
+  }
+
+  @Test func nullSearchNodeWithErrorsKeepsTheOtherPullRequests() async throws {
+    var response = try #require(try JSONSerialization.jsonObject(with: fixture("github-search.json")) as? [String: Any])
+    var data = try #require(response["data"] as? [String: Any])
+    var authored = try #require(data["authored"] as? [String: Any])
+    var nodes = try #require(authored["nodes"] as? [Any])
+    nodes.insert(NSNull(), at: 0)
+    authored["nodes"] = nodes
+    data["authored"] = authored
+    response["data"] = data
+    response["errors"] = [["message": "Resource protected by organization SAML enforcement", "path": ["authored", "nodes", 0]]]
+    let body = try JSONSerialization.data(withJSONObject: response)
+    let snapshot = try await client(transport: StubTransport { _ in (body, 200) }).fetch(now: now)
+    #expect(snapshot.authoredPullRequests.count == 2)
+  }
+
   @Test func tokenFailurePassesThroughWithoutRequest() async {
     let transport = StubTransport { _ in (Data(), 200) }
     await #expect(throws: SourceFailure.authentication) {
