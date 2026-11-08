@@ -134,8 +134,4 @@ import SwiftUI
     positionPanel()
     panel.invalidateShadow()
   }
-
-  func windowDidResignKey(_ notification: Notification) {
-    closePanel()
-  }
 }
