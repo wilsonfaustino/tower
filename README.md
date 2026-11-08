@@ -58,9 +58,9 @@ xcodegen generate
 xcodebuild -scheme Tower -destination 'platform=macOS' test
 ```
 
-The tests use Swift Testing. `CoreTests` covers the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. `AppTests` covers the menu bar icon, its right-click menu, the panel close rules and the Settings window. The tests do not call the network.
+The tests use Swift Testing. `CoreTests` covers the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. `AppTests` covers the store refresh and cache load (with the same stub transport), the settings loaders, the menu bar icon, its right-click menu, the panel close rules and placement, the banner and Settings text, and the Settings window. The tests do not call the network, and they do not touch the real Jira and CircleCI Keychain items, the owner's defaults or the real cache folder.
 
-GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `Core` coverage to SonarQube Cloud. It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
+GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `App` and `Core` coverage to SonarQube Cloud. Only three layout-only views are excluded from coverage (`sonar-project.properties`). It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
 
 ## Release
 
@@ -77,7 +77,7 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 | `App/` | SwiftUI and AppKit app: status item, panel window, store, panel views, settings, theme tokens, assets |
 | `Core/` | Framework with no SwiftUI: models, GitHub and Jira clients, queue rules, cache, refresh policy, panel state |
 | `CoreTests/` | Unit tests and fixtures for `Core` |
-| `AppTests/` | Unit tests for the status item, panel and Settings window, hosted by the app |
+| `AppTests/` | Unit tests for the store, status item, panel and Settings logic, hosted by the app |
 | `scripts/` | Release script, coverage conversion for SonarQube |
 | `docs/superpowers/` | Specs and implementation plans |
 
