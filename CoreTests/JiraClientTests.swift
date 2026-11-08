@@ -55,6 +55,22 @@ struct JiraClientTests {
     #expect(transport.requests.count == 2)
   }
 
+  @Test func stopsWhenIsLastEvenWithAToken() async throws {
+    let page = try JSONSerialization.data(withJSONObject: [
+      "issues": [], "isLast": true, "nextPageToken": "ignored",
+    ] as [String: Any])
+    let transport = StubTransport { _ in (page, 200) }
+    _ = try await JiraClient(settings: settings, transport: transport).fetch()
+    #expect(transport.requests.count == 1)
+  }
+
+  @Test func stopsWhenTokenIsMissingEvenIfNotLast() async throws {
+    let page = try JSONSerialization.data(withJSONObject: ["issues": [], "isLast": false] as [String: Any])
+    let transport = StubTransport { _ in (page, 200) }
+    _ = try await JiraClient(settings: settings, transport: transport).fetch()
+    #expect(transport.requests.count == 1)
+  }
+
   @Test func stopsAfterFivePages() async throws {
     let transport = StubTransport { _ in (searchPage(keys: ["PROJ-1"], nextPageToken: "more"), 200) }
     let tickets = try await JiraClient(settings: settings, transport: transport).fetch()
