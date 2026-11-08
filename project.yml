@@ -47,11 +47,22 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.wilsonfaustino.Tower.CoreTests
         GENERATE_INFOPLIST_FILE: YES
+  AppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [AppTests]
+    dependencies:
+      - target: Tower
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wilsonfaustino.Tower.AppTests
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   Tower:
     build:
       targets:
         Tower: all
         CoreTests: [test]
+        AppTests: [test]
     test:
-      targets: [CoreTests]
+      targets: [CoreTests, AppTests]
