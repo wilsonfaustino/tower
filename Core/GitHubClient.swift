@@ -89,8 +89,10 @@ public struct GitHubClient: Sendable {
     } catch {
       throw .unexpected("GitHub response did not decode")
     }
-    if let message = response.errors?.first?.message { throw .unexpected(message) }
-    guard let payload = response.data else { throw .unexpected("GitHub response has no data") }
+    // GraphQL can return data and errors together; one failed field should not hide the PRs that did load.
+    guard let payload = response.data else {
+      throw .unexpected(response.errors?.first?.message ?? "GitHub response has no data")
+    }
     return GitHubSnapshot(
       viewerLogin: payload.viewer.login,
       authoredPullRequests: payload.authored.nodes.compactMap { $0.pullRequest },

@@ -98,6 +98,15 @@ struct GitHubClientTests {
     }
   }
 
+  @Test func graphQLErrorsWithDataKeepTheSnapshot() async throws {
+    var response = try #require(try JSONSerialization.jsonObject(with: fixture("github-search.json")) as? [String: Any])
+    response["errors"] = [["message": "Resource protected by organization SAML enforcement"]]
+    let body = try JSONSerialization.data(withJSONObject: response)
+    let snapshot = try await client(transport: StubTransport { _ in (body, 200) }).fetch(now: now)
+    #expect(snapshot.viewerLogin == "octo-me")
+    #expect(snapshot.authoredPullRequests.count == 2)
+  }
+
   @Test func tokenFailurePassesThroughWithoutRequest() async {
     let transport = StubTransport { _ in (Data(), 200) }
     await #expect(throws: SourceFailure.authentication) {
