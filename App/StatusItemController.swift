@@ -94,7 +94,9 @@ import SwiftUI
     statusItem.menu = nil
   }
 
-  private func showPanel() {
+  var isPanelVisible: Bool { panel.isVisible }
+
+  func showPanel() {
     let hostingController = NSHostingController(
       rootView: PanelView(store: store, close: { [weak self] in self?.closePanel() }, openSettings: openSettings)
         .background(.regularMaterial)
@@ -133,5 +135,10 @@ import SwiftUI
   func windowDidResize(_ notification: Notification) {
     positionPanel()
     panel.invalidateShadow()
+  }
+
+  // Covers a click in another Tower window and Cmd-Tab to another app.
+  func windowDidResignKey(_ notification: Notification) {
+    closePanel()
   }
 }

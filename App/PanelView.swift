@@ -171,8 +171,14 @@ struct PanelView: View {
   }
 
   private func open(_ item: QueueItem) {
-    NSWorkspace.shared.open(item.url)
-    // Cmd-click opens the item and keeps the panel open.
-    if !NSEvent.modifierFlags.contains(.command) { close() }
+    // Cmd-click opens the item in the background, so the panel keeps key status and stays open.
+    guard NSEvent.modifierFlags.contains(.command) else {
+      NSWorkspace.shared.open(item.url)
+      close()
+      return
+    }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    NSWorkspace.shared.open(item.url, configuration: configuration)
   }
 }
