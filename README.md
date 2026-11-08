@@ -1,5 +1,7 @@
 # Tower
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=wilsonfaustino_tower&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=wilsonfaustino_tower)
+
 A macOS menu bar app that shows one queue of the GitHub pull requests and Jira tickets that need you now, sorted by urgency. Open the panel, see what to do, and click through to the item.
 
 Tower is a sibling of [Copilot Runway](https://github.com/wilsonfaustino/copilot-runway). Both apps use aviation names.
@@ -58,6 +60,8 @@ xcodebuild -scheme Tower -destination 'platform=macOS' test
 
 The tests use Swift Testing and cover the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. They do not call the network.
 
+GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `Core` coverage to SonarQube Cloud. It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
+
 ## Release
 
 ```bash
@@ -73,14 +77,13 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 | `App/` | SwiftUI app: menu bar scene, store, panel views, settings, theme tokens, assets |
 | `Core/` | Framework with no SwiftUI: models, GitHub and Jira clients, queue rules, cache, refresh policy, panel state |
 | `CoreTests/` | Unit tests and fixtures |
-| `scripts/` | Release script |
+| `scripts/` | Release script, coverage conversion for SonarQube |
 | `docs/superpowers/` | Specs and implementation plans |
 
 ## Next steps
 
-1. **CI and SonarQube:** a GitHub Actions workflow that builds and runs the tests on each PR, plus SonarQube analysis of the repo. PRs get checks.
-2. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
-3. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
+1. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
+2. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
 
 Update this list when an item ships or changes.
 
