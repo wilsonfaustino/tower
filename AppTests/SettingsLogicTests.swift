@@ -15,7 +15,7 @@ struct SettingsFailureTextTests {
   }
 
   @Test func otherFailures() {
-    #expect(settingsFailureText(.network, source: "Jira") == "Can't reach Jira")
+    #expect(settingsFailureText(.network, source: "Jira") == "Can’t reach Jira")
     #expect(settingsFailureText(.notConfigured, source: "CircleCI") == "Not set up")
     #expect(settingsFailureText(.unexpected("HTTP 500"), source: "GitHub") == "HTTP 500")
   }
@@ -23,7 +23,7 @@ struct SettingsFailureTextTests {
 
 struct SettingsGitHubStatusTextTests {
   @Test func statusText() {
-    #expect(settingsGitHubStatusText(status: .idle, viewerLogin: nil) == "Checking")
+    #expect(settingsGitHubStatusText(status: .idle, viewerLogin: nil) == "Checking…")
     #expect(settingsGitHubStatusText(status: .ok, viewerLogin: "octo-me") == "Signed in as octo-me via gh")
     #expect(settingsGitHubStatusText(status: .ok, viewerLogin: nil) == "Signed in as unknown via gh")
     #expect(settingsGitHubStatusText(status: .failed(.authentication), viewerLogin: nil) == "Not signed in. Run gh auth login.")
