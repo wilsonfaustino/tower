@@ -76,16 +76,16 @@ struct PanelView: View {
   @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
       if store.githubStatus == .failed(.authentication) {
-        AuthBannerView(title: "GitHub sign-in expired", message: githubBannerMessage) {
-          GitHubReconnect.open(ghPath: store.tokenProvider.ghPath)
+        AuthBannerView(title: "GitHub sign-in expired", message: store.githubBannerMessage(now: Date())) {
+          GitHubReconnect.open(ghPath: GhCLITokenProvider().ghPath)
         }
       }
       if store.jiraStatus == .failed(.authentication) {
-        AuthBannerView(title: "Jira sign-in expired", message: jiraBannerMessage, reconnect: showSettings)
+        AuthBannerView(title: "Jira sign-in expired", message: store.jiraBannerMessage(now: Date()), reconnect: showSettings)
       }
       if store.circleciStatus == .failed(.authentication) {
         AuthBannerView(
-          title: "CircleCI token expired", message: circleciBannerMessage, actionTitle: "Open Settings",
+          title: "CircleCI token expired", message: store.circleciBannerMessage(now: Date()), actionTitle: "Open Settings",
           reconnect: showSettings)
       }
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
@@ -117,34 +117,6 @@ struct PanelView: View {
     }
   }
 
-  private var githubBannerMessage: String {
-    guard let fetchedAt = store.githubFetchedAt else { return "Run gh auth login to show your PRs." }
-    let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
-    return "Showing PRs from \(minutes) min ago.\(currentSentence(jira: true, circleci: true))"
-  }
-
-  private var jiraBannerMessage: String {
-    guard let fetchedAt = store.jiraFetchedAt else { return "Check your Jira email and API token in Settings." }
-    let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
-    return "Showing tickets from \(minutes) min ago.\(currentSentence(github: true, circleci: true))"
-  }
-
-  private var circleciBannerMessage: String {
-    guard let fetchedAt = store.circleciFetchedAt else { return "Check your CircleCI API token in Settings." }
-    let minutes = max(1, Int(Date().timeIntervalSince(fetchedAt) / 60))
-    return "Showing pipelines from \(minutes) min ago.\(currentSentence(github: true, jira: true))"
-  }
-
-  // Names the other sources that fetched on the last refresh, like " GitHub and Jira are current."
-  private func currentSentence(github: Bool = false, jira: Bool = false, circleci: Bool = false) -> String {
-    var names: [String] = []
-    if github && store.githubStatus == .ok { names.append("GitHub") }
-    if jira && store.jiraStatus == .ok { names.append("Jira") }
-    if circleci && store.circleciStatus == .ok { names.append("CircleCI") }
-    guard !names.isEmpty else { return "" }
-    return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
-  }
-
   private func showSettings() {
     close()
     openSettings()
@@ -157,16 +129,8 @@ struct PanelView: View {
   private var allItems: [QueueItem] { store.sections.flatMap(\.items) }
 
   private func moveSelection(by offset: Int) -> KeyPress.Result {
-    let items = allItems
-    guard !items.isEmpty else { return .ignored }
-    let currentIndex = items.firstIndex { $0.id == selectedItemId }
-    let nextIndex: Int
-    if let currentIndex {
-      nextIndex = min(max(currentIndex + offset, 0), items.count - 1)
-    } else {
-      nextIndex = offset > 0 ? 0 : items.count - 1
-    }
-    selectedItemId = items[nextIndex].id
+    guard let nextItemId = nextSelectedItemId(in: allItems, after: selectedItemId, offset: offset) else { return .ignored }
+    selectedItemId = nextItemId
     return .handled
   }
 
@@ -181,4 +145,55 @@ struct PanelView: View {
     configuration.activates = false
     NSWorkspace.shared.open(item.url, configuration: configuration)
   }
+}
+
+extension QueueStore {
+  func githubBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "PRs", fetchedAt: githubFetchedAt, now: now,
+      missingDataMessage: "Run gh auth login to show your PRs.",
+      otherSources: [("Jira", jiraStatus), ("CircleCI", circleciStatus)])
+  }
+
+  func jiraBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "tickets", fetchedAt: jiraFetchedAt, now: now,
+      missingDataMessage: "Check your Jira email and API token in Settings.",
+      otherSources: [("GitHub", githubStatus), ("CircleCI", circleciStatus)])
+  }
+
+  func circleciBannerMessage(now: Date) -> String {
+    authBannerMessage(
+      itemsLabel: "pipelines", fetchedAt: circleciFetchedAt, now: now,
+      missingDataMessage: "Check your CircleCI API token in Settings.",
+      otherSources: [("GitHub", githubStatus), ("Jira", jiraStatus)])
+  }
+}
+
+func authBannerMessage(
+  itemsLabel: String, fetchedAt: Date?, now: Date, missingDataMessage: String,
+  otherSources: [(name: String, status: SourceStatus)]
+) -> String {
+  guard let fetchedAt else { return missingDataMessage }
+  let minutes = max(1, Int(now.timeIntervalSince(fetchedAt) / 60))
+  return "Showing \(itemsLabel) from \(minutes) min ago.\(currentSentence(sources: otherSources))"
+}
+
+// Names the other sources that fetched on the last refresh, like " GitHub and Jira are current."
+func currentSentence(sources: [(name: String, status: SourceStatus)]) -> String {
+  let names = sources.filter { $0.status == .ok }.map(\.name)
+  guard !names.isEmpty else { return "" }
+  return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
+}
+
+// The first press picks the first row (Down) or the last row (Up). At either end the selection stays.
+func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, offset: Int) -> String? {
+  guard !items.isEmpty else { return nil }
+  let nextIndex: Int
+  if let currentIndex = items.firstIndex(where: { $0.id == selectedItemId }) {
+    nextIndex = min(max(currentIndex + offset, 0), items.count - 1)
+  } else {
+    nextIndex = offset > 0 ? 0 : items.count - 1
+  }
+  return items[nextIndex].id
 }

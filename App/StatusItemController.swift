@@ -77,12 +77,10 @@ import SwiftUI
 
   @objc private func handleButtonClick() {
     guard let event = NSApp.currentEvent else { return }
-    if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
-      showContextMenu()
-    } else if panel.isVisible {
-      closePanel()
-    } else {
-      showPanel()
+    switch statusItemClickAction(eventType: event.type, modifierFlags: event.modifierFlags, isPanelVisible: panel.isVisible) {
+    case .showMenu: showContextMenu()
+    case .closePanel: closePanel()
+    case .showPanel: showPanel()
     }
   }
 
@@ -121,15 +119,12 @@ import SwiftUI
     outsideClickMonitor = nil
   }
 
-  // Top-left of the panel sits under the icon, kept inside the screen.
   private func positionPanel() {
     guard let buttonWindow = statusItem.button?.window, let screen = buttonWindow.screen else { return }
-    let anchor = buttonWindow.frame
-    let size = panel.frame.size
-    let visibleFrame = screen.visibleFrame
-    let originX = min(max(anchor.minX, visibleFrame.minX), visibleFrame.maxX - size.width)
-    let originY = anchor.minY - Theme.Metrics.panelGap - size.height
-    panel.setFrameOrigin(NSPoint(x: originX, y: originY))
+    panel.setFrameOrigin(
+      panelOrigin(
+        anchor: buttonWindow.frame, panelSize: panel.frame.size, visibleFrame: screen.visibleFrame,
+        gap: Theme.Metrics.panelGap))
   }
 
   func windowDidResize(_ notification: Notification) {
@@ -141,4 +136,24 @@ import SwiftUI
   func windowDidResignKey(_ notification: Notification) {
     closePanel()
   }
+}
+
+enum StatusItemClickAction {
+  case showMenu
+  case closePanel
+  case showPanel
+}
+
+func statusItemClickAction(
+  eventType: NSEvent.EventType, modifierFlags: NSEvent.ModifierFlags, isPanelVisible: Bool
+) -> StatusItemClickAction {
+  if eventType == .rightMouseUp || modifierFlags.contains(.control) { return .showMenu }
+  return isPanelVisible ? .closePanel : .showPanel
+}
+
+// Top-left of the panel sits under the icon, kept inside the screen.
+func panelOrigin(anchor: NSRect, panelSize: NSSize, visibleFrame: NSRect, gap: CGFloat) -> NSPoint {
+  let originX = min(max(anchor.minX, visibleFrame.minX), visibleFrame.maxX - panelSize.width)
+  let originY = anchor.minY - gap - panelSize.height
+  return NSPoint(x: originX, y: originY)
 }

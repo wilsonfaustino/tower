@@ -4,12 +4,16 @@ import Core
 // Tower cannot run `gh auth login` without a terminal. Opening a .command file makes
 // Terminal run it, which needs no Automation permission.
 enum GitHubReconnect {
-  static func open(ghPath: String?) {
+  static func open(
+    ghPath: String?,
+    scriptDirectory: URL = FileManager.default.temporaryDirectory,
+    openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+  ) {
     guard let ghPath else {
-      NSWorkspace.shared.open(URL(string: "https://cli.github.com")!)
+      openURL(URL(string: "https://cli.github.com")!)
       return
     }
-    let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("tower-gh-login.command")
+    let scriptURL = scriptDirectory.appendingPathComponent("tower-gh-login.command")
     let script = "#!/bin/zsh\n'\(ghPath)' auth login\n"
     do {
       try script.write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -17,6 +21,6 @@ enum GitHubReconnect {
     } catch {
       return
     }
-    NSWorkspace.shared.open(scriptURL)
+    openURL(scriptURL)
   }
 }

@@ -50,7 +50,10 @@ targets:
   AppTests:
     type: bundle.unit-test
     platform: macOS
-    sources: [AppTests]
+    sources:
+      - AppTests
+      # Shares the stub transport and fixture loader with CoreTests.
+      - CoreTests/TestSupport.swift
     dependencies:
       - target: Tower
     settings:

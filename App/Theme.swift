@@ -82,13 +82,13 @@ enum Theme {
     return Color(nsColor: dynamicColor(light: systemColor.withAlphaComponent(0.12), dark: systemColor.withAlphaComponent(0.18)))
   }
 
-  private static func hex(_ value: Int) -> NSColor {
+  static func hex(_ value: Int) -> NSColor {
     NSColor(
       srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
       blue: CGFloat(value & 0xFF) / 255, alpha: 1)
   }
 
-  private static func dynamicColor(
+  static func dynamicColor(
     light: NSColor, dark: NSColor, highContrastLight: NSColor? = nil, highContrastDark: NSColor? = nil
   ) -> NSColor {
     NSColor(name: nil) { appearance in

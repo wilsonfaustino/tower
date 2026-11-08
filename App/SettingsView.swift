@@ -16,7 +16,8 @@ struct SettingsView: View {
   var body: some View {
     Form {
       Section("GitHub") {
-        LabeledContent("Status", value: githubStatusText)
+        LabeledContent(
+          "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
@@ -59,44 +60,12 @@ struct SettingsView: View {
     }
   }
 
-  private var githubStatusText: String {
-    switch store.githubStatus {
-    case .idle: "Checking"
-    case .ok: "Signed in as \(store.githubSnapshot?.viewerLogin ?? "unknown") via gh"
-    case .failed(let failure): failureText(failure, source: "GitHub")
-    }
-  }
-
-  private func failureText(_ failure: SourceFailure, source: String) -> String {
-    switch failure {
-    case .authentication:
-      switch source {
-      case "GitHub": "Not signed in. Run gh auth login."
-      case "CircleCI": "Token rejected. Check the API token."
-      default: "Sign-in failed. Check email and token."
-      }
-    case .network: "Can't reach \(source)"
-    case .notConfigured: "Not set up"
-    case .unexpected(let message): message
-    }
-  }
-
   private func saveToken() {
-    let trimmedToken = jiraToken.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmedToken.isEmpty {
-      KeychainStore.delete(account: KeychainStore.jiraTokenAccount)
-    } else {
-      try? KeychainStore.write(trimmedToken, account: KeychainStore.jiraTokenAccount)
-    }
+    saveTrimmedToken(jiraToken, account: KeychainStore.jiraTokenAccount)
   }
 
   private func saveCircleCIToken() {
-    let trimmedToken = circleciToken.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmedToken.isEmpty {
-      KeychainStore.delete(account: KeychainStore.circleciTokenAccount)
-    } else {
-      try? KeychainStore.write(trimmedToken, account: KeychainStore.circleciTokenAccount)
-    }
+    saveTrimmedToken(circleciToken, account: KeychainStore.circleciTokenAccount)
   }
 
   private func testJira() {
@@ -109,7 +78,7 @@ struct SettingsView: View {
         jiraTestResult = "Connected"
         await store.refresh()
       } catch {
-        jiraTestResult = failureText(error, source: "Jira")
+        jiraTestResult = settingsFailureText(error, source: "Jira")
       }
       isTestingJira = false
     }
@@ -124,11 +93,51 @@ struct SettingsView: View {
     Task {
       do throws(SourceFailure) {
         _ = try await CircleCIClient(settings: settings, transport: URLSessionTransport()).fetch(now: Date())
-        circleciTestResult = "Connected · \(projectCount) \(projectCount == 1 ? "project" : "projects")"
+        circleciTestResult = circleciConnectedText(projectCount: projectCount)
       } catch {
-        circleciTestResult = failureText(error, source: "CircleCI")
+        circleciTestResult = settingsFailureText(error, source: "CircleCI")
       }
       isTestingCircleCI = false
     }
+  }
+}
+
+func settingsGitHubStatusText(status: SourceStatus, viewerLogin: String?) -> String {
+  switch status {
+  case .idle: "Checking"
+  case .ok: "Signed in as \(viewerLogin ?? "unknown") via gh"
+  case .failed(let failure): settingsFailureText(failure, source: "GitHub")
+  }
+}
+
+func settingsFailureText(_ failure: SourceFailure, source: String) -> String {
+  switch failure {
+  case .authentication:
+    switch source {
+    case "GitHub": "Not signed in. Run gh auth login."
+    case "CircleCI": "Token rejected. Check the API token."
+    default: "Sign-in failed. Check email and token."
+    }
+  case .network: "Can't reach \(source)"
+  case .notConfigured: "Not set up"
+  case .unexpected(let message): message
+  }
+}
+
+func circleciConnectedText(projectCount: Int) -> String {
+  "Connected · \(projectCount) \(projectCount == 1 ? "project" : "projects")"
+}
+
+// An empty token deletes the Keychain item, so clearing the field signs the source out.
+func saveTrimmedToken(
+  _ token: String, account: String,
+  write: (String, String) throws -> Void = KeychainStore.write(_:account:),
+  delete: (String) -> Void = KeychainStore.delete(account:)
+) {
+  let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+  if trimmedToken.isEmpty {
+    delete(account)
+  } else {
+    try? write(trimmedToken, account)
   }
 }

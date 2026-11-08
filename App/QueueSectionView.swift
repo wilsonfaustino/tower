@@ -23,16 +23,3 @@ struct QueueSectionView: View {
     }
   }
 }
-
-extension SectionKind {
-  var title: String {
-    switch self {
-    case .fix: "Fix"
-    case .review: "Review"
-    case .merge: "Merge"
-    case .tidy: "Tidy"
-    case .watch: "Watch"
-    case .waiting: "Waiting"
-    }
-  }
-}
