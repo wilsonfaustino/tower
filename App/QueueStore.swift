@@ -31,7 +31,8 @@ enum CircleCISettingsKeys {
 
 @MainActor @Observable final class QueueStore {
   private(set) var sections: [QueueSection] = []
-  private(set) var menuBarState: MenuBarState = .normal
+  // Settable inside the module so App tests can drive the menu bar icon without a refresh.
+  var menuBarState: MenuBarState = .normal
   private(set) var githubStatus: SourceStatus = .idle
   private(set) var jiraStatus: SourceStatus = .idle
   private(set) var circleciStatus: SourceStatus = .idle

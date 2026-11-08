@@ -42,14 +42,14 @@ xcodegen generate
 open Tower.xcodeproj
 ```
 
-Run the `Tower` scheme. The cab icon appears in the menu bar. Tower has no Dock icon.
+Run the `Tower` scheme. The cab icon appears in the menu bar. Tower has no Dock icon. Click the icon to open the panel. Right-click or Control-click it for Settings and Quit Tower.
 
 `project.yml` is the source of the Xcode project. Do not edit `Tower.xcodeproj` by hand; it is generated and gitignored.
 
 ## Set up
 
 - **GitHub:** Tower reads your token from `gh auth token` and keeps it in memory only. If the sign-in expires, click "Reconnect" in the panel. Terminal opens and runs `gh auth login`.
-- **Jira:** open Settings from the gear button in the panel. Enter the site URL (for example `https://acme.atlassian.net`), your email and the API token, then click "Test connection". Tower keeps the token in the Keychain.
+- **Jira:** open Settings from the gear button in the panel or from the right-click menu. Enter the site URL (for example `https://acme.atlassian.net`), your email and the API token, then click "Test connection". Tower keeps the token in the Keychain.
 
 ## Test
 
@@ -58,7 +58,7 @@ xcodegen generate
 xcodebuild -scheme Tower -destination 'platform=macOS' test
 ```
 
-The tests use Swift Testing and cover the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. They do not call the network.
+The tests use Swift Testing. `CoreTests` covers the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. `AppTests` covers the menu bar icon, its right-click menu, the panel close rules and the Settings window. The tests do not call the network.
 
 GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `Core` coverage to SonarQube Cloud. It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
 
@@ -74,16 +74,18 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 
 | Path | Contents |
 |---|---|
-| `App/` | SwiftUI app: menu bar scene, store, panel views, settings, theme tokens, assets |
+| `App/` | SwiftUI and AppKit app: status item, panel window, store, panel views, settings, theme tokens, assets |
 | `Core/` | Framework with no SwiftUI: models, GitHub and Jira clients, queue rules, cache, refresh policy, panel state |
-| `CoreTests/` | Unit tests and fixtures |
+| `CoreTests/` | Unit tests and fixtures for `Core` |
+| `AppTests/` | Unit tests for the status item, panel and Settings window, hosted by the app |
 | `scripts/` | Release script, coverage conversion for SonarQube |
 | `docs/superpowers/` | Specs and implementation plans |
 
 ## Next steps
 
-1. **Small fixes from the MVP review:** hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
-2. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
+1. **Open Settings when Tower is launched again** ([#14](https://github.com/wilsonfaustino/tower/issues/14)), so Tower stays reachable when its menu bar icon is hidden.
+2. **Small fixes from the MVP review** ([#10](https://github.com/wilsonfaustino/tower/issues/10)): hover layout, copy details, VoiceOver selection, Jira paging, partial GitHub errors.
+3. **Later:** GitHub sign-in without `gh`, launch at login, notarized releases.
 
 Update this list when an item ships or changes.
 

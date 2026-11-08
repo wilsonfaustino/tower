@@ -4,8 +4,8 @@ import SwiftUI
 
 struct PanelView: View {
   let store: QueueStore
-  @Environment(\.dismiss) private var dismiss
-  @Environment(\.openSettings) private var openSettings
+  let close: () -> Void
+  let openSettings: () -> Void
   @State private var selectedItemId: String?
   @State private var contentHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
@@ -145,10 +145,8 @@ struct PanelView: View {
     return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
   }
 
-  // An agent app is not active while the panel shows, so bring it forward or Settings opens behind other windows.
   private func showSettings() {
-    dismiss()
-    NSApp.activate()
+    close()
     openSettings()
   }
 
@@ -173,8 +171,14 @@ struct PanelView: View {
   }
 
   private func open(_ item: QueueItem) {
-    NSWorkspace.shared.open(item.url)
-    // Cmd-click opens the item and keeps the panel open.
-    if !NSEvent.modifierFlags.contains(.command) { dismiss() }
+    // Cmd-click opens the item in the background, so the panel keeps key status and stays open.
+    guard NSEvent.modifierFlags.contains(.command) else {
+      NSWorkspace.shared.open(item.url)
+      close()
+      return
+    }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    NSWorkspace.shared.open(item.url, configuration: configuration)
   }
 }
