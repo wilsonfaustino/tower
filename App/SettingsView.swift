@@ -15,6 +15,7 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
+      LaunchAtLoginSection()
       Section("GitHub") {
         LabeledContent(
           "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
