@@ -49,6 +49,7 @@ Run the `Tower` scheme. The cab icon appears in the menu bar. Tower has no Dock 
 ## Set up
 
 - **GitHub:** Tower reads your token from `gh auth token` and keeps it in memory only. If the sign-in expires, click "Reconnect" in the panel. Terminal opens and runs `gh auth login`.
+- **GitHub organizations:** to show PRs from some owners only, enter one organization or user login per line in Settings > GitHub > Organizations. Leave it empty to show PRs from all owners. Tower ignores blank lines and lines that are not valid logins. A change applies at the next refresh.
 - **Jira:** open Settings from the gear button in the panel or from the right-click menu. Enter the site URL (for example `https://acme.atlassian.net`), your email and the API token, then click "Test connection". Tower keeps the token in the Keychain.
 - **Launch at login:** copy Tower to `/Applications` and open it from there, because a build in DerivedData can be deleted. Then turn on "Launch at login" in Settings > General. It is off by default. If macOS asks for approval, approve Tower in System Settings > General > Login Items.
 

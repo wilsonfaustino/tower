@@ -60,10 +60,16 @@ public struct GitHubClient: Sendable {
 
   private let tokenProvider: GitHubTokenProvider
   private let transport: HTTPTransport
+  private let ownerQualifiers: String
 
-  public init(tokenProvider: GitHubTokenProvider, transport: HTTPTransport) {
+  public init(tokenProvider: GitHubTokenProvider, transport: HTTPTransport, owners: [String] = []) {
     self.tokenProvider = tokenProvider
     self.transport = transport
+    ownerQualifiers = owners
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") } }
+      .map { " org:\($0)" }
+      .joined()
   }
 
   public func fetch(now: Date) async throws(SourceFailure) -> GitHubSnapshot {
@@ -71,10 +77,10 @@ public struct GitHubClient: Sendable {
     // GitHub reads a bare date as UTC, so send the local start of day with its offset.
     let today = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: now))
     let variables = [
-      "authoredQuery": "is:pr is:open author:@me archived:false",
-      "requestedQuery": "is:pr is:open review-requested:@me archived:false",
-      "reviewedQuery": "is:pr reviewed-by:@me -author:@me updated:>=\(today)",
-      "mergedQuery": "is:pr author:@me merged:>=\(today)",
+      "authoredQuery": "is:pr is:open author:@me archived:false\(ownerQualifiers)",
+      "requestedQuery": "is:pr is:open review-requested:@me archived:false\(ownerQualifiers)",
+      "reviewedQuery": "is:pr reviewed-by:@me -author:@me updated:>=\(today)\(ownerQualifiers)",
+      "mergedQuery": "is:pr author:@me merged:>=\(today)\(ownerQualifiers)",
     ]
     var request = URLRequest(url: Self.endpoint)
     request.httpMethod = "POST"

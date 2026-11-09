@@ -19,6 +19,7 @@ struct SettingsView: View {
       Section("GitHub") {
         LabeledContent(
           "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
+        GitHubOrganizationsField()
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
