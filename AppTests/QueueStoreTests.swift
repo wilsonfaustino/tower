@@ -237,14 +237,19 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     "requestedQuery": "is:pr is:open review-requested:@me archived:false",
   ]
 
+  private func githubSearchVariables(in transport: StubTransport) throws -> [[String: String]] {
+    try transport.requests.filter { $0.url?.host() == "api.github.com" }.map { githubRequest in
+      let body = try #require(githubRequest.httpBody)
+      let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+      return try #require(payload["variables"] as? [String: String])
+    }
+  }
+
   private func searchVariables(organizations: [String]) async throws -> [String: String] {
     let transport = try routingTransport()
     let store = makeStore(transport: transport, githubOrganizations: organizations)
     await store.refresh()
-    let githubRequest = try #require(transport.requests.first { $0.url?.host() == "api.github.com" })
-    let body = try #require(githubRequest.httpBody)
-    let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-    return try #require(payload["variables"] as? [String: String])
+    return try #require(try githubSearchVariables(in: transport).first)
   }
 
   private let queryNames = ["authoredQuery", "requestedQuery", "reviewedQuery", "mergedQuery"]
@@ -254,13 +259,32 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     for name in queryNames { #expect(!variables[name]!.contains("org:")) }
     #expect(variables["authoredQuery"] == baseQueries["authoredQuery"])
     #expect(variables["requestedQuery"] == baseQueries["requestedQuery"])
+    #expect(variables["reviewedQuery"]!.hasPrefix("is:pr reviewed-by:@me -author:@me updated:>="))
+    #expect(variables["mergedQuery"]!.hasPrefix("is:pr author:@me merged:>="))
   }
 
   @Test func twoOwnersAddBothQualifiersToAllFourQueries() async throws {
+    let unfilteredVariables = try await searchVariables(organizations: [])
     let variables = try await searchVariables(organizations: ["acme", "side-project"])
     for name in queryNames {
-      #expect(variables[name]!.hasSuffix(" org:acme org:side-project"))
+      #expect(variables[name] == unfilteredVariables[name]! + " org:acme org:side-project")
     }
+  }
+
+  @Test func eachRefreshReadsTheCurrentOrganizations() async throws {
+    let transport = try routingTransport()
+    var currentOrganizations = ["acme"]
+    let store = QueueStore(
+      tokenProvider: StubTokenProvider(result: .success("gh-token")), transport: transport,
+      cacheDirectory: temporaryDirectory(), loadJiraSettings: { jiraSettings },
+      loadCircleCISettings: { circleciSettings }, loadGitHubOrganizations: { currentOrganizations })
+    await store.refresh()
+    currentOrganizations = ["side-project"]
+    await store.refresh()
+    let requestVariables = try githubSearchVariables(in: transport)
+    #expect(requestVariables.count == 2)
+    #expect(requestVariables[0]["authoredQuery"]!.hasSuffix(" org:acme"))
+    #expect(requestVariables[1]["authoredQuery"]!.hasSuffix(" org:side-project"))
   }
 
   @Test func blankPaddedAndInvalidLinesYieldOnlyTrimmedValidLogins() async throws {
@@ -273,7 +297,8 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
   }
 
   @Test func onlyInvalidOrBlankLinesLeaveTheQueriesUnchanged() async throws {
+    let unfilteredVariables = try await searchVariables(organizations: [])
     let variables = try await searchVariables(organizations: ["", "  ", "not valid", "a/b"])
-    for name in queryNames { #expect(!variables[name]!.contains("org:")) }
+    #expect(variables == unfilteredVariables)
   }
 }
