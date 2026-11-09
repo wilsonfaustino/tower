@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct LaunchAtLoginSection: View {
@@ -11,6 +12,9 @@ struct LaunchAtLoginSection: View {
           .font(.caption)
           .foregroundStyle(Theme.textSecondary)
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      model.refresh()
     }
   }
 }

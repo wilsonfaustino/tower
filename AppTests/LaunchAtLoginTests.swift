@@ -95,3 +95,33 @@ struct LaunchAtLoginTests {
     #expect(model.caption == "Approve Tower in System Settings > General > Login Items.")
   }
 }
+
+@MainActor struct LaunchAtLoginRefreshTests {
+  @Test func refreshReadsAStatusChangedInSystemSettings() {
+    let loginItem = StubLoginItem(status: .requiresApproval)
+    let model = LaunchAtLoginModel(loginItem: loginItem)
+    loginItem.status = .enabled
+    model.refresh()
+    #expect(model.isOn)
+    #expect(model.caption == nil)
+  }
+
+  @Test func refreshClearsAnOldError() {
+    let loginItem = StubLoginItem(status: .notRegistered, failure: LoginItemFailure())
+    let model = LaunchAtLoginModel(loginItem: loginItem)
+    model.isOn = true
+    loginItem.status = .enabled
+    model.refresh()
+    #expect(model.caption == nil)
+  }
+
+  @Test func errorAndApprovalHintShowTogether() {
+    let loginItem = StubLoginItem(status: .notRegistered, failure: LoginItemFailure())
+    let model = LaunchAtLoginModel(loginItem: loginItem)
+    loginItem.status = .requiresApproval
+    model.isOn = true
+    #expect(
+      model.caption
+        == "Can’t change login item: Operation not permitted\nApprove Tower in System Settings > General > Login Items.")
+  }
+}

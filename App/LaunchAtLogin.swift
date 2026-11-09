@@ -51,5 +51,15 @@ func launchAtLoginStatusText(status: SMAppService.Status) -> String? {
     }
   }
 
-  var caption: String? { error ?? launchAtLoginStatusText(status: status) }
+  // Reads a change made in System Settings while Tower's Settings window stays open.
+  func refresh() {
+    error = nil
+    status = loginItem.status
+  }
+
+  // macOS can reject register() and still need approval, so the error and the approval hint can show together.
+  var caption: String? {
+    let lines = [error, launchAtLoginStatusText(status: status)].compactMap { $0 }
+    return lines.isEmpty ? nil : lines.joined(separator: "\n")
+  }
 }
