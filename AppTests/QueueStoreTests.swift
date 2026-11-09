@@ -41,11 +41,13 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
   transport: StubTransport,
   cacheDirectory: URL = temporaryDirectory(),
   jira: JiraSettings? = jiraSettings,
-  circleci: CircleCISettings? = circleciSettings
+  circleci: CircleCISettings? = circleciSettings,
+  githubOrganizations: [String] = []
 ) -> QueueStore {
   QueueStore(
     tokenProvider: StubTokenProvider(result: token), transport: transport, cacheDirectory: cacheDirectory,
-    loadJiraSettings: { jira }, loadCircleCISettings: { circleci })
+    loadJiraSettings: { jira }, loadCircleCISettings: { circleci },
+    loadGitHubOrganizations: { githubOrganizations })
 }
 
 @MainActor struct QueueStoreRefreshTests {
@@ -226,5 +228,52 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     #expect(store.githubBannerMessage(now: now) == "Showing PRs from 5 min ago. Jira and CircleCI are current.")
     #expect(store.jiraBannerMessage(now: now) == "Showing tickets from 5 min ago. GitHub and CircleCI are current.")
     #expect(store.circleciBannerMessage(now: now) == "Showing pipelines from 5 min ago. GitHub and Jira are current.")
+  }
+}
+
+@MainActor struct QueueStoreOrganizationFilterTests {
+  private let baseQueries = [
+    "authoredQuery": "is:pr is:open author:@me archived:false",
+    "requestedQuery": "is:pr is:open review-requested:@me archived:false",
+  ]
+
+  private func searchVariables(organizations: [String]) async throws -> [String: String] {
+    let transport = try routingTransport()
+    let store = makeStore(transport: transport, githubOrganizations: organizations)
+    await store.refresh()
+    let githubRequest = try #require(transport.requests.first { $0.url?.host() == "api.github.com" })
+    let body = try #require(githubRequest.httpBody)
+    let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    return try #require(payload["variables"] as? [String: String])
+  }
+
+  private let queryNames = ["authoredQuery", "requestedQuery", "reviewedQuery", "mergedQuery"]
+
+  @Test func emptyListLeavesTheFourQueriesUnchanged() async throws {
+    let variables = try await searchVariables(organizations: [])
+    for name in queryNames { #expect(!variables[name]!.contains("org:")) }
+    #expect(variables["authoredQuery"] == baseQueries["authoredQuery"])
+    #expect(variables["requestedQuery"] == baseQueries["requestedQuery"])
+  }
+
+  @Test func twoOwnersAddBothQualifiersToAllFourQueries() async throws {
+    let variables = try await searchVariables(organizations: ["acme", "side-project"])
+    for name in queryNames {
+      #expect(variables[name]!.hasSuffix(" org:acme org:side-project"))
+    }
+  }
+
+  @Test func blankPaddedAndInvalidLinesYieldOnlyTrimmedValidLogins() async throws {
+    let variables = try await searchVariables(
+      organizations: ["  acme  ", "", "   ", "bad owner", "evil:qualifier", "under_score", "Side-Project"])
+    for name in queryNames {
+      #expect(variables[name]!.hasSuffix(" org:acme org:Side-Project"))
+      #expect(variables[name]!.components(separatedBy: "org:").count == 3)
+    }
+  }
+
+  @Test func onlyInvalidOrBlankLinesLeaveTheQueriesUnchanged() async throws {
+    let variables = try await searchVariables(organizations: ["", "  ", "not valid", "a/b"])
+    for name in queryNames { #expect(!variables[name]!.contains("org:")) }
   }
 }

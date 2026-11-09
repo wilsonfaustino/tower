@@ -75,3 +75,17 @@ struct CircleCISettingsLoaderTests {
     }
   }
 }
+
+struct GitHubSettingsLoaderTests {
+  @Test func loadsOneOrganizationPerLine() {
+    withDefaults([GitHubSettingsKeys.organizations: "acme\n\n  side-project  \n"]) { defaults in
+      #expect(GitHubSettingsKeys.loadOrganizations(defaults: defaults) == ["acme", "  side-project  "])
+    }
+  }
+
+  @Test func missingValueLoadsEmptyList() {
+    withDefaults([:]) { defaults in
+      #expect(GitHubSettingsKeys.loadOrganizations(defaults: defaults).isEmpty)
+    }
+  }
+}

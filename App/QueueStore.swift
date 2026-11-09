@@ -32,6 +32,14 @@ enum CircleCISettingsKeys {
   }
 }
 
+enum GitHubSettingsKeys {
+  static let organizations = "githubOrganizations"
+
+  static func loadOrganizations(defaults: UserDefaults = .standard) -> [String] {
+    (defaults.string(forKey: organizations) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+  }
+}
+
 @MainActor @Observable final class QueueStore {
   private(set) var sections: [QueueSection] = []
   // Settable inside the module so App tests can drive the menu bar icon without a refresh.
@@ -52,6 +60,7 @@ enum CircleCISettingsKeys {
   private let cache: SourceCache
   private let loadJiraSettings: () -> JiraSettings?
   private let loadCircleCISettings: () -> CircleCISettings?
+  private let loadGitHubOrganizations: () -> [String]
   private var pollingTask: Task<Void, Never>?
   private var activationObserver: NSObjectProtocol?
 
@@ -60,13 +69,15 @@ enum CircleCISettingsKeys {
     transport: any HTTPTransport = URLSessionTransport(),
     cacheDirectory: URL = URL.applicationSupportDirectory.appendingPathComponent("Tower", isDirectory: true),
     loadJiraSettings: @escaping () -> JiraSettings? = { JiraSettingsKeys.load() },
-    loadCircleCISettings: @escaping () -> CircleCISettings? = { CircleCISettingsKeys.load() }
+    loadCircleCISettings: @escaping () -> CircleCISettings? = { CircleCISettingsKeys.load() },
+    loadGitHubOrganizations: @escaping () -> [String] = { GitHubSettingsKeys.loadOrganizations() }
   ) {
     self.tokenProvider = tokenProvider
     self.transport = transport
     cache = SourceCache(directory: cacheDirectory)
     self.loadJiraSettings = loadJiraSettings
     self.loadCircleCISettings = loadCircleCISettings
+    self.loadGitHubOrganizations = loadGitHubOrganizations
   }
 
   var todaySummary: (reviews: Int, merges: Int)? {
@@ -130,7 +141,7 @@ enum CircleCISettingsKeys {
     isRefreshing = true
     defer { isRefreshing = false }
     let now = Date()
-    let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport)
+    let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport, owners: loadGitHubOrganizations())
     let jiraClient = JiraClient(settings: loadJiraSettings(), transport: transport)
     let circleciClient = CircleCIClient(settings: loadCircleCISettings(), transport: transport)
     async let githubResult = Result { () async throws(SourceFailure) -> GitHubSnapshot in try await githubClient.fetch(now: now) }

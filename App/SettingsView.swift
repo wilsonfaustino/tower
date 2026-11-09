@@ -8,6 +8,7 @@ struct SettingsView: View {
   @State private var jiraToken = KeychainStore.read(account: KeychainStore.jiraTokenAccount) ?? ""
   @State private var jiraTestResult: String?
   @State private var isTestingJira = false
+  @AppStorage(GitHubSettingsKeys.organizations) private var githubOrganizations = ""
   @AppStorage(CircleCISettingsKeys.projectSlugs) private var circleciProjectSlugs = ""
   @State private var circleciToken = KeychainStore.read(account: KeychainStore.circleciTokenAccount) ?? ""
   @State private var circleciTestResult: String?
@@ -19,6 +20,14 @@ struct SettingsView: View {
       Section("GitHub") {
         LabeledContent(
           "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
+        LabeledContent("Organizations") {
+          TextEditor(text: $githubOrganizations)
+            .font(.body.monospaced())
+            .frame(minHeight: 60)
+        }
+        Text("One per line. Leave empty to show PRs from all organizations.")
+          .font(.caption)
+          .foregroundStyle(Theme.textSecondary)
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
