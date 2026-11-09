@@ -1,5 +1,4 @@
 import Core
-import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -13,19 +12,10 @@ struct SettingsView: View {
   @State private var circleciToken = KeychainStore.read(account: KeychainStore.circleciTokenAccount) ?? ""
   @State private var circleciTestResult: String?
   @State private var isTestingCircleCI = false
-  @State private var launchAtLoginStatus = SMAppService.mainApp.status
-  @State private var launchAtLoginError: String?
 
   var body: some View {
     Form {
-      Section("General") {
-        Toggle("Launch at login", isOn: Binding(get: { launchAtLoginIsOn(status: launchAtLoginStatus) }, set: changeLaunchAtLogin))
-        if let launchAtLoginText = launchAtLoginError ?? launchAtLoginStatusText(status: launchAtLoginStatus) {
-          Text(launchAtLoginText)
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-        }
-      }
+      LaunchAtLoginSection()
       Section("GitHub") {
         LabeledContent(
           "Status", value: settingsGitHubStatusText(status: store.githubStatus, viewerLogin: store.githubSnapshot?.viewerLogin))
@@ -69,11 +59,6 @@ struct SettingsView: View {
       saveToken()
       saveCircleCIToken()
     }
-  }
-
-  private func changeLaunchAtLogin(_ isOn: Bool) {
-    launchAtLoginError = setLaunchAtLogin(isOn)
-    launchAtLoginStatus = SMAppService.mainApp.status
   }
 
   private func saveToken() {

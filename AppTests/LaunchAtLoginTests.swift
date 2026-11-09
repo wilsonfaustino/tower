@@ -65,3 +65,33 @@ struct LaunchAtLoginTests {
     #expect(launchAtLoginStatusText(status: .notRegistered) == nil)
   }
 }
+
+@MainActor struct LaunchAtLoginModelTests {
+  @Test func readsTheStatusOnInit() {
+    let model = LaunchAtLoginModel(loginItem: StubLoginItem(status: .enabled))
+    #expect(model.isOn)
+    #expect(model.caption == nil)
+  }
+
+  @Test func turningOnRegistersAndReadsTheNewStatus() {
+    let loginItem = StubLoginItem(status: .notRegistered)
+    let model = LaunchAtLoginModel(loginItem: loginItem)
+    model.isOn = true
+    #expect(loginItem.calls == ["register"])
+    #expect(model.isOn)
+    #expect(model.caption == nil)
+  }
+
+  @Test func failureKeepsTheToggleOffAndShowsTheError() {
+    let model = LaunchAtLoginModel(loginItem: StubLoginItem(status: .notRegistered, failure: LoginItemFailure()))
+    model.isOn = true
+    #expect(!model.isOn)
+    #expect(model.caption == "Can’t change login item: Operation not permitted")
+  }
+
+  @Test func captionAsksForApprovalWhenMacOSNeedsIt() {
+    let model = LaunchAtLoginModel(loginItem: StubLoginItem(status: .requiresApproval))
+    #expect(model.isOn)
+    #expect(model.caption == "Approve Tower in System Settings > General > Login Items.")
+  }
+}

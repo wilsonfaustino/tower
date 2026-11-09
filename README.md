@@ -61,7 +61,7 @@ xcodebuild -scheme Tower -destination 'platform=macOS' test
 
 The tests use Swift Testing. `CoreTests` covers the `Core` framework: queue rules, clients (with a stub transport and fixture JSON), cache, refresh timing and panel state. `AppTests` covers the store refresh and cache load (with the same stub transport), the settings loaders, the menu bar icon, its right-click menu, the panel close rules and placement, the banner and Settings text, the launch at login toggle, and the Settings window. The tests do not call the network, and they do not touch the real Jira and CircleCI Keychain items, the owner's defaults or the real cache folder.
 
-GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `App` and `Core` coverage to SonarQube Cloud. Only three layout-only views are excluded from coverage (`sonar-project.properties`). It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
+GitHub Actions runs the same tests on each PR to `main` and each push to `main` (`.github/workflows/ci.yml`). The `build-and-test` job uses the `xcode-27` runner image and converts the code coverage with `scripts/xccov-to-sonarqube-generic.sh` (copied from Copilot Runway). The `sonarqube` job sends the code and the `App` and `Core` coverage to SonarQube Cloud. Only four layout-only views are excluded from coverage (`sonar-project.properties`). It needs the `SONAR_TOKEN` repo secret, so it does not run on PRs from forks.
 
 ## Release
 

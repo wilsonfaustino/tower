@@ -1,3 +1,4 @@
+import Observation
 import ServiceManagement
 
 protocol LoginItem {
@@ -29,4 +30,26 @@ func launchAtLoginIsOn(status: SMAppService.Status) -> Bool {
 
 func launchAtLoginStatusText(status: SMAppService.Status) -> String? {
   status == .requiresApproval ? "Approve Tower in System Settings > General > Login Items." : nil
+}
+
+// Settings binds the toggle to isOn. Each change reads the status back, so a failed change leaves the toggle off.
+@MainActor @Observable final class LaunchAtLoginModel {
+  private let loginItem: LoginItem
+  private(set) var status: SMAppService.Status
+  private(set) var error: String?
+
+  init(loginItem: LoginItem = SMAppService.mainApp) {
+    self.loginItem = loginItem
+    status = loginItem.status
+  }
+
+  var isOn: Bool {
+    get { launchAtLoginIsOn(status: status) }
+    set {
+      error = setLaunchAtLogin(newValue, loginItem: loginItem)
+      status = loginItem.status
+    }
+  }
+
+  var caption: String? { error ?? launchAtLoginStatusText(status: status) }
 }
