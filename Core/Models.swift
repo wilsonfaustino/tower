@@ -186,6 +186,9 @@ public struct StatusStrip: Equatable, Sendable {
       self.given = given
       self.required = required
     }
+
+    // With required 0 the row draws one filled slot, whatever the real count.
+    public var slotCount: Int { required == 0 ? min(given, 1) : max(given, required) }
   }
 
   public var checks: Checks?
@@ -197,6 +200,8 @@ public struct StatusStrip: Equatable, Sendable {
     self.threads = threads
     self.approvals = approvals
   }
+
+  public var isEmpty: Bool { checks == nil && threads == nil && approvals == nil }
 
   // Failed checks are left out because the row badge already says it.
   public var accessibilityPhrase: String {

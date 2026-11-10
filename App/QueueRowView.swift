@@ -26,7 +26,7 @@ struct QueueRowView: View {
             .font(Theme.Fonts.rowMeta)
             .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
             .lineLimit(1)
-          if let strip = item.strip, strip.checks != nil || strip.threads != nil || strip.approvals != nil {
+          if let strip = item.strip, !strip.isEmpty {
             StatusStripView(strip: strip, isSelected: isSelected)
           }
         }
@@ -115,9 +115,8 @@ struct StatusStripView: View {
   }
 
   private func approvalSlots(_ approvals: StatusStrip.Approvals) -> some View {
-    let slotCount = approvals.given + max(approvals.required - approvals.given, 0)
-    return HStack(spacing: -3) {
-      ForEach(0..<slotCount, id: \.self) { index in
+    HStack(spacing: -3) {
+      ForEach(0..<approvals.slotCount, id: \.self) { index in
         let isGiven = index < approvals.given
         Image(systemName: isGiven ? "checkmark.circle.fill" : "circle")
           .foregroundStyle(glyphColor(isGiven ? Theme.statusText(.ready) : Theme.textSecondary))

@@ -291,6 +291,23 @@ struct StatusStripTests {
     #expect(approvals == StatusStrip.Approvals(given: 2, required: 0))
   }
 
+  @Test func noRequiredApprovalsDrawsOneSlot() {
+    let approvals = strip(pullRequest(approvalCount: 3, requiredApprovalCount: 0))?.approvals
+    #expect(approvals?.slotCount == 1)
+  }
+
+  @Test func requiredApprovalsDrawOneSlotEach() {
+    #expect(strip(pullRequest(approvalCount: 1, requiredApprovalCount: 2))?.approvals?.slotCount == 2)
+    #expect(strip(pullRequest(approvalCount: 3, requiredApprovalCount: 2))?.approvals?.slotCount == 2)
+  }
+
+  @Test func stripWithNoPartsIsEmpty() {
+    #expect(StatusStrip(checks: nil, threads: nil, approvals: nil).isEmpty)
+    #expect(!StatusStrip(checks: .passed, threads: nil, approvals: nil).isEmpty)
+    #expect(!StatusStrip(checks: nil, threads: StatusStrip.Threads(unresolvedCount: 1, isLowerBound: false), approvals: nil).isEmpty)
+    #expect(!StatusStrip(checks: nil, threads: nil, approvals: StatusStrip.Approvals(given: 1, required: 0)).isEmpty)
+  }
+
   @Test func noRequiredApprovalsAndNoneGivenHidesApprovals() {
     #expect(strip(pullRequest(approvalCount: 0, requiredApprovalCount: 0))?.approvals == nil)
   }
