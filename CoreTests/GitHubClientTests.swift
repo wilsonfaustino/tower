@@ -13,6 +13,11 @@ private func client(token: Result<String, SourceFailure> = .success("secret-toke
   GitHubClient(tokenProvider: StubTokenProvider(result: token), transport: transport)
 }
 
+private func authoredStripPullRequests() async throws -> [PullRequest] {
+  let fixtureData = try fixture("github-search-authored-strip.json")
+  return try await client(transport: StubTransport { _ in (fixtureData, 200) }).fetch(now: now).authoredPullRequests
+}
+
 struct GitHubClientTests {
   @Test func decodesFixtureIntoSnapshot() async throws {
     let fixtureData = try fixture("github-search.json")
@@ -70,6 +75,60 @@ struct GitHubClientTests {
     #expect(variables["requestedQuery"] == "is:pr is:open review-requested:@me archived:false")
     #expect(variables["mergedQuery"] == "is:pr author:@me merged:>=\(today)")
     #expect(variables["reviewedQuery"] == "is:pr reviewed-by:@me -author:@me updated:>=\(today)")
+  }
+
+  @Test func onlyAuthoredSearchAsksForStripFields() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let transport = StubTransport { _ in (fixtureData, 200) }
+    _ = try await client(transport: transport).fetch(now: now)
+    let body = try #require(transport.requests.first?.httpBody)
+    let query = try #require((try JSONSerialization.jsonObject(with: body) as? [String: Any])?["query"] as? String)
+    let stripFields = ["baseRef", "latestOpinionatedReviews", "reviewThreads"]
+    let authoredFields = try fieldsRequested(bySearch: "authored", in: query)
+    let requestedFields = try fieldsRequested(bySearch: "requested", in: query)
+    for field in stripFields {
+      #expect(authoredFields.contains(field))
+      #expect(!requestedFields.contains(field))
+    }
+  }
+
+  @Test func requiredApprovalCountIsHighestPullRequestRule() async throws {
+    let pullRequests = try await authoredStripPullRequests()
+    #expect(pullRequests[0].requiredApprovalCount == 2)
+    #expect(pullRequests[1].requiredApprovalCount == 1)
+    #expect(pullRequests[2].requiredApprovalCount == 0)
+    #expect(pullRequests[3].requiredApprovalCount == 1)
+  }
+
+  @Test func approvalCountCountsOnlyApprovedReviewsWithoutCap() async throws {
+    let pullRequests = try await authoredStripPullRequests()
+    #expect(pullRequests[0].approvalCount == 3)
+    #expect(pullRequests[1].approvalCount == 0)
+    #expect(pullRequests[2].approvalCount == 1)
+  }
+
+  @Test func unresolvedThreadCountComesFromFetchedThreads() async throws {
+    let pullRequests = try await authoredStripPullRequests()
+    #expect(pullRequests[0].unresolvedThreadCount == 2)
+    #expect(pullRequests[0].hasMoreThreadsThanFetched == false)
+    #expect(pullRequests[1].unresolvedThreadCount == 0)
+    #expect(pullRequests[2].unresolvedThreadCount == 0)
+  }
+
+  @Test func threadTotalOverFiftySetsOverflow() async throws {
+    let pullRequests = try await authoredStripPullRequests()
+    #expect(pullRequests[3].unresolvedThreadCount == 2)
+    #expect(pullRequests[3].hasMoreThreadsThanFetched == true)
+  }
+
+  @Test func reviewRequestsGetNeutralStripDefaults() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let snapshot = try await client(transport: StubTransport { _ in (fixtureData, 200) }).fetch(now: now)
+    let reviewRequest = snapshot.reviewRequests[0]
+    #expect(reviewRequest.unresolvedThreadCount == 0)
+    #expect(reviewRequest.hasMoreThreadsThanFetched == false)
+    #expect(reviewRequest.approvalCount == 0)
+    #expect(reviewRequest.requiredApprovalCount == 1)
   }
 
   @Test func hangingGhIsUnexpectedFailureNotSignIn() async throws {
@@ -139,4 +198,25 @@ struct GitHubClientTests {
     let provider = GhCLITokenProvider(candidatePaths: ["/nonexistent/gh"])
     await #expect(throws: SourceFailure.authentication) { try await provider.token() }
   }
+}
+
+// The search line plus the text of every fragment it spreads, followed through nested spreads.
+private func fieldsRequested(bySearch alias: String, in query: String) throws -> String {
+  let searchLine = try #require(query.split(separator: "\n").first { $0.contains("\(alias): search(") })
+  var text = String(searchLine)
+  var pendingFragments = fragmentNames(spreadIn: text)
+  var visitedFragments: Set<String> = []
+  while let fragmentName = pendingFragments.popLast() {
+    guard visitedFragments.insert(fragmentName).inserted else { continue }
+    let fragmentStart = try #require(query.range(of: "fragment \(fragmentName) on"))
+    let rest = query[fragmentStart.upperBound...]
+    let fragmentBody = rest.range(of: "fragment ").map { rest[..<$0.lowerBound] } ?? rest
+    text += fragmentBody
+    pendingFragments += fragmentNames(spreadIn: String(fragmentBody))
+  }
+  return text
+}
+
+private func fragmentNames(spreadIn text: String) -> [String] {
+  text.matches(of: /\.\.\.([A-Za-z]+)/).map { String($0.output.1) }
 }

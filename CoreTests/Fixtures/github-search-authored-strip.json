@@ -1,0 +1,170 @@
+{
+  "data": {
+    "viewer": {
+      "login": "octo-me"
+    },
+    "authored": {
+      "nodes": [
+        {
+          "number": 501,
+          "title": "Several pull request rules",
+          "url": "https://github.com/acme/app-web/pull/501",
+          "updatedAt": "2027-01-15T11:00:00Z",
+          "repository": {
+            "name": "app-web"
+          },
+          "baseRef": {
+            "rules": {
+              "nodes": [
+                {
+                  "parameters": {
+                    "requiredApprovingReviewCount": 1
+                  }
+                },
+                {
+                  "parameters": null
+                },
+                {
+                  "parameters": {
+                    "requiredApprovingReviewCount": 2
+                  }
+                },
+                {
+                  "parameters": {}
+                }
+              ]
+            }
+          },
+          "latestOpinionatedReviews": {
+            "nodes": [
+              {
+                "state": "APPROVED"
+              },
+              {
+                "state": "DISMISSED"
+              },
+              {
+                "state": "CHANGES_REQUESTED"
+              },
+              {
+                "state": "APPROVED"
+              },
+              {
+                "state": "APPROVED"
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 3,
+            "nodes": [
+              {
+                "isResolved": true
+              },
+              {
+                "isResolved": false
+              },
+              {
+                "isResolved": false
+              }
+            ]
+          }
+        },
+        {
+          "number": 502,
+          "title": "No pull request rules",
+          "url": "https://github.com/acme/app-web/pull/502",
+          "updatedAt": "2027-01-15T10:00:00Z",
+          "repository": {
+            "name": "app-web"
+          },
+          "baseRef": {
+            "rules": {
+              "nodes": []
+            }
+          },
+          "latestOpinionatedReviews": {
+            "nodes": []
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          }
+        },
+        {
+          "number": 503,
+          "title": "Rule of zero approvals",
+          "url": "https://github.com/acme/app-api/pull/503",
+          "updatedAt": "2027-01-15T09:00:00Z",
+          "repository": {
+            "name": "app-api"
+          },
+          "baseRef": {
+            "rules": {
+              "nodes": [
+                {
+                  "parameters": {
+                    "requiredApprovingReviewCount": 0
+                  }
+                }
+              ]
+            }
+          },
+          "latestOpinionatedReviews": {
+            "nodes": [
+              {
+                "state": "APPROVED"
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 2,
+            "nodes": [
+              {
+                "isResolved": true
+              },
+              {
+                "isResolved": true
+              }
+            ]
+          }
+        },
+        {
+          "number": 504,
+          "title": "More threads than fetched",
+          "url": "https://github.com/acme/app-api/pull/504",
+          "updatedAt": "2027-01-15T08:00:00Z",
+          "repository": {
+            "name": "app-api"
+          },
+          "baseRef": null,
+          "latestOpinionatedReviews": {
+            "nodes": []
+          },
+          "reviewThreads": {
+            "totalCount": 57,
+            "nodes": [
+              {
+                "isResolved": false
+              },
+              {
+                "isResolved": true
+              },
+              {
+                "isResolved": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "requested": {
+      "nodes": []
+    },
+    "reviewed": {
+      "issueCount": 0
+    },
+    "merged": {
+      "issueCount": 0
+    }
+  }
+}

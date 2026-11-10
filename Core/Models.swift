@@ -33,12 +33,18 @@ public struct PullRequest: Codable, Sendable, Equatable {
   public var requestedTeamSlugs: [String]
   public var reviewCount: Int
   public var reviewRequestedAt: Date?
+  public var unresolvedThreadCount: Int
+  // True when the PR has more review threads than the fetched first page, so the unresolved count is a lower bound.
+  public var hasMoreThreadsThanFetched: Bool
+  public var approvalCount: Int
+  public var requiredApprovalCount: Int
 
   public init(
     repository: String, number: Int, title: String, url: URL, author: String, authorIsBot: Bool, isDraft: Bool,
     updatedAt: Date, headBranch: String, reviewDecision: ReviewDecision?, checkState: CheckState?,
     failedCheckCount: Int, additions: Int, deletions: Int, requestedReviewerLogins: [String],
-    requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?
+    requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?, unresolvedThreadCount: Int = 0,
+    hasMoreThreadsThanFetched: Bool = false, approvalCount: Int = 0, requiredApprovalCount: Int = 1
   ) {
     self.repository = repository
     self.number = number
@@ -58,6 +64,10 @@ public struct PullRequest: Codable, Sendable, Equatable {
     self.requestedTeamSlugs = requestedTeamSlugs
     self.reviewCount = reviewCount
     self.reviewRequestedAt = reviewRequestedAt
+    self.unresolvedThreadCount = unresolvedThreadCount
+    self.hasMoreThreadsThanFetched = hasMoreThreadsThanFetched
+    self.approvalCount = approvalCount
+    self.requiredApprovalCount = requiredApprovalCount
   }
 }
 
