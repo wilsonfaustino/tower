@@ -7,6 +7,7 @@ struct PanelView: View {
   let close: () -> Void
   let openSettings: () -> Void
   @State private var selectedItemId: String?
+  @State private var popoverItemId: String?
   @State private var contentHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
 
@@ -35,12 +36,18 @@ struct PanelView: View {
       // The panel may open without activating the app, so the activation refresh can miss the Reconnect return.
       if store.hasAuthenticationFailure { Task { await store.refresh() } }
     }
-    .onKeyPress(.downArrow) { moveSelection(by: 1) }
-    .onKeyPress(.upArrow) { moveSelection(by: -1) }
+    .onKeyPress(.downArrow) { handle(.downArrow) }
+    .onKeyPress(.upArrow) { handle(.upArrow) }
     .onKeyPress(.return) {
       guard let item = allItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
       open(item)
       return .handled
+    }
+    .onKeyPress(.space) { handle(.space) }
+    .onKeyPress(.escape) { handle(.escape) }
+    .onKeyPress(keys: ["c"]) { press in
+      guard press.modifiers.contains(.command) else { return .ignored }
+      return handle(.copy)
     }
   }
 
@@ -91,7 +98,8 @@ struct PanelView: View {
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
       case .queue:
         ForEach(store.sections) { section in
-          QueueSectionView(section: section, selectedItemId: selectedItemId, open: open)
+          QueueSectionView(
+            section: section, selectedItemId: selectedItemId, open: open, showDetails: showDetails, copyLink: copyLink)
         }
       case .empty:
         StateMessageView(
@@ -132,6 +140,37 @@ struct PanelView: View {
     guard let nextItemId = nextSelectedItemId(in: allItems, after: selectedItemId, offset: offset) else { return .ignored }
     selectedItemId = nextItemId
     return .handled
+  }
+
+  private func handle(_ input: PanelInput) -> KeyPress.Result {
+    let selectedItem = allItems.first(where: { $0.id == selectedItemId })
+    let action = panelAction(
+      for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil)
+    switch action {
+    case .closePopoverAndMoveSelection(let offset):
+      popoverItemId = nil
+      return moveSelection(by: offset)
+    case .showPopover:
+      popoverItemId = selectedItemId
+    case .closePopover:
+      popoverItemId = nil
+    case .copyLink:
+      if let selectedItem { copyLink(selectedItem) }
+    // Esc with no popover goes on to PanelWindow.cancelOperation, which closes the panel as before.
+    case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
+      return .ignored
+    }
+    return .handled
+  }
+
+  private func showDetails(_ item: QueueItem) {
+    selectedItemId = item.id
+    popoverItemId = item.id
+  }
+
+  private func copyLink(_ item: QueueItem) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(item.url.absoluteString, forType: .string)
   }
 
   private func open(_ item: QueueItem) {

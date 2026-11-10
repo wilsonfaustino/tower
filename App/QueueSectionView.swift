@@ -5,6 +5,8 @@ struct QueueSectionView: View {
   let section: QueueSection
   let selectedItemId: String?
   let open: (QueueItem) -> Void
+  let showDetails: (QueueItem) -> Void
+  let copyLink: (QueueItem) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -17,7 +19,9 @@ struct QueueSectionView: View {
       .padding(.top, Theme.Spacing.s)
       .padding(.bottom, Theme.Spacing.xs)
       ForEach(section.items) { item in
-        QueueRowView(item: item, isSelected: item.id == selectedItemId) { open(item) }
+        QueueRowView(
+          item: item, isSelected: item.id == selectedItemId, open: { open(item) }, showDetails: { showDetails(item) },
+          copyLink: { copyLink(item) })
           .id(item.id)
       }
     }
