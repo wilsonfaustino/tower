@@ -6,3 +6,4 @@ xcuserdata/
 dist/
 .serena/
 Tower-assets.zip
+.env
