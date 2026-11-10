@@ -251,6 +251,15 @@ public struct PullRequestDetails: Equatable, Sendable {
       localized: "^[\(additions) line](inflect: true) added, ^[\(deletions) line](inflect: true) removed")
     return String(phrase.characters)
   }
+
+  public func additionsText(locale: Locale = .current) -> String {
+    "+\(additions.formatted(.number.locale(locale)))"
+  }
+
+  // U+2212 minus sign, as in the design, so the sign has the same width as the plus sign.
+  public func deletionsText(locale: Locale = .current) -> String {
+    "\u{2212}\(deletions.formatted(.number.locale(locale)))"
+  }
 }
 
 public struct QueueItem: Identifiable, Equatable, Sendable {

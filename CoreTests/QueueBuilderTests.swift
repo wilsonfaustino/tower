@@ -189,6 +189,14 @@ struct QueueBuilderTests {
     #expect(details.diffAccessibilityPhrase == "0 lines added, 0 lines removed")
   }
 
+  @Test func diffTextUsesSignsAndLocaleGrouping() {
+    let details = PullRequestDetails(
+      title: "Change", reference: "#1", repository: "app-web", additions: 1204, deletions: 318)
+    #expect(details.additionsText(locale: Locale(identifier: "en_US")) == "+1,204")
+    #expect(details.deletionsText(locale: Locale(identifier: "en_US")) == "\u{2212}318")
+    #expect(details.additionsText(locale: Locale(identifier: "de_DE")) == "+1.204")
+  }
+
   @Test func botTicketAndPipelineRowsHaveNoDetails() {
     let sections = queue(
       reviewRequests: [
