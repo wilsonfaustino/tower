@@ -20,7 +20,7 @@ enum Theme {
   }
 
   enum Metrics {
-    static let panelWidth: CGFloat = 380
+    static let panelWidth: CGFloat = 420
     static let panelMaxHeight: CGFloat = 560
     static let panelGap: CGFloat = 4
     static let rowMinHeight: CGFloat = 40
@@ -61,12 +61,34 @@ enum Theme {
   static let selectionFill = Color(nsColor: .selectedContentBackgroundColor)
   static let selectionText = Color(nsColor: .alternateSelectedControlTextColor)
 
-  static func statusText(_ variant: BadgeVariant) -> Color {
+  struct StatusColors {
+    let light: NSColor
+    let dark: NSColor
+    let highContrastLight: NSColor
+    let highContrastDark: NSColor
+  }
+
+  // Only failing and ready have Increase Contrast values, because the PR status strip draws them as thin glyphs.
+  static func statusColors(_ variant: BadgeVariant) -> StatusColors? {
     switch variant {
-    case .failing: Color(nsColor: dynamicColor(light: hex(0xB3261E), dark: hex(0xFF8A80)))
+    case .failing:
+      StatusColors(light: hex(0xB3261E), dark: hex(0xFF8A80), highContrastLight: hex(0x8C1D18), highContrastDark: hex(0xFFB4AB))
+    case .ready:
+      StatusColors(light: hex(0x146B2B), dark: hex(0x5BE07A), highContrastLight: hex(0x0D5220), highContrastDark: hex(0x8CF0A0))
+    case .urgent, .neutral: nil
+    }
+  }
+
+  static func statusText(_ variant: BadgeVariant) -> Color {
+    if let colors = statusColors(variant) {
+      return Color(
+        nsColor: dynamicColor(
+          light: colors.light, dark: colors.dark, highContrastLight: colors.highContrastLight,
+          highContrastDark: colors.highContrastDark))
+    }
+    return switch variant {
     case .urgent: Color(nsColor: dynamicColor(light: hex(0x934600), dark: hex(0xFFB84D)))
-    case .ready: Color(nsColor: dynamicColor(light: hex(0x146B2B), dark: hex(0x5BE07A)))
-    case .neutral: textSecondary
+    default: textSecondary
     }
   }
 

@@ -33,12 +33,18 @@ public struct PullRequest: Codable, Sendable, Equatable {
   public var requestedTeamSlugs: [String]
   public var reviewCount: Int
   public var reviewRequestedAt: Date?
+  public var unresolvedThreadCount: Int
+  // True when the PR has more review threads than the fetched first page, so the unresolved count is a lower bound.
+  public var hasMoreThreadsThanFetched: Bool
+  public var approvalCount: Int
+  public var requiredApprovalCount: Int
 
   public init(
     repository: String, number: Int, title: String, url: URL, author: String, authorIsBot: Bool, isDraft: Bool,
     updatedAt: Date, headBranch: String, reviewDecision: ReviewDecision?, checkState: CheckState?,
     failedCheckCount: Int, additions: Int, deletions: Int, requestedReviewerLogins: [String],
-    requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?
+    requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?, unresolvedThreadCount: Int = 0,
+    hasMoreThreadsThanFetched: Bool = false, approvalCount: Int = 0, requiredApprovalCount: Int = 1
   ) {
     self.repository = repository
     self.number = number
@@ -58,6 +64,10 @@ public struct PullRequest: Codable, Sendable, Equatable {
     self.requestedTeamSlugs = requestedTeamSlugs
     self.reviewCount = reviewCount
     self.reviewRequestedAt = reviewRequestedAt
+    self.unresolvedThreadCount = unresolvedThreadCount
+    self.hasMoreThreadsThanFetched = hasMoreThreadsThanFetched
+    self.approvalCount = approvalCount
+    self.requiredApprovalCount = requiredApprovalCount
   }
 }
 
@@ -150,6 +160,76 @@ public enum RowSymbol: String, CaseIterable, Sendable {
   case waiting = "hourglass"
 }
 
+// The status strip of one authored PR row. A nil part is hidden.
+public struct StatusStrip: Equatable, Sendable {
+  public enum Checks: Sendable {
+    case passed, failed, running
+  }
+
+  public struct Threads: Equatable, Sendable {
+    public var unresolvedCount: Int
+    // True when GitHub has more threads than Tower fetched, so the real count can be higher.
+    public var isLowerBound: Bool
+
+    public init(unresolvedCount: Int, isLowerBound: Bool) {
+      self.unresolvedCount = unresolvedCount
+      self.isLowerBound = isLowerBound
+    }
+  }
+
+  // With required 0, given is not capped and the row shows no open slots.
+  public struct Approvals: Equatable, Sendable {
+    public var given: Int
+    public var required: Int
+
+    public init(given: Int, required: Int) {
+      self.given = given
+      self.required = required
+    }
+
+    // With required 0 the row draws one filled slot, whatever the real count.
+    public var slotCount: Int { required == 0 ? min(given, 1) : max(given, required) }
+  }
+
+  public var checks: Checks?
+  public var threads: Threads?
+  public var approvals: Approvals?
+  // False when the row badge already says the checks failed.
+  public var announcesFailedChecks: Bool
+
+  public init(checks: Checks?, threads: Threads?, approvals: Approvals?, announcesFailedChecks: Bool = false) {
+    self.checks = checks
+    self.threads = threads
+    self.approvals = approvals
+    self.announcesFailedChecks = announcesFailedChecks
+  }
+
+  public var isEmpty: Bool { checks == nil && threads == nil && approvals == nil }
+
+  public var accessibilityPhrase: String {
+    var parts: [String] = []
+    switch checks {
+    case .passed: parts.append("checks passed")
+    case .running: parts.append("checks running")
+    case .failed: if announcesFailedChecks { parts.append("checks failed") }
+    case nil: break
+    }
+    if let threads {
+      let threadWord = threads.unresolvedCount == 1 ? "thread" : "threads"
+      let countPrefix = threads.isLowerBound ? "at least " : ""
+      parts.append("\(countPrefix)\(threads.unresolvedCount) unresolved \(threadWord)")
+    }
+    if let approvals {
+      if approvals.required == 0 {
+        parts.append("\(approvals.given) \(approvals.given == 1 ? "approval" : "approvals")")
+      } else {
+        parts.append("\(approvals.given) of \(approvals.required) \(approvals.required == 1 ? "approval" : "approvals")")
+      }
+    }
+    return parts.joined(separator: ", ")
+  }
+}
+
 public struct QueueItem: Identifiable, Equatable, Sendable {
   public var id: String
   public var title: String
@@ -158,8 +238,14 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var symbol: RowSymbol
   public var badge: Badge?
   public var sortDate: Date
+  public var strip: StatusStrip?
+  // Shown before the title, for example a PR number.
+  public var reference: String?
 
-  public init(id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date) {
+  public init(
+    id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date,
+    strip: StatusStrip? = nil, reference: String? = nil
+  ) {
     self.id = id
     self.title = title
     self.meta = meta
@@ -167,6 +253,8 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.symbol = symbol
     self.badge = badge
     self.sortDate = sortDate
+    self.strip = strip
+    self.reference = reference
   }
 }
 

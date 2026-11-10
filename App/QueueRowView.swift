@@ -16,15 +16,20 @@ struct QueueRowView: View {
         // SF Symbol descriptions ("show", "divide") would mislead; the badge text carries the meaning.
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-        Text(item.title)
+        titleText
           .font(Theme.Fonts.rowTitle)
           .foregroundStyle(isSelected ? Theme.selectionText : Theme.textPrimary)
           .lineLimit(1)
           .truncationMode(.tail)
-        Text(item.meta)
-          .font(Theme.Fonts.rowMeta)
-          .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
-          .lineLimit(1)
+        HStack(spacing: 6) {
+          Text(item.meta)
+            .font(Theme.Fonts.rowMeta)
+            .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
+            .lineLimit(1)
+          if let strip = item.strip, !strip.isEmpty {
+            StatusStripView(strip: strip, isSelected: isSelected)
+          }
+        }
       }
       Spacer(minLength: Theme.Spacing.s)
       if let badge = item.badge {
@@ -45,6 +50,12 @@ struct QueueRowView: View {
     .onTapGesture(perform: open)
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+  }
+
+  private var titleText: Text {
+    guard let reference = item.reference else { return Text(item.title) }
+    let referenceColor = isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary
+    return Text("\(Text(reference).foregroundStyle(referenceColor)) \(item.title)")
   }
 
   private var rowFill: Color {
@@ -71,5 +82,64 @@ struct BadgeView: View {
       .padding(.horizontal, 7)
       .background(isSelected ? Theme.selectionText.opacity(0.22) : Theme.badgeFill(badge.variant), in: Capsule())
       .fixedSize()
+  }
+}
+
+struct StatusStripView: View {
+  let strip: StatusStrip
+  let isSelected: Bool
+
+  var body: some View {
+    HStack(spacing: 7) {
+      if let checks = strip.checks {
+        checksGlyph(checks)
+      }
+      if let threads = strip.threads {
+        HStack(spacing: Theme.Spacing.xxs) {
+          Image(systemName: "bubble.left")
+          Text("\(threads.unresolvedCount)\(threads.isLowerBound ? "+" : "")")
+        }
+        .foregroundStyle(glyphColor(Theme.textSecondary))
+      }
+      if let approvals = strip.approvals {
+        approvalSlots(approvals)
+      }
+    }
+    .font(Theme.Fonts.rowMeta)
+    .imageScale(.small)
+    .fixedSize()
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(strip.accessibilityPhrase)
+  }
+
+  private func checksGlyph(_ checks: StatusStrip.Checks) -> some View {
+    switch checks {
+    case .passed: Image(systemName: "checkmark.circle").foregroundStyle(glyphColor(Theme.statusText(.ready)))
+    case .failed: Image(systemName: "xmark.circle").foregroundStyle(glyphColor(Theme.statusText(.failing)))
+    case .running: Image(systemName: "circle.dashed").foregroundStyle(glyphColor(Theme.textSecondary))
+    }
+  }
+
+  private func approvalSlots(_ approvals: StatusStrip.Approvals) -> some View {
+    HStack(spacing: -3) {
+      ForEach(0..<approvals.slotCount, id: \.self) { index in
+        let isGiven = index < approvals.given
+        Image(systemName: isGiven ? "checkmark.circle.fill" : "circle")
+          .foregroundStyle(glyphColor(isGiven ? Theme.statusText(.ready) : Theme.textSecondary))
+          .background {
+            // Draws after the previous slot and erases where they overlap, so the row fill shows through
+            // the gap. A ring painted in the panel color would show as a halo on the material and hover fill.
+            if index > 0 {
+              Image(systemName: "circle.fill").scaleEffect(1.3).blendMode(.destinationOut)
+            }
+          }
+      }
+    }
+    // Keeps the destination-out erase inside the slots instead of cutting through the row fill.
+    .compositingGroup()
+  }
+
+  private func glyphColor(_ color: Color) -> Color {
+    isSelected ? Theme.selectionText : color
   }
 }

@@ -123,10 +123,13 @@ public struct GitHubClient: Sendable {
 
 // MARK: - GraphQL wire format
 
+// The strip counts unresolved threads on the newest page only and does not page further.
+private let reviewThreadPageSize = 50
+
 private let searchQuery = """
   query($authoredQuery: String!, $requestedQuery: String!, $reviewedQuery: String!, $mergedQuery: String!) {
     viewer { login }
-    authored: search(type: ISSUE, query: $authoredQuery, first: 50) { nodes { ...PullRequestFields } }
+    authored: search(type: ISSUE, query: $authoredQuery, first: 50) { nodes { ...AuthoredPullRequestFields } }
     requested: search(type: ISSUE, query: $requestedQuery, first: 50) { nodes { ...PullRequestFields } }
     reviewed: search(type: ISSUE, query: $reviewedQuery, first: 1) { issueCount }
     merged: search(type: ISSUE, query: $mergedQuery, first: 1) { issueCount }
@@ -140,6 +143,12 @@ private let searchQuery = """
     reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
     reviews(first: 1) { totalCount }
     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
+  }
+  fragment AuthoredPullRequestFields on PullRequest {
+    ...PullRequestFields
+    baseRef { rules(first: 10) { nodes { parameters { ... on PullRequestParameters { requiredApprovingReviewCount } } } } }
+    latestOpinionatedReviews(first: 20, writersOnly: true) { nodes { state } }
+    reviewThreads(last: \(reviewThreadPageSize)) { totalCount nodes { isResolved } }
   }
   """
 
@@ -197,6 +206,18 @@ private struct PullRequestNode: Decodable {
   struct TotalCount: Decodable { var totalCount: Int }
   struct Timeline: Decodable { var nodes: [TimelineEvent] }
   struct TimelineEvent: Decodable { var createdAt: Date? }
+  struct BaseRef: Decodable { var rules: Rules? }
+  struct Rules: Decodable { var nodes: [Rule] }
+  struct Rule: Decodable { var parameters: RuleParameters? }
+  // Rules that are not pull request rules come back with empty parameters.
+  struct RuleParameters: Decodable { var requiredApprovingReviewCount: Int? }
+  struct Reviews: Decodable { var nodes: [Review] }
+  struct Review: Decodable { var state: String }
+  struct Threads: Decodable {
+    var totalCount: Int
+    var nodes: [Thread]
+  }
+  struct Thread: Decodable { var isResolved: Bool }
 
   // Search can return non-PR nodes as empty objects, so every field is optional.
   var number: Int?
@@ -214,6 +235,9 @@ private struct PullRequestNode: Decodable {
   var reviewRequests: ReviewRequests?
   var reviews: TotalCount?
   var timelineItems: Timeline?
+  var baseRef: BaseRef?
+  var latestOpinionatedReviews: Reviews?
+  var reviewThreads: Threads?
 
   var pullRequest: PullRequest? {
     guard let number, let title, let url, let updatedAt, let repository else { return nil }
@@ -223,6 +247,7 @@ private struct PullRequestNode: Decodable {
     let failedStatusContexts = (rollup?.contexts.statusContextCountsByState ?? [])
       .filter { GitHubClient.isFailedStatusContextState($0.state) }.reduce(0) { $0 + $1.count }
     let reviewers = reviewRequests?.nodes.compactMap(\.requestedReviewer) ?? []
+    let requiredApprovalCounts = baseRef?.rules?.nodes.compactMap { $0.parameters?.requiredApprovingReviewCount } ?? []
     return PullRequest(
       repository: repository.name, number: number, title: title, url: url,
       author: author?.login ?? "ghost", authorIsBot: author?.typename == "Bot", isDraft: isDraft ?? false, updatedAt: updatedAt,
@@ -231,7 +256,11 @@ private struct PullRequestNode: Decodable {
       failedCheckCount: failedCheckRuns + failedStatusContexts,
       additions: additions ?? 0, deletions: deletions ?? 0,
       requestedReviewerLogins: reviewers.compactMap(\.login), requestedTeamSlugs: reviewers.compactMap(\.slug),
-      reviewCount: reviews?.totalCount ?? 0, reviewRequestedAt: timelineItems?.nodes.last?.createdAt)
+      reviewCount: reviews?.totalCount ?? 0, reviewRequestedAt: timelineItems?.nodes.last?.createdAt,
+      unresolvedThreadCount: reviewThreads?.nodes.filter { !$0.isResolved }.count ?? 0,
+      hasMoreThreadsThanFetched: (reviewThreads?.totalCount ?? 0) > reviewThreadPageSize,
+      approvalCount: latestOpinionatedReviews?.nodes.filter { $0.state == "APPROVED" }.count ?? 0,
+      requiredApprovalCount: requiredApprovalCounts.max() ?? 1)
   }
 }
 
