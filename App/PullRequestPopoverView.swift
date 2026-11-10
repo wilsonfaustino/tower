@@ -10,6 +10,7 @@ struct PullRequestPopoverView: View {
   let handleInput: (PanelInput) -> KeyPress.Result
   @State private var isShowingCopied = false
   @FocusState private var isFocused: Bool
+  @AccessibilityFocusState private var isTitleAccessibilityFocused: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Metrics.popoverSpacing) {
@@ -20,6 +21,7 @@ struct PullRequestPopoverView: View {
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityFocused($isTitleAccessibilityFocused)
       Text("\(details.reference) · \(details.repository)")
         .font(Theme.Fonts.rowMeta)
         .foregroundStyle(Theme.textSecondary)
@@ -49,7 +51,10 @@ struct PullRequestPopoverView: View {
     .focusable()
     .focusEffectDisabled()
     .focused($isFocused)
-    .onAppear { isFocused = true }
+    .onAppear {
+      isFocused = true
+      isTitleAccessibilityFocused = true
+    }
     .onKeyPress(.space) { handleInput(.space) }
     .onKeyPress(.upArrow) { handleInput(.upArrow) }
     .onKeyPress(.downArrow) { handleInput(.downArrow) }

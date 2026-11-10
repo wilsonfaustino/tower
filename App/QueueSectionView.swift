@@ -9,6 +9,7 @@ struct QueueSectionView: View {
   let showDetails: (QueueItem) -> Void
   let copyLink: (QueueItem) -> Void
   let handlePopoverInput: (PanelInput) -> KeyPress.Result
+  @AccessibilityFocusState private var accessibilityFocusedItemId: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -25,6 +26,7 @@ struct QueueSectionView: View {
           item: item, isSelected: item.id == selectedItemId, open: { open(item) }, showDetails: { showDetails(item) },
           copyLink: { copyLink(item) })
           .id(item.id)
+          .accessibilityFocused($accessibilityFocusedItemId, equals: item.id)
           // The leading point puts the arrow at the vertical middle of the row, with the popover left of the panel.
           .popover(isPresented: isPopoverPresented(for: item), attachmentAnchor: .point(.leading), arrowEdge: .leading) {
             if let details = item.details {
@@ -33,6 +35,11 @@ struct QueueSectionView: View {
             }
           }
       }
+    }
+    // Gives VoiceOver focus back to the row that opened the popover when it closes.
+    .onChange(of: popoverItemId) { oldValue, newValue in
+      guard newValue == nil, let oldValue, section.items.contains(where: { $0.id == oldValue }) else { return }
+      accessibilityFocusedItemId = oldValue
     }
   }
 
