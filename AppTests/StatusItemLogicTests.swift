@@ -58,3 +58,44 @@ struct PanelOriginTests {
     #expect(cancelCount == 1)
   }
 }
+
+@MainActor struct PanelKeyChangeActionTests {
+  private func panelWithChild() -> (panel: PanelWindow, child: NSWindow) {
+    let panel = PanelWindow()
+    let child = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+    panel.addChildWindow(child, ordered: .above)
+    return (panel, child)
+  }
+
+  @Test func panelTakingKeyBackKeepsItOpen() {
+    let (panel, _) = panelWithChild()
+    #expect(panelKeyChangeAction(newKeyWindow: panel, panel: panel, resignedChildIsVisible: true) == .keepOpen)
+  }
+
+  @Test func popoverTakingKeyFromThePanelKeepsItOpen() {
+    let (panel, child) = panelWithChild()
+    #expect(panelKeyChangeAction(newKeyWindow: child, panel: panel, resignedChildIsVisible: nil) == .keepOpen)
+  }
+
+  @Test func closedPopoverWithNoNewKeyWindowGivesKeyBackToThePanel() {
+    let (panel, _) = panelWithChild()
+    #expect(panelKeyChangeAction(newKeyWindow: nil, panel: panel, resignedChildIsVisible: false) == .focusPanel)
+  }
+
+  @Test func openPopoverLosingKeyClosesThePanel() {
+    let (panel, _) = panelWithChild()
+    #expect(panelKeyChangeAction(newKeyWindow: nil, panel: panel, resignedChildIsVisible: true) == .closePanel)
+  }
+
+  @Test func anotherWindowTakingKeyClosesThePanel() {
+    let (panel, _) = panelWithChild()
+    let settingsWindow = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+    #expect(panelKeyChangeAction(newKeyWindow: settingsWindow, panel: panel, resignedChildIsVisible: nil) == .closePanel)
+    #expect(panelKeyChangeAction(newKeyWindow: settingsWindow, panel: panel, resignedChildIsVisible: false) == .closePanel)
+  }
+
+  @Test func panelLosingKeyToNothingClosesIt() {
+    let (panel, _) = panelWithChild()
+    #expect(panelKeyChangeAction(newKeyWindow: nil, panel: panel, resignedChildIsVisible: nil) == .closePanel)
+  }
+}
