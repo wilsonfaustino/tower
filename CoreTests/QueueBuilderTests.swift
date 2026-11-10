@@ -22,7 +22,11 @@ private func pullRequest(
   requestedReviewerLogins: [String] = [],
   requestedTeamSlugs: [String] = [],
   reviewCount: Int = 0,
-  reviewRequestedHoursAgo: Double? = nil
+  reviewRequestedHoursAgo: Double? = nil,
+  unresolvedThreadCount: Int = 0,
+  hasMoreThreadsThanFetched: Bool = false,
+  approvalCount: Int = 0,
+  requiredApprovalCount: Int = 1
 ) -> PullRequest {
   PullRequest(
     repository: repository, number: number, title: title,
@@ -32,7 +36,9 @@ private func pullRequest(
     failedCheckCount: failedCheckCount, additions: additions, deletions: deletions,
     requestedReviewerLogins: requestedReviewerLogins, requestedTeamSlugs: requestedTeamSlugs,
     reviewCount: reviewCount,
-    reviewRequestedAt: reviewRequestedHoursAgo.map { now.addingTimeInterval(-$0 * hour) })
+    reviewRequestedAt: reviewRequestedHoursAgo.map { now.addingTimeInterval(-$0 * hour) },
+    unresolvedThreadCount: unresolvedThreadCount, hasMoreThreadsThanFetched: hasMoreThreadsThanFetched,
+    approvalCount: approvalCount, requiredApprovalCount: requiredApprovalCount)
 }
 
 private func ticket(key: String, statusName: String = "In Progress", updatedHoursAgo: Double = 72) -> JiraTicket {
@@ -225,6 +231,119 @@ struct QueueBuilderTests {
       tickets: [ticket(key: "PROJ-9")])
     #expect(sections.map(\.kind) == [.fix, .review, .merge, .tidy, .waiting])
     #expect(items(sections, .fix).map(\.id) == ["pr:app-web#3", "pr:app-web#2"])
+  }
+}
+
+private func strip(_ pullRequest: PullRequest) -> StatusStrip? {
+  queue(authored: [pullRequest]).flatMap(\.items).first?.strip
+}
+
+struct StatusStripTests {
+  @Test(arguments: [
+    (CheckState.success, StatusStrip.Checks.passed),
+    (.failure, .failed),
+    (.error, .failed),
+    (.pending, .running),
+    (.expected, .running),
+  ])
+  func checksStateMapsFromRollup(checkState: CheckState, expectedChecks: StatusStrip.Checks) {
+    #expect(strip(pullRequest(checkState: checkState, failedCheckCount: 1))?.checks == expectedChecks)
+  }
+
+  @Test func missingRollupHidesChecks() {
+    #expect(strip(pullRequest(checkState: nil))?.checks == nil)
+  }
+
+  @Test func noUnresolvedThreadsHidesThreads() {
+    #expect(strip(pullRequest(unresolvedThreadCount: 0))?.threads == nil)
+  }
+
+  @Test func unresolvedThreadsShowTheirCount() {
+    #expect(strip(pullRequest(unresolvedThreadCount: 3))?.threads == StatusStrip.Threads(unresolvedCount: 3, isLowerBound: false))
+  }
+
+  @Test func moreThreadsThanFetchedMarksCountAsLowerBound() {
+    let threads = strip(pullRequest(unresolvedThreadCount: 2, hasMoreThreadsThanFetched: true))?.threads
+    #expect(threads == StatusStrip.Threads(unresolvedCount: 2, isLowerBound: true))
+  }
+
+  @Test func moreThreadsThanFetchedWithNoneUnresolvedHidesThreads() {
+    #expect(strip(pullRequest(unresolvedThreadCount: 0, hasMoreThreadsThanFetched: true))?.threads == nil)
+  }
+
+  @Test func noApprovalsOfOneRequired() {
+    let approvals = strip(pullRequest(approvalCount: 0, requiredApprovalCount: 1))?.approvals
+    #expect(approvals == StatusStrip.Approvals(given: 0, required: 1))
+  }
+
+  @Test func oneApprovalOfTwoRequired() {
+    let approvals = strip(pullRequest(approvalCount: 1, requiredApprovalCount: 2))?.approvals
+    #expect(approvals == StatusStrip.Approvals(given: 1, required: 2))
+  }
+
+  @Test func approvalsOverRequiredAreCapped() {
+    let approvals = strip(pullRequest(approvalCount: 3, requiredApprovalCount: 2))?.approvals
+    #expect(approvals == StatusStrip.Approvals(given: 2, required: 2))
+  }
+
+  @Test func noRequiredApprovalsShowsApprovalsGiven() {
+    let approvals = strip(pullRequest(approvalCount: 2, requiredApprovalCount: 0))?.approvals
+    #expect(approvals == StatusStrip.Approvals(given: 2, required: 0))
+  }
+
+  @Test func noRequiredApprovalsAndNoneGivenHidesApprovals() {
+    #expect(strip(pullRequest(approvalCount: 0, requiredApprovalCount: 0))?.approvals == nil)
+  }
+
+  @Test func draftHidesApprovalsButKeepsChecksAndThreads() {
+    let draftStrip = strip(
+      pullRequest(isDraft: true, checkState: .pending, unresolvedThreadCount: 1, approvalCount: 1, requiredApprovalCount: 2))
+    #expect(draftStrip == StatusStrip(checks: .running, threads: StatusStrip.Threads(unresolvedCount: 1, isLowerBound: false), approvals: nil))
+  }
+
+  @Test func onlyAuthoredPullRequestsHaveAStrip() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 2, author: "Ana", requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 2, unresolvedThreadCount: 1),
+        pullRequest(number: 3, author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2),
+      ],
+      tickets: [ticket(key: "PROJ-9")],
+      pipelines: [pipeline(state: .failed), pipeline(triggerType: "webhook", state: .running)])
+    let allItems = sections.flatMap(\.items)
+    #expect(allItems.count == 5)
+    #expect(allItems.allSatisfy { $0.strip == nil })
+  }
+
+  @Test func phraseForFullStrip() {
+    let fullStrip = strip(
+      pullRequest(checkState: .pending, unresolvedThreadCount: 3, approvalCount: 1, requiredApprovalCount: 2))
+    #expect(fullStrip?.accessibilityPhrase == "checks running, 3 unresolved threads, 1 of 2 approvals")
+  }
+
+  @Test func phraseForPartialStrip() {
+    #expect(strip(pullRequest(isDraft: true, checkState: .success))?.accessibilityPhrase == "checks passed")
+  }
+
+  @Test func phraseUsesSingularForms() {
+    let singularStrip = strip(pullRequest(checkState: nil, unresolvedThreadCount: 1, approvalCount: 0, requiredApprovalCount: 1))
+    #expect(singularStrip?.accessibilityPhrase == "1 unresolved thread, 0 of 1 approval")
+  }
+
+  @Test func phraseSaysAtLeastWhenThreadCountIsLowerBound() {
+    let overflowStrip = strip(
+      pullRequest(isDraft: true, checkState: nil, unresolvedThreadCount: 2, hasMoreThreadsThanFetched: true))
+    #expect(overflowStrip?.accessibilityPhrase == "at least 2 unresolved threads")
+  }
+
+  @Test func phraseLeavesOutFailedChecks() {
+    let failingStrip = strip(
+      pullRequest(checkState: .failure, failedCheckCount: 2, unresolvedThreadCount: 2, approvalCount: 0, requiredApprovalCount: 1))
+    #expect(failingStrip?.accessibilityPhrase == "2 unresolved threads, 0 of 1 approval")
+  }
+
+  @Test func phraseWithNoRequiredApprovalsCountsApprovalsGiven() {
+    #expect(strip(pullRequest(checkState: nil, approvalCount: 1, requiredApprovalCount: 0))?.accessibilityPhrase == "1 approval")
+    #expect(strip(pullRequest(checkState: nil, approvalCount: 2, requiredApprovalCount: 0))?.accessibilityPhrase == "2 approvals")
   }
 }
 

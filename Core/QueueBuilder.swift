@@ -91,7 +91,33 @@ private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: 
   QueueItem(
     id: pullRequest.itemId, title: pullRequest.title,
     meta: "\(pullRequest.repository) #\(pullRequest.number) · \(shortAge(from: pullRequest.updatedAt, now: now))",
-    url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt)
+    url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt,
+    strip: statusStrip(pullRequest))
+}
+
+private func statusStrip(_ pullRequest: PullRequest) -> StatusStrip {
+  let checks: StatusStrip.Checks? =
+    switch pullRequest.checkState {
+    case .success: .passed
+    case .failure, .error: .failed
+    case .pending, .expected: .running
+    case nil: nil
+    }
+  let threads =
+    pullRequest.unresolvedThreadCount > 0
+    ? StatusStrip.Threads(
+      unresolvedCount: pullRequest.unresolvedThreadCount, isLowerBound: pullRequest.hasMoreThreadsThanFetched)
+    : nil
+  return StatusStrip(checks: checks, threads: threads, approvals: approvalsPart(pullRequest))
+}
+
+private func approvalsPart(_ pullRequest: PullRequest) -> StatusStrip.Approvals? {
+  if pullRequest.isDraft { return nil }
+  let required = pullRequest.requiredApprovalCount
+  if required == 0 {
+    return pullRequest.approvalCount > 0 ? StatusStrip.Approvals(given: pullRequest.approvalCount, required: 0) : nil
+  }
+  return StatusStrip.Approvals(given: min(pullRequest.approvalCount, required), required: required)
 }
 
 private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Date) -> QueueItem {
