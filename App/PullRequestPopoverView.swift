@@ -9,6 +9,7 @@ struct PullRequestPopoverView: View {
   // The popover is its own key window, so the panel's key handlers do not see these keys.
   let handleInput: (PanelInput) -> KeyPress.Result
   @State private var isShowingCopied = false
+  @State private var copyEventCount = 0
   @FocusState private var isFocused: Bool
   @AccessibilityFocusState private var isTitleAccessibilityFocused: Bool
 
@@ -62,9 +63,10 @@ struct PullRequestPopoverView: View {
       guard press.modifiers.contains(.command) else { return .ignored }
       return handleInput(.copy)
     }
-    .task(id: isShowingCopied) {
+    // Each copy cancels the previous task, so the 1.5 s feedback restarts.
+    .task(id: copyEventCount) {
       guard isShowingCopied else { return }
-      try? await Task.sleep(for: .seconds(1.5))
+      guard (try? await Task.sleep(for: .seconds(1.5))) != nil else { return }
       isShowingCopied = false
     }
   }
@@ -72,5 +74,6 @@ struct PullRequestPopoverView: View {
   private func copy() {
     copyLink()
     isShowingCopied = true
+    copyEventCount += 1
   }
 }
