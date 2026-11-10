@@ -25,6 +25,10 @@ struct PanelView: View {
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
         }
+        // Gives keyboard focus back to the list, with the same row selected, when the popover closes.
+        .onChange(of: popoverItemId) { _, newValue in
+          if newValue == nil { isListFocused = true }
+        }
       }
     }
     .frame(width: Theme.Metrics.panelWidth)
@@ -99,7 +103,8 @@ struct PanelView: View {
       case .queue:
         ForEach(store.sections) { section in
           QueueSectionView(
-            section: section, selectedItemId: selectedItemId, open: open, showDetails: showDetails, copyLink: copyLink)
+            section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
+            showDetails: showDetails, copyLink: copyLink)
         }
       case .empty:
         StateMessageView(

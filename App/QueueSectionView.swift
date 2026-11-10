@@ -4,6 +4,7 @@ import SwiftUI
 struct QueueSectionView: View {
   let section: QueueSection
   let selectedItemId: String?
+  @Binding var popoverItemId: String?
   let open: (QueueItem) -> Void
   let showDetails: (QueueItem) -> Void
   let copyLink: (QueueItem) -> Void
@@ -23,7 +24,21 @@ struct QueueSectionView: View {
           item: item, isSelected: item.id == selectedItemId, open: { open(item) }, showDetails: { showDetails(item) },
           copyLink: { copyLink(item) })
           .id(item.id)
+          // The leading point puts the arrow at the vertical middle of the row, with the popover left of the panel.
+          .popover(isPresented: isPopoverPresented(for: item), attachmentAnchor: .point(.leading), arrowEdge: .leading) {
+            if let details = item.details {
+              PullRequestPopoverView(details: details, open: { open(item) }, copyLink: { copyLink(item) })
+            }
+          }
       }
     }
+  }
+
+  private func isPopoverPresented(for item: QueueItem) -> Binding<Bool> {
+    Binding(
+      get: { popoverItemId == item.id },
+      set: { isPresented in
+        if !isPresented, popoverItemId == item.id { popoverItemId = nil }
+      })
   }
 }
