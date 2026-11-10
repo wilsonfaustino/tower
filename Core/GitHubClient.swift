@@ -123,7 +123,7 @@ public struct GitHubClient: Sendable {
 
 // MARK: - GraphQL wire format
 
-// The strip counts unresolved threads on this first page only and does not page further.
+// The strip counts unresolved threads on the newest page only and does not page further.
 private let reviewThreadPageSize = 50
 
 private let searchQuery = """
@@ -146,9 +146,9 @@ private let searchQuery = """
   }
   fragment AuthoredPullRequestFields on PullRequest {
     ...PullRequestFields
-    baseRef { rules(first: 50) { nodes { parameters { ... on PullRequestParameters { requiredApprovingReviewCount } } } } }
-    latestOpinionatedReviews(first: 100, writersOnly: true) { nodes { state } }
-    reviewThreads(first: \(reviewThreadPageSize)) { totalCount nodes { isResolved } }
+    baseRef { rules(first: 10) { nodes { parameters { ... on PullRequestParameters { requiredApprovingReviewCount } } } } }
+    latestOpinionatedReviews(first: 20, writersOnly: true) { nodes { state } }
+    reviewThreads(last: \(reviewThreadPageSize)) { totalCount nodes { isResolved } }
   }
   """
 

@@ -92,6 +92,15 @@ struct GitHubClientTests {
     }
   }
 
+  @Test func reviewThreadsSampleTheNewestPage() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let transport = StubTransport { _ in (fixtureData, 200) }
+    _ = try await client(transport: transport).fetch(now: now)
+    let body = try #require(transport.requests.first?.httpBody)
+    let query = try #require((try JSONSerialization.jsonObject(with: body) as? [String: Any])?["query"] as? String)
+    #expect(query.contains("reviewThreads(last: 50)"))
+  }
+
   @Test func requiredApprovalCountIsHighestPullRequestRule() async throws {
     let pullRequests = try await authoredStripPullRequests()
     #expect(pullRequests[0].requiredApprovalCount == 2)
