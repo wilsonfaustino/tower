@@ -6,7 +6,10 @@ struct PullRequestPopoverView: View {
   let details: PullRequestDetails
   let open: () -> Void
   let copyLink: () -> Void
+  // The popover is its own key window, so the panel's key handlers do not see these keys.
+  let handleInput: (PanelInput) -> KeyPress.Result
   @State private var isShowingCopied = false
+  @FocusState private var isFocused: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Metrics.popoverSpacing) {
@@ -33,7 +36,7 @@ struct PullRequestPopoverView: View {
         Spacer()
         Button(action: copy) {
           if isShowingCopied {
-            Label("Copied", systemImage: "checkmark")
+            Label("Copied", systemImage: "checkmark").labelStyle(.titleAndIcon)
           } else {
             Text("Copy link")
           }
@@ -43,6 +46,17 @@ struct PullRequestPopoverView: View {
     }
     .padding(Theme.Metrics.popoverPadding)
     .frame(width: Theme.Metrics.popoverWidth)
+    .focusable()
+    .focusEffectDisabled()
+    .focused($isFocused)
+    .onAppear { isFocused = true }
+    .onKeyPress(.space) { handleInput(.space) }
+    .onKeyPress(.upArrow) { handleInput(.upArrow) }
+    .onKeyPress(.downArrow) { handleInput(.downArrow) }
+    .onKeyPress(keys: ["c"]) { press in
+      guard press.modifiers.contains(.command) else { return .ignored }
+      return handleInput(.copy)
+    }
     .task(id: isShowingCopied) {
       guard isShowingCopied else { return }
       try? await Task.sleep(for: .seconds(1.5))

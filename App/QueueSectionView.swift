@@ -8,6 +8,7 @@ struct QueueSectionView: View {
   let open: (QueueItem) -> Void
   let showDetails: (QueueItem) -> Void
   let copyLink: (QueueItem) -> Void
+  let handlePopoverInput: (PanelInput) -> KeyPress.Result
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -27,7 +28,8 @@ struct QueueSectionView: View {
           // The leading point puts the arrow at the vertical middle of the row, with the popover left of the panel.
           .popover(isPresented: isPopoverPresented(for: item), attachmentAnchor: .point(.leading), arrowEdge: .leading) {
             if let details = item.details {
-              PullRequestPopoverView(details: details, open: { open(item) }, copyLink: { copyLink(item) })
+              PullRequestPopoverView(
+                details: details, open: { open(item) }, copyLink: { copyLink(item) }, handleInput: handlePopoverInput)
             }
           }
       }

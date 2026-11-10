@@ -104,7 +104,7 @@ struct PanelView: View {
         ForEach(store.sections) { section in
           QueueSectionView(
             section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
-            showDetails: showDetails, copyLink: copyLink)
+            showDetails: showDetails, copyLink: copyLink, handlePopoverInput: handle)
         }
       case .empty:
         StateMessageView(
