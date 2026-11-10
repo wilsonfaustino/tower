@@ -230,6 +230,22 @@ public struct StatusStrip: Equatable, Sendable {
   }
 }
 
+public struct PullRequestDetails: Equatable, Sendable {
+  public var title: String
+  public var reference: String
+  public var repository: String
+  public var additions: Int
+  public var deletions: Int
+
+  public init(title: String, reference: String, repository: String, additions: Int, deletions: Int) {
+    self.title = title
+    self.reference = reference
+    self.repository = repository
+    self.additions = additions
+    self.deletions = deletions
+  }
+}
+
 public struct QueueItem: Identifiable, Equatable, Sendable {
   public var id: String
   public var title: String
@@ -241,10 +257,12 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var strip: StatusStrip?
   // Shown before the title, for example a PR number.
   public var reference: String?
+  // Nil on rows that are not one pull request (bots, tickets, pipelines).
+  public var details: PullRequestDetails?
 
   public init(
     id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date,
-    strip: StatusStrip? = nil, reference: String? = nil
+    strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil
   ) {
     self.id = id
     self.title = title
@@ -255,6 +273,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.sortDate = sortDate
     self.strip = strip
     self.reference = reference
+    self.details = details
   }
 }
 
