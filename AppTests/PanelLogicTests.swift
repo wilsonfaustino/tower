@@ -80,3 +80,53 @@ struct SelectionMovementTests {
     #expect(nextSelectedItemId(in: items, after: "a", offset: -1) == "a")
   }
 }
+
+struct PanelInputTests {
+  // (input, selected item has details, popover is open, expected action)
+  static let rules: [(PanelInput, Bool, Bool, PanelAction)] = [
+    (.click, true, false, .openAndClosePanel),
+    (.click, false, false, .openAndClosePanel),
+    (.click, true, true, .openAndClosePanel),
+    (.click, false, true, .openAndClosePanel),
+    (.commandClick, true, false, .openInBackground),
+    (.commandClick, false, false, .openInBackground),
+    (.commandClick, true, true, .openInBackground),
+    (.commandClick, false, true, .openInBackground),
+    (.returnKey, true, false, .openAndClosePanel),
+    (.returnKey, false, false, .openAndClosePanel),
+    (.returnKey, true, true, .openAndClosePanel),
+    (.returnKey, false, true, .openAndClosePanel),
+    (.space, true, false, .showPopover),
+    (.space, false, false, .ignore),
+    (.space, true, true, .closePopover),
+    (.space, false, true, .closePopover),
+    (.escape, true, false, .closePanel),
+    (.escape, false, false, .closePanel),
+    (.escape, true, true, .closePopover),
+    (.escape, false, true, .closePopover),
+    (.upArrow, true, false, .closePopoverAndMoveSelection(offset: -1)),
+    (.upArrow, false, false, .closePopoverAndMoveSelection(offset: -1)),
+    (.upArrow, true, true, .closePopoverAndMoveSelection(offset: -1)),
+    (.upArrow, false, true, .closePopoverAndMoveSelection(offset: -1)),
+    (.downArrow, true, false, .closePopoverAndMoveSelection(offset: 1)),
+    (.downArrow, false, false, .closePopoverAndMoveSelection(offset: 1)),
+    (.downArrow, true, true, .closePopoverAndMoveSelection(offset: 1)),
+    (.downArrow, false, true, .closePopoverAndMoveSelection(offset: 1)),
+    (.copy, true, false, .copyLink),
+    (.copy, false, false, .ignore),
+    (.copy, true, true, .copyLink),
+    (.copy, false, true, .ignore),
+    (.rightClick, true, false, .showContextMenu),
+    (.rightClick, false, false, .ignore),
+    (.rightClick, true, true, .showContextMenu),
+    (.rightClick, false, true, .ignore),
+  ]
+
+  @Test(arguments: rules)
+  func inputGivesTheRuleAction(
+    input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool, expectedAction: PanelAction
+  ) {
+    let action = panelAction(for: input, selectedItemHasDetails: selectedItemHasDetails, isPopoverOpen: isPopoverOpen)
+    #expect(action == expectedAction)
+  }
+}

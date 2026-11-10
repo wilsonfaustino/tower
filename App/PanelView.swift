@@ -197,3 +197,28 @@ func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, of
   }
   return items[nextIndex].id
 }
+
+enum PanelInput: Sendable {
+  case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick
+}
+
+enum PanelAction: Equatable, Sendable {
+  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
+  case copyLink, showContextMenu, closePanel, ignore
+}
+
+// Click, Cmd-click and Return work on every row. Space, Cmd-C and right-click act only on rows with PR details.
+func panelAction(for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool) -> PanelAction {
+  switch input {
+  case .click, .returnKey: return .openAndClosePanel
+  case .commandClick: return .openInBackground
+  case .space:
+    if isPopoverOpen { return .closePopover }
+    return selectedItemHasDetails ? .showPopover : .ignore
+  case .escape: return isPopoverOpen ? .closePopover : .closePanel
+  case .upArrow: return .closePopoverAndMoveSelection(offset: -1)
+  case .downArrow: return .closePopoverAndMoveSelection(offset: 1)
+  case .copy: return selectedItemHasDetails ? .copyLink : .ignore
+  case .rightClick: return selectedItemHasDetails ? .showContextMenu : .ignore
+  }
+}
