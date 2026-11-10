@@ -16,7 +16,7 @@ struct QueueRowView: View {
         // SF Symbol descriptions ("show", "divide") would mislead; the badge text carries the meaning.
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-        Text(item.title)
+        titleText
           .font(Theme.Fonts.rowTitle)
           .foregroundStyle(isSelected ? Theme.selectionText : Theme.textPrimary)
           .lineLimit(1)
@@ -50,6 +50,12 @@ struct QueueRowView: View {
     .onTapGesture(perform: open)
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+  }
+
+  private var titleText: Text {
+    guard let reference = item.reference else { return Text(item.title) }
+    let referenceColor = isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary
+    return Text("\(Text(reference).foregroundStyle(referenceColor)) \(item.title)")
   }
 
   private var rowFill: Color {

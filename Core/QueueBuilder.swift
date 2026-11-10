@@ -90,9 +90,9 @@ extension PullRequest {
 private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: Badge?, now: Date) -> QueueItem {
   QueueItem(
     id: pullRequest.itemId, title: pullRequest.title,
-    meta: "\(pullRequest.repository) #\(pullRequest.number) · \(shortAge(from: pullRequest.updatedAt, now: now))",
+    meta: "\(pullRequest.repository) · \(shortAge(from: pullRequest.updatedAt, now: now))",
     url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt,
-    strip: statusStrip(pullRequest))
+    strip: statusStrip(pullRequest), reference: "#\(pullRequest.number)")
 }
 
 private func statusStrip(_ pullRequest: PullRequest) -> StatusStrip {
@@ -108,7 +108,9 @@ private func statusStrip(_ pullRequest: PullRequest) -> StatusStrip {
     ? StatusStrip.Threads(
       unresolvedCount: pullRequest.unresolvedThreadCount, isLowerBound: pullRequest.hasMoreThreadsThanFetched)
     : nil
-  return StatusStrip(checks: checks, threads: threads, approvals: approvalsPart(pullRequest))
+  // Only a failing non-draft gets the "N checks failed" badge; a failing draft shows "Draft".
+  return StatusStrip(
+    checks: checks, threads: threads, approvals: approvalsPart(pullRequest), announcesFailedChecks: pullRequest.isDraft && checks == .failed)
 }
 
 private func approvalsPart(_ pullRequest: PullRequest) -> StatusStrip.Approvals? {
@@ -129,14 +131,14 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : Badge(text: "+\(pullRequest.additions) \u{2212}\(pullRequest.deletions)", variant: .neutral)
-  var metaParts = ["\(pullRequest.repository) #\(pullRequest.number)", pullRequest.author]
+  var metaParts = [pullRequest.repository, pullRequest.author]
   if !isDirectRequest, let teamSlug = pullRequest.requestedTeamSlugs.first {
     metaParts.append("team \(teamSlug)")
   }
   metaParts.append(shortAge(from: requestedAt, now: now))
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, meta: metaParts.joined(separator: " · "),
-    url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt)
+    url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)")
 }
 
 // Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.

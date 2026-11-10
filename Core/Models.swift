@@ -194,22 +194,25 @@ public struct StatusStrip: Equatable, Sendable {
   public var checks: Checks?
   public var threads: Threads?
   public var approvals: Approvals?
+  // False when the row badge already says the checks failed.
+  public var announcesFailedChecks: Bool
 
-  public init(checks: Checks?, threads: Threads?, approvals: Approvals?) {
+  public init(checks: Checks?, threads: Threads?, approvals: Approvals?, announcesFailedChecks: Bool = false) {
     self.checks = checks
     self.threads = threads
     self.approvals = approvals
+    self.announcesFailedChecks = announcesFailedChecks
   }
 
   public var isEmpty: Bool { checks == nil && threads == nil && approvals == nil }
 
-  // Failed checks are left out because the row badge already says it.
   public var accessibilityPhrase: String {
     var parts: [String] = []
     switch checks {
     case .passed: parts.append("checks passed")
     case .running: parts.append("checks running")
-    case .failed, nil: break
+    case .failed: if announcesFailedChecks { parts.append("checks failed") }
+    case nil: break
     }
     if let threads {
       let threadWord = threads.unresolvedCount == 1 ? "thread" : "threads"
@@ -236,10 +239,12 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var badge: Badge?
   public var sortDate: Date
   public var strip: StatusStrip?
+  // Shown before the title, for example a PR number.
+  public var reference: String?
 
   public init(
     id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date,
-    strip: StatusStrip? = nil
+    strip: StatusStrip? = nil, reference: String? = nil
   ) {
     self.id = id
     self.title = title
@@ -249,6 +254,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.badge = badge
     self.sortDate = sortDate
     self.strip = strip
+    self.reference = reference
   }
 }
 

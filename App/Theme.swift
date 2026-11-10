@@ -20,7 +20,7 @@ enum Theme {
   }
 
   enum Metrics {
-    static let panelWidth: CGFloat = 380
+    static let panelWidth: CGFloat = 420
     static let panelMaxHeight: CGFloat = 560
     static let panelGap: CGFloat = 4
     static let rowMinHeight: CGFloat = 40

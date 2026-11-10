@@ -90,7 +90,8 @@ struct QueueBuilderTests {
     let fixItems = items(sections, .fix)
     #expect(fixItems.count == 1)
     #expect(fixItems.first?.badge == Badge(text: "3 checks failed", variant: .failing))
-    #expect(fixItems.first?.meta == "app-web #2184 · 25m")
+    #expect(fixItems.first?.meta == "app-web · 25m")
+    #expect(fixItems.first?.reference == "#2184")
     #expect(fixItems.first?.symbol == .failing)
   }
 
@@ -117,7 +118,8 @@ struct QueueBuilderTests {
     ])
     let waitingItems = items(sections, .waiting)
     #expect(sections.map(\.kind) == [.waiting])
-    #expect(waitingItems.first?.meta == "app-api #45 · 3h")
+    #expect(waitingItems.first?.meta == "app-api · 3h")
+    #expect(waitingItems.first?.reference == "#45")
     #expect(waitingItems.first?.symbol == .waiting)
     #expect(waitingItems.first?.badge == nil)
   }
@@ -131,7 +133,8 @@ struct QueueBuilderTests {
     let sections = queue(authored: [pullRequest(repository: "app-api", number: 988, updatedHoursAgo: 48, reviewDecision: .approved)])
     let mergeItems = items(sections, .merge)
     #expect(mergeItems.first?.badge == Badge(text: "Approved", variant: .ready))
-    #expect(mergeItems.first?.meta == "app-api #988 · 2d")
+    #expect(mergeItems.first?.meta == "app-api · 2d")
+    #expect(mergeItems.first?.reference == "#988")
     #expect(mergeItems.first?.symbol == .merge)
   }
 
@@ -142,7 +145,8 @@ struct QueueBuilderTests {
     ])
     let reviewItem = items(sections, .review).first
     #expect(reviewItem?.badge == Badge(text: "+12 \u{2212}4", variant: .neutral))
-    #expect(reviewItem?.meta == "ui-kit #412 · Rui · 23h")
+    #expect(reviewItem?.meta == "ui-kit · Rui · 23h")
+    #expect(reviewItem?.reference == "#412")
     #expect(reviewItem?.symbol == .review)
   }
 
@@ -175,6 +179,7 @@ struct QueueBuilderTests {
     let botItem = try #require(reviewItems.first { $0.id == "bots:dependabot" })
     #expect(botItem.title == "3 Dependabot PRs")
     #expect(botItem.meta == "2 repos · 3d")
+    #expect(botItem.reference == nil)
     #expect(botItem.badge == Badge(text: "Bot", variant: .neutral))
     #expect(botItem.url == URL(string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20review-requested%3A%40me%20author%3Aapp%2Fdependabot"))
     #expect(botItem.symbol == .review)
@@ -192,7 +197,7 @@ struct QueueBuilderTests {
     let sections = queue(reviewRequests: [
       pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
     ])
-    #expect(items(sections, .review).first?.meta == "app-web #2179 · Ana · team web-core · 1d")
+    #expect(items(sections, .review).first?.meta == "app-web · Ana · team web-core · 1d")
   }
 
   @Test func ticketWithoutPullRequestShowsNoPR() {
@@ -356,6 +361,13 @@ struct StatusStripTests {
     let failingStrip = strip(
       pullRequest(checkState: .failure, failedCheckCount: 2, unresolvedThreadCount: 2, approvalCount: 0, requiredApprovalCount: 1))
     #expect(failingStrip?.accessibilityPhrase == "2 unresolved threads, 0 of 1 approval")
+  }
+
+  // A failing draft sits in Waiting with a Draft badge, so only the strip can say the checks failed.
+  @Test func phraseSaysFailedChecksOnDraft() {
+    let failingDraftStrip = strip(
+      pullRequest(isDraft: true, checkState: .failure, failedCheckCount: 2, unresolvedThreadCount: 3))
+    #expect(failingDraftStrip?.accessibilityPhrase == "checks failed, 3 unresolved threads")
   }
 
   @Test func phraseWithNoRequiredApprovalsCountsApprovalsGiven() {
