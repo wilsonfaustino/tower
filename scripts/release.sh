@@ -7,6 +7,13 @@ set -euo pipefail
 repo_root="${0:A:h:h}"
 cd "$repo_root"
 
+# Optional, gitignored. Values already set in the environment win over the file.
+if [[ -f .env ]]; then
+  while IFS='=' read -r env_name env_value; do
+    [[ "$env_name" == (DEVELOPER_ID_IDENTITY|NOTARY_KEYCHAIN_PROFILE) && -z "${(P)env_name:-}" ]] && export "$env_name=$env_value"
+  done < .env
+fi
+
 developer_id_identity="${DEVELOPER_ID_IDENTITY:-}"
 notary_keychain_profile="${NOTARY_KEYCHAIN_PROFILE:-}"
 if [[ -n "$developer_id_identity" && -n "$notary_keychain_profile" ]]; then

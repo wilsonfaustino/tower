@@ -70,7 +70,20 @@ GitHub Actions runs the same tests on each PR to `main` and each push to `main` 
 scripts/release.sh
 ```
 
-The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE` set, it signs with a Developer ID, notarizes, staples and checks the result with `spctl`.
+The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE` set, it signs with a Developer ID, notarizes, staples and checks the result with `spctl`. The script reads both values from a gitignored `.env` at the repo root when the environment does not set them:
+
+```bash
+DEVELOPER_ID_IDENTITY=<codesign identity name or SHA-1 hash>
+NOTARY_KEYCHAIN_PROFILE=<notarytool keychain profile>
+```
+
+To install the current version on this Mac:
+
+```bash
+scripts/install.sh
+```
+
+The script runs `release.sh`, quits a running Tower, replaces `/Applications/Tower.app` with the new build and opens it.
 
 ## Project layout
 
@@ -80,7 +93,7 @@ The script builds `dist/Tower-<version>.zip`, ad-hoc signed. With `DEVELOPER_ID_
 | `Core/` | Framework with no SwiftUI: models, GitHub and Jira clients, queue rules, cache, refresh policy, panel state |
 | `CoreTests/` | Unit tests and fixtures for `Core` |
 | `AppTests/` | Unit tests for the store, status item, panel and Settings logic, hosted by the app |
-| `scripts/` | Release script, coverage conversion for SonarQube |
+| `scripts/` | Release and install scripts, coverage conversion for SonarQube |
 | `docs/superpowers/` | Specs and implementation plans |
 
 ## Next steps
