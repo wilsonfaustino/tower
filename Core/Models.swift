@@ -244,6 +244,13 @@ public struct PullRequestDetails: Equatable, Sendable {
     self.additions = additions
     self.deletions = deletions
   }
+
+  // Inflection picks the plural form for the locale and formats the counts with its grouping separators.
+  public var diffAccessibilityPhrase: String {
+    let phrase = AttributedString(
+      localized: "^[\(additions) line](inflect: true) added, ^[\(deletions) line](inflect: true) removed")
+    return String(phrase.characters)
+  }
 }
 
 public struct QueueItem: Identifiable, Equatable, Sendable {

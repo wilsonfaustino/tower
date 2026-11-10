@@ -174,6 +174,21 @@ struct QueueBuilderTests {
       title: "Cache tokens", reference: "#88", repository: "api-core", additions: 48, deletions: 12))
   }
 
+  @Test func diffPhraseUsesPluralForms() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 48, deletions: 12)
+    #expect(details.diffAccessibilityPhrase == "48 lines added, 12 lines removed")
+  }
+
+  @Test func diffPhraseUsesSingularForms() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 1, deletions: 1)
+    #expect(details.diffAccessibilityPhrase == "1 line added, 1 line removed")
+  }
+
+  @Test func diffPhraseUsesPluralFormsForZero() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 0, deletions: 0)
+    #expect(details.diffAccessibilityPhrase == "0 lines added, 0 lines removed")
+  }
+
   @Test func botTicketAndPipelineRowsHaveNoDetails() {
     let sections = queue(
       reviewRequests: [
