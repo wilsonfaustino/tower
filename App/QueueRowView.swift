@@ -7,9 +7,10 @@ struct QueueRowView: View {
   let open: () -> Void
   let showDetails: () -> Void
   let copyLink: () -> Void
+  let dismiss: () -> Void
   @State private var isHovered = false
 
-  // Only PR rows get the context menu and the extra actions; other rows keep their single action.
+  // PR rows and failed pipeline rows get a context menu; other rows keep their single action.
   var body: some View {
     if item.details != nil {
       row
@@ -20,6 +21,13 @@ struct QueueRowView: View {
         }
         .accessibilityAction(named: "Show details", showDetails)
         .accessibilityAction(named: "Copy link", copyLink)
+    } else if item.dismissal != nil {
+      row
+        .contextMenu {
+          Button("Open in Browser", action: open)
+          Button("Dismiss", action: dismiss).keyboardShortcut(.delete)
+        }
+        .accessibilityAction(named: "Dismiss", dismiss)
     } else {
       row
     }

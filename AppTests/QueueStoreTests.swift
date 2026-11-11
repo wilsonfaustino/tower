@@ -23,6 +23,10 @@ private func temporaryDirectory() -> URL {
   FileManager.default.temporaryDirectory.appendingPathComponent("tower-store-\(UUID().uuidString)")
 }
 
+private func temporaryDefaults() -> UserDefaults {
+  UserDefaults(suiteName: "tower-store-\(UUID().uuidString)")!
+}
+
 // Answers each source by host, so one stub serves the whole refresh.
 private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int = 200) throws -> StubTransport {
   let githubData = try fixture("github-search.json")
@@ -42,12 +46,13 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
   cacheDirectory: URL = temporaryDirectory(),
   jira: JiraSettings? = jiraSettings,
   circleci: CircleCISettings? = circleciSettings,
-  githubOrganizations: [String] = []
+  githubOrganizations: [String] = [],
+  defaults: UserDefaults = temporaryDefaults()
 ) -> QueueStore {
   QueueStore(
     tokenProvider: StubTokenProvider(result: token), transport: transport, cacheDirectory: cacheDirectory,
     loadJiraSettings: { jira }, loadCircleCISettings: { circleci },
-    loadGitHubOrganizations: { githubOrganizations })
+    loadGitHubOrganizations: { githubOrganizations }, defaults: defaults)
 }
 
 @MainActor struct QueueStoreRefreshTests {
@@ -119,6 +124,55 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     #expect(store.jiraTickets == nil)
     #expect(store.pipelines == nil)
     #expect(store.circleciFetchedAt == nil)
+  }
+}
+
+private let failedPipeline = Pipeline(
+  id: "pipeline-6000", projectSlug: "gh/acme/app-web", number: 6000, ref: "main", refIsTag: false,
+  triggerType: "webhook", hasPullRequest: false, createdAt: Date(), state: .failed,
+  url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6000")!, newestWorkflowId: "workflow-1")
+
+// A cache that holds only the failed pipeline, so loadCache shows one Fix row without a network call.
+private func cacheDirectoryWithFailedPipeline() throws -> URL {
+  let cacheDirectory = temporaryDirectory()
+  try SourceCache(directory: cacheDirectory).save(Cached(value: [failedPipeline], fetchedAt: Date()), name: "circleci")
+  return cacheDirectory
+}
+
+@MainActor struct QueueStoreDismissTests {
+  @Test func dismissHidesTheFailedPipelineAndKeepsItForTheNextLaunch() throws {
+    let cacheDirectory = try cacheDirectoryWithFailedPipeline()
+    let defaults = temporaryDefaults()
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    store.loadCache()
+    let fixItem = try #require(store.sections.first { $0.kind == .fix }?.items.first)
+    store.dismiss(fixItem)
+    #expect(store.sections.isEmpty)
+    #expect(store.menuBarState == .normal)
+
+    let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    relaunchedStore.loadCache()
+    #expect(relaunchedStore.sections.isEmpty)
+  }
+
+  @Test func successfulRefreshDropsDismissalsOfPipelinesNoLongerReturned() async throws {
+    let cacheDirectory = try cacheDirectoryWithFailedPipeline()
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    store.loadCache()
+    store.dismiss(try #require(store.sections.first?.items.first))
+    #expect(store.dismissedPipelines == [failedPipeline.dismissal])
+    await store.refresh()
+    #expect(store.dismissedPipelines.isEmpty)
+  }
+
+  @Test func failedRefreshKeepsDismissals() async throws {
+    let cacheDirectory = try cacheDirectoryWithFailedPipeline()
+    let store = makeStore(transport: try routingTransport(circleci: 500), cacheDirectory: cacheDirectory)
+    store.loadCache()
+    store.dismiss(try #require(store.sections.first?.items.first))
+    await store.refresh()
+    #expect(store.circleciStatus == .failed(.unexpected("HTTP 500")))
+    #expect(store.dismissedPipelines == [failedPipeline.dismissal])
   }
 }
 

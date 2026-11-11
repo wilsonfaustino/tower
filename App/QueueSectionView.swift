@@ -8,6 +8,7 @@ struct QueueSectionView: View {
   let open: (QueueItem) -> Void
   let showDetails: (QueueItem) -> Void
   let copyLink: (QueueItem) -> Void
+  let dismiss: (QueueItem) -> Void
   let handlePopoverInput: (PanelInput) -> KeyPress.Result
   @AccessibilityFocusState private var accessibilityFocusedItemId: String?
 
@@ -24,7 +25,7 @@ struct QueueSectionView: View {
       ForEach(section.items) { item in
         QueueRowView(
           item: item, isSelected: item.id == selectedItemId, open: { open(item) }, showDetails: { showDetails(item) },
-          copyLink: { copyLink(item) })
+          copyLink: { copyLink(item) }, dismiss: { dismiss(item) })
           .id(item.id)
           .accessibilityFocused($accessibilityFocusedItemId, equals: item.id)
           // The leading point puts the arrow at the vertical middle of the row, with the popover left of the panel.
