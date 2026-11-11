@@ -104,7 +104,7 @@ struct PanelView: View {
         ForEach(store.sections) { section in
           QueueSectionView(
             section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
-            showDetails: showDetails, copyLink: copyLink, handlePopoverInput: handle)
+            showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, handlePopoverInput: handle)
         }
       case .empty:
         StateMessageView(
@@ -151,31 +151,16 @@ struct PanelView: View {
     let selectedItem = allItems.first(where: { $0.id == selectedItemId })
     let action = panelAction(
       for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil)
-    switch action {
-    case .closePopoverAndMoveSelection(let offset):
-      popoverItemId = nil
-      return moveSelection(by: offset)
-    case .showPopover:
-      popoverItemId = selectedItemId
-    case .closePopover:
-      popoverItemId = nil
-    case .copyLink:
-      if let selectedItem { copyLink(selectedItem) }
-    // Esc with no popover goes on to PanelWindow.cancelOperation, which closes the panel as before.
-    case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
-      return .ignored
-    }
-    return .handled
+    let outcome = panelKeyOutcome(for: action, selectedItemId: selectedItemId, popoverItemId: popoverItemId)
+    popoverItemId = outcome.popoverItemId
+    if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
+    if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
+    return outcome.isHandled ? .handled : .ignored
   }
 
   private func showDetails(_ item: QueueItem) {
     selectedItemId = item.id
     popoverItemId = item.id
-  }
-
-  private func copyLink(_ item: QueueItem) {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(item.url.absoluteString, forType: .string)
   }
 
   private func open(_ item: QueueItem) {
@@ -265,4 +250,32 @@ func panelAction(for input: PanelInput, selectedItemHasDetails: Bool, isPopoverO
   case .copy: return selectedItemHasDetails ? .copyLink : .ignore
   case .rightClick: return selectedItemHasDetails ? .showContextMenu : .ignore
   }
+}
+
+struct PanelKeyOutcome: Equatable {
+  var popoverItemId: String?
+  var selectionOffset: Int?
+  var copiesSelectedLink = false
+  var isHandled = true
+}
+
+// Esc with no popover is not handled, so it goes on to PanelWindow.cancelOperation, which closes the panel.
+func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverItemId: String?) -> PanelKeyOutcome {
+  switch action {
+  case .closePopoverAndMoveSelection(let offset):
+    return PanelKeyOutcome(popoverItemId: nil, selectionOffset: offset)
+  case .showPopover:
+    return PanelKeyOutcome(popoverItemId: selectedItemId)
+  case .closePopover:
+    return PanelKeyOutcome(popoverItemId: nil)
+  case .copyLink:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, copiesSelectedLink: true)
+  case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
+  }
+}
+
+func writeLink(_ url: URL, to pasteboard: NSPasteboard) {
+  pasteboard.clearContents()
+  pasteboard.setString(url.absoluteString, forType: .string)
 }

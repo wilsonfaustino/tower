@@ -10,7 +10,7 @@ import SwiftUI
   private let store: QueueStore
   private let openSettings: () -> Void
   private let quit: () -> Void
-  private let panel = PanelWindow()
+  let panel = PanelWindow()
   private var outsideClickMonitor: Any?
 
   init(store: QueueStore, openSettings: @escaping () -> Void, quit: @escaping () -> Void) {
