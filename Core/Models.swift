@@ -103,6 +103,8 @@ public enum PipelineState: String, Codable, Sendable {
 }
 
 public struct Pipeline: Codable, Sendable, Equatable {
+  // The CircleCI pipeline id. The pipeline number is not unique across projects.
+  public var id: String
   public var projectSlug: String
   public var number: Int
   public var ref: String
@@ -112,11 +114,14 @@ public struct Pipeline: Codable, Sendable, Equatable {
   public var createdAt: Date
   public var state: PipelineState
   public var url: URL
+  // Nil when the client did not read the workflows: a PR pipeline, an errored pipeline or no workflows.
+  public var newestWorkflowId: String?
 
   public init(
-    projectSlug: String, number: Int, ref: String, refIsTag: Bool, triggerType: String, hasPullRequest: Bool,
-    createdAt: Date, state: PipelineState, url: URL
+    id: String, projectSlug: String, number: Int, ref: String, refIsTag: Bool, triggerType: String,
+    hasPullRequest: Bool, createdAt: Date, state: PipelineState, url: URL, newestWorkflowId: String?
   ) {
+    self.id = id
     self.projectSlug = projectSlug
     self.number = number
     self.ref = ref
@@ -126,6 +131,7 @@ public struct Pipeline: Codable, Sendable, Equatable {
     self.createdAt = createdAt
     self.state = state
     self.url = url
+    self.newestWorkflowId = newestWorkflowId
   }
 }
 
@@ -286,10 +292,13 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var reference: String?
   // Nil on rows that are not one pull request (bots, tickets, pipelines).
   public var details: PullRequestDetails?
+  // Set only on failed pipeline rows, the rows the owner can dismiss.
+  public var dismissal: PipelineDismissal?
 
   public init(
     id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date,
-    strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil
+    strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil,
+    dismissal: PipelineDismissal? = nil
   ) {
     self.id = id
     self.title = title
@@ -301,6 +310,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.strip = strip
     self.reference = reference
     self.details = details
+    self.dismissal = dismissal
   }
 }
 

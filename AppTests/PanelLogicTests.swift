@@ -130,6 +130,32 @@ struct PanelInputTests {
     let action = panelAction(for: input, selectedItemHasDetails: selectedItemHasDetails, isPopoverOpen: isPopoverOpen)
     #expect(action == expectedAction)
   }
+
+  // (input, selected item is dismissible, popover is open, expected action), on rows without PR details.
+  static let dismissibleRules: [(PanelInput, Bool, Bool, PanelAction)] = [
+    (.dismiss, true, false, .dismiss),
+    (.dismiss, false, false, .ignore),
+    (.dismiss, false, true, .ignore),
+    (.rightClick, true, false, .showContextMenu),
+    (.rightClick, false, false, .ignore),
+    (.space, true, false, .ignore),
+    (.copy, true, false, .ignore),
+    (.returnKey, true, false, .openAndClosePanel),
+  ]
+
+  @Test(arguments: dismissibleRules)
+  func dismissibleRowInputGivesTheRuleAction(
+    input: PanelInput, selectedItemIsDismissible: Bool, isPopoverOpen: Bool, expectedAction: PanelAction
+  ) {
+    let action = panelAction(
+      for: input, selectedItemHasDetails: false, isPopoverOpen: isPopoverOpen,
+      selectedItemIsDismissible: selectedItemIsDismissible)
+    #expect(action == expectedAction)
+  }
+
+  @Test func dismissIgnoresAPullRequestRow() {
+    #expect(panelAction(for: .dismiss, selectedItemHasDetails: true, isPopoverOpen: false) == .ignore)
+  }
 }
 
 struct PanelKeyOutcomeTests {
@@ -152,6 +178,11 @@ struct PanelKeyOutcomeTests {
   @Test func copyLinkKeepsThePopover() {
     let outcome = panelKeyOutcome(for: .copyLink, selectedItemId: "a", popoverItemId: "a")
     #expect(outcome == PanelKeyOutcome(popoverItemId: "a", copiesSelectedLink: true))
+  }
+
+  @Test func dismissDismissesTheSelectedRow() {
+    let outcome = panelKeyOutcome(for: .dismiss, selectedItemId: "a", popoverItemId: nil)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, dismissesSelectedItem: true))
   }
 
   @Test(arguments: [PanelAction.closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu])

@@ -29,6 +29,12 @@ private func fixtureTransport() -> StubTransport {
 private func releaseState(
   workflowFixture: String = "circleci-workflows-success.json", workflowData: Data? = nil, pipelineState: String = "created"
 ) async throws -> PipelineState {
+  try await releasePipeline(workflowFixture: workflowFixture, workflowData: workflowData, pipelineState: pipelineState).state
+}
+
+private func releasePipeline(
+  workflowFixture: String = "circleci-workflows-success.json", workflowData: Data? = nil, pipelineState: String = "created"
+) async throws -> Pipeline {
   var page = try #require(try JSONSerialization.jsonObject(with: fixture("circleci-pipelines-mine.json")) as? [String: Any])
   var items = try #require(page["items"] as? [[String: Any]])
   var release = items[2]
@@ -40,7 +46,7 @@ private func releaseState(
   let transport = StubTransport { request in
     (request.url!.path().hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
   }
-  return try #require(try await CircleCIClient(settings: settings, transport: transport).fetch(now: now).first).state
+  return try #require(try await CircleCIClient(settings: settings, transport: transport).fetch(now: now).first)
 }
 
 // One pipeline/mine page built from fixture items, each with its fields replaced.
@@ -92,7 +98,11 @@ private func workflowList(statuses: [String]) throws -> Data {
 }
 
 private func workflowList(runs: [(name: String, status: String, createdAt: String)]) throws -> Data {
-  let items = runs.map { ["id": UUID().uuidString, "name": $0.name, "status": $0.status, "created_at": $0.createdAt] }
+  try workflowList(identifiedRuns: runs.map { (id: UUID().uuidString, name: $0.name, status: $0.status, createdAt: $0.createdAt) })
+}
+
+private func workflowList(identifiedRuns runs: [(id: String, name: String, status: String, createdAt: String)]) throws -> Data {
+  let items = runs.map { ["id": $0.id, "name": $0.name, "status": $0.status, "created_at": $0.createdAt] }
   return try JSONSerialization.data(withJSONObject: ["items": items])
 }
 
@@ -101,17 +111,20 @@ struct CircleCIClientTests {
     let pipelines = try await CircleCIClient(settings: settings, transport: fixtureTransport()).fetch(now: now)
     #expect(pipelines == [
       Pipeline(
-        projectSlug: "gh/acme/app-web", number: 6053, ref: "fix-e2e-cleanup", refIsTag: false, triggerType: "webhook",
-        hasPullRequest: true, createdAt: fractionalDate("2027-01-15T11:02:34.621Z"), state: .succeeded,
-        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6053")!),
+        id: "017c68cd-10e2-44b1-82f2-aacb59609b9c", projectSlug: "gh/acme/app-web", number: 6053, ref: "fix-e2e-cleanup",
+        refIsTag: false, triggerType: "webhook", hasPullRequest: true, createdAt: fractionalDate("2027-01-15T11:02:34.621Z"),
+        state: .succeeded, url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6053")!,
+        newestWorkflowId: nil),
       Pipeline(
-        projectSlug: "gh/acme/app-web", number: 6000, ref: "main", refIsTag: false, triggerType: "webhook",
-        hasPullRequest: false, createdAt: fractionalDate("2027-01-15T09:43:16.805Z"), state: .failed,
-        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6000")!),
+        id: "80f96bcb-62b4-4eee-9b92-24d709a8b5c3", projectSlug: "gh/acme/app-web", number: 6000, ref: "main",
+        refIsTag: false, triggerType: "webhook", hasPullRequest: false, createdAt: fractionalDate("2027-01-15T09:43:16.805Z"),
+        state: .failed, url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6000")!,
+        newestWorkflowId: "ab430a84-e501-4529-b4c9-20cc4c4a75e6"),
       Pipeline(
-        projectSlug: "gh/acme/app-web", number: 5952, ref: "main", refIsTag: false, triggerType: "api",
-        hasPullRequest: false, createdAt: fractionalDate("2027-01-14T20:12:44.208Z"), state: .succeeded,
-        url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/5952")!),
+        id: "ecb77895-f2fd-4135-8535-a7d83b9c27fd", projectSlug: "gh/acme/app-web", number: 5952, ref: "main",
+        refIsTag: false, triggerType: "api", hasPullRequest: false, createdAt: fractionalDate("2027-01-14T20:12:44.208Z"),
+        state: .succeeded, url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/5952")!,
+        newestWorkflowId: "ab5d9618-5c36-4df1-8648-dbec8ff09e11"),
     ])
   }
 
@@ -239,6 +252,19 @@ struct CircleCIClientTests {
       (name: "trunk-based", status: "failed", createdAt: "2027-01-15T09:44:25.166Z"),
     ])
     #expect(try await releaseState(workflowData: workflowData) == .running)
+  }
+
+  @Test func newestWorkflowIdIsTheNewestRunOfAnyName() async throws {
+    let workflowData = try workflowList(identifiedRuns: [
+      (id: "setup-run", name: "setup", status: "success", createdAt: "2027-01-15T09:43:17.162Z"),
+      (id: "rerun", name: "trunk-based", status: "failed", createdAt: "2027-01-15T10:10:02.511Z"),
+      (id: "first-run", name: "trunk-based", status: "failed", createdAt: "2027-01-15T09:44:25.166Z"),
+    ])
+    #expect(try await releasePipeline(workflowData: workflowData).newestWorkflowId == "rerun")
+  }
+
+  @Test func erroredPipelineHasNoNewestWorkflowId() async throws {
+    #expect(try await releasePipeline(pipelineState: "errored").newestWorkflowId == nil)
   }
 
   @Test func erroredPipelineIsFailed() async throws {

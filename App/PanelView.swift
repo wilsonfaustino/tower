@@ -53,6 +53,10 @@ struct PanelView: View {
       guard press.modifiers.contains(.command) else { return .ignored }
       return handle(.copy)
     }
+    .onKeyPress(keys: [.delete]) { press in
+      guard press.modifiers.contains(.command) else { return .ignored }
+      return handle(.dismiss)
+    }
   }
 
   private var header: some View {
@@ -104,7 +108,8 @@ struct PanelView: View {
         ForEach(store.sections) { section in
           QueueSectionView(
             section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
-            showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, handlePopoverInput: handle)
+            showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: store.dismiss,
+            handlePopoverInput: handle)
         }
       case .empty:
         StateMessageView(
@@ -150,10 +155,12 @@ struct PanelView: View {
   private func handle(_ input: PanelInput) -> KeyPress.Result {
     let selectedItem = allItems.first(where: { $0.id == selectedItemId })
     let action = panelAction(
-      for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil)
+      for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil,
+      selectedItemIsDismissible: selectedItem?.dismissal != nil)
     let outcome = panelKeyOutcome(for: action, selectedItemId: selectedItemId, popoverItemId: popoverItemId)
     popoverItemId = outcome.popoverItemId
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
+    if outcome.dismissesSelectedItem, let selectedItem { store.dismiss(selectedItem) }
     if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
     return outcome.isHandled ? .handled : .ignored
   }
@@ -228,16 +235,19 @@ func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, of
 }
 
 enum PanelInput: Sendable {
-  case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick
+  case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss
 }
 
 enum PanelAction: Equatable, Sendable {
   case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
-  case copyLink, showContextMenu, closePanel, ignore
+  case copyLink, showContextMenu, closePanel, ignore, dismiss
 }
 
-// Click, Cmd-click and Return work on every row. Space, Cmd-C and right-click act only on rows with PR details.
-func panelAction(for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool) -> PanelAction {
+// Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
+// Cmd-Delete acts only on dismissible rows (failed pipelines). Right-click acts on both kinds.
+func panelAction(
+  for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool, selectedItemIsDismissible: Bool = false
+) -> PanelAction {
   switch input {
   case .click, .returnKey: return .openAndClosePanel
   case .commandClick: return .openInBackground
@@ -248,7 +258,8 @@ func panelAction(for input: PanelInput, selectedItemHasDetails: Bool, isPopoverO
   case .upArrow: return .closePopoverAndMoveSelection(offset: -1)
   case .downArrow: return .closePopoverAndMoveSelection(offset: 1)
   case .copy: return selectedItemHasDetails ? .copyLink : .ignore
-  case .rightClick: return selectedItemHasDetails ? .showContextMenu : .ignore
+  case .rightClick: return selectedItemHasDetails || selectedItemIsDismissible ? .showContextMenu : .ignore
+  case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore
   }
 }
 
@@ -256,6 +267,7 @@ struct PanelKeyOutcome: Equatable {
   var popoverItemId: String?
   var selectionOffset: Int?
   var copiesSelectedLink = false
+  var dismissesSelectedItem = false
   var isHandled = true
 }
 
@@ -270,6 +282,8 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
     return PanelKeyOutcome(popoverItemId: nil)
   case .copyLink:
     return PanelKeyOutcome(popoverItemId: popoverItemId, copiesSelectedLink: true)
+  case .dismiss:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, dismissesSelectedItem: true)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }

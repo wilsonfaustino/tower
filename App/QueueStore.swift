@@ -40,6 +40,19 @@ enum GitHubSettingsKeys {
   }
 }
 
+enum DismissedPipelinesKeys {
+  static let dismissedPipelines = "dismissedPipelines"
+
+  static func load(defaults: UserDefaults) -> Set<PipelineDismissal> {
+    guard let data = defaults.data(forKey: dismissedPipelines) else { return [] }
+    return (try? JSONDecoder().decode(Set<PipelineDismissal>.self, from: data)) ?? []
+  }
+
+  static func save(_ dismissals: Set<PipelineDismissal>, defaults: UserDefaults) {
+    defaults.set(try? JSONEncoder().encode(dismissals), forKey: dismissedPipelines)
+  }
+}
+
 @MainActor @Observable final class QueueStore {
   private(set) var sections: [QueueSection] = []
   // Settable inside the module so App tests can drive the menu bar icon without a refresh.
@@ -54,6 +67,7 @@ enum GitHubSettingsKeys {
   private(set) var isRefreshing = false
   private(set) var jiraTickets: [JiraTicket]?
   private(set) var pipelines: [Pipeline]?
+  private(set) var dismissedPipelines: Set<PipelineDismissal>
 
   private let tokenProvider: any GitHubTokenProvider
   private let transport: any HTTPTransport
@@ -61,6 +75,7 @@ enum GitHubSettingsKeys {
   private let loadJiraSettings: () -> JiraSettings?
   private let loadCircleCISettings: () -> CircleCISettings?
   private let loadGitHubOrganizations: () -> [String]
+  private let defaults: UserDefaults
   private var pollingTask: Task<Void, Never>?
   private var activationObserver: NSObjectProtocol?
 
@@ -70,7 +85,8 @@ enum GitHubSettingsKeys {
     cacheDirectory: URL = URL.applicationSupportDirectory.appendingPathComponent("Tower", isDirectory: true),
     loadJiraSettings: @escaping () -> JiraSettings? = { JiraSettingsKeys.load() },
     loadCircleCISettings: @escaping () -> CircleCISettings? = { CircleCISettingsKeys.load() },
-    loadGitHubOrganizations: @escaping () -> [String] = { GitHubSettingsKeys.loadOrganizations() }
+    loadGitHubOrganizations: @escaping () -> [String] = { GitHubSettingsKeys.loadOrganizations() },
+    defaults: UserDefaults = .standard
   ) {
     self.tokenProvider = tokenProvider
     self.transport = transport
@@ -78,6 +94,8 @@ enum GitHubSettingsKeys {
     self.loadJiraSettings = loadJiraSettings
     self.loadCircleCISettings = loadCircleCISettings
     self.loadGitHubOrganizations = loadGitHubOrganizations
+    self.defaults = defaults
+    dismissedPipelines = DismissedPipelinesKeys.load(defaults: defaults)
   }
 
   var todaySummary: (reviews: Int, merges: Int)? {
@@ -173,6 +191,12 @@ enum GitHubSettingsKeys {
       circleciFetchedAt = now
       circleciStatus = .ok
       try? cache.save(Cached(value: fetchedPipelines, fetchedAt: now), name: "circleci")
+      // Only a successful fetch prunes, so a failed one does not drop every dismissal.
+      let keptDismissals = prunedDismissals(dismissedPipelines, pipelines: fetchedPipelines, now: now)
+      if keptDismissals != dismissedPipelines {
+        dismissedPipelines = keptDismissals
+        DismissedPipelinesKeys.save(keptDismissals, defaults: defaults)
+      }
     case .failure(let failure):
       circleciStatus = .failed(failure)
       if failure == .notConfigured {
@@ -183,13 +207,20 @@ enum GitHubSettingsKeys {
     rebuild()
   }
 
+  func dismiss(_ item: QueueItem) {
+    guard let dismissal = item.dismissal else { return }
+    dismissedPipelines.insert(dismissal)
+    DismissedPipelinesKeys.save(dismissedPipelines, defaults: defaults)
+    rebuild()
+  }
+
   private func rebuild() {
     let input = QueueInput(
       viewerLogin: githubSnapshot?.viewerLogin ?? "",
       authoredPullRequests: githubSnapshot?.authoredPullRequests ?? [],
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
       jiraTickets: jiraTickets ?? [],
-      pipelines: pipelines ?? [])
+      pipelines: pipelines ?? [], dismissedPipelines: dismissedPipelines)
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }

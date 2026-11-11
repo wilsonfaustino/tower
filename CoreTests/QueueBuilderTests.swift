@@ -57,21 +57,24 @@ private func pipeline(
   triggerType: String = "api",
   hasPullRequest: Bool = false,
   createdHoursAgo: Double = 0.1,
-  state: PipelineState = .failed
+  state: PipelineState = .failed,
+  newestWorkflowId: String? = "workflow-1"
 ) -> Pipeline {
   Pipeline(
-    projectSlug: projectSlug, number: number, ref: ref, refIsTag: refIsTag, triggerType: triggerType,
+    id: "pipeline-\(number)", projectSlug: projectSlug, number: number, ref: ref, refIsTag: refIsTag, triggerType: triggerType,
     hasPullRequest: hasPullRequest, createdAt: now.addingTimeInterval(-createdHoursAgo * hour), state: state,
-    url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/\(number)")!)
+    url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/\(number)")!,
+    newestWorkflowId: newestWorkflowId)
 }
 
 private func queue(
-  authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = []
+  authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = [],
+  dismissedPipelines: Set<PipelineDismissal> = []
 ) -> [QueueSection] {
   buildQueue(
     QueueInput(
       viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
-      pipelines: pipelines),
+      pipelines: pipelines, dismissedPipelines: dismissedPipelines),
     now: now)
 }
 
@@ -459,7 +462,8 @@ struct PipelineQueueTests {
       QueueItem(
         id: "pipeline:gh/acme/app-web:v2.14.0:webhook", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
         url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .failing,
-        badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: now.addingTimeInterval(-0.1 * hour))
+        badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: now.addingTimeInterval(-0.1 * hour),
+        dismissal: PipelineDismissal(pipelineId: "pipeline-1842", newestWorkflowId: "workflow-1"))
     ])
   }
 
@@ -549,5 +553,77 @@ struct PipelineQueueTests {
     let urgentReview = pullRequest(requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)
     #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview])) == .urgent(count: 1))
     #expect(MenuBarState(sections: queue(reviewRequests: [urgentReview], pipelines: [pipeline(state: .onHold)])) == .urgent(count: 2))
+  }
+
+  @Test func dismissedFailedPipelineIsHidden() {
+    let failed = pipeline()
+    let sections = queue(pipelines: [failed], dismissedPipelines: [failed.dismissal])
+    #expect(items(sections, .fix).isEmpty)
+  }
+
+  @Test func rerunWithNewNewestWorkflowShowsTheDismissedPipelineAgain() {
+    let dismissed = pipeline(newestWorkflowId: "workflow-1")
+    let rerun = pipeline(newestWorkflowId: "workflow-2")
+    let sections = queue(pipelines: [rerun], dismissedPipelines: [dismissed.dismissal])
+    #expect(items(sections, .fix).map(\.meta) == ["#1842 · branch · 6m"])
+  }
+
+  @Test func newPipelineOnSameBranchShowsAfterDismiss() {
+    let dismissed = pipeline(number: 1, createdHoursAgo: 2)
+    let newer = pipeline(number: 2, createdHoursAgo: 1)
+    let sections = queue(pipelines: [newer, dismissed], dismissedPipelines: [dismissed.dismissal])
+    #expect(items(sections, .fix).map(\.meta) == ["#2 · branch · 1h"])
+  }
+
+  @Test func dismissingNewestFailureDoesNotShowOlderFailureOnSameKey() {
+    let older = pipeline(number: 1, createdHoursAgo: 2)
+    let newest = pipeline(number: 2, createdHoursAgo: 1)
+    #expect(queue(pipelines: [newest, older], dismissedPipelines: [newest.dismissal]).isEmpty)
+  }
+
+  @Test func onlyFailedPipelineRowsCarryADismissal() {
+    let failed = pipeline(ref: "main", state: .failed)
+    let sections = queue(pipelines: [
+      failed, pipeline(number: 2, ref: "release", state: .running), pipeline(number: 3, ref: "hotfix", state: .onHold),
+    ])
+    #expect(items(sections, .fix).map(\.dismissal) == [failed.dismissal])
+    #expect(items(sections, .watch).map(\.dismissal) == [nil, nil])
+  }
+
+  @Test func dismissalDoesNotHideRunningOrOnHoldRows() {
+    let running = pipeline(number: 2, ref: "release", state: .running)
+    let onHold = pipeline(number: 3, ref: "hotfix", state: .onHold)
+    let sections = queue(pipelines: [running, onHold], dismissedPipelines: [running.dismissal, onHold.dismissal])
+    #expect(items(sections, .watch).count == 2)
+  }
+
+  @Test func dismissedPipelineLeavesTheMenuBarCount() {
+    let dismissed = pipeline(number: 1, ref: "main")
+    let shown = pipeline(number: 2, ref: "release")
+    #expect(MenuBarState(sections: queue(pipelines: [dismissed, shown], dismissedPipelines: [dismissed.dismissal])) == .failing(count: 1))
+    #expect(MenuBarState(sections: queue(pipelines: [dismissed], dismissedPipelines: [dismissed.dismissal])) == .normal)
+  }
+}
+
+struct PrunedDismissalsTests {
+  @Test func keepsDismissalOfReturnedPipelineInsideTheWindow() {
+    let recent = pipeline(createdHoursAgo: 23)
+    #expect(prunedDismissals([recent.dismissal], pipelines: [recent], now: now) == [recent.dismissal])
+  }
+
+  @Test func dropsDismissalOfPipelineOlderThanTheWindow() {
+    let old = pipeline(createdHoursAgo: 25)
+    #expect(prunedDismissals([old.dismissal], pipelines: [old], now: now).isEmpty)
+  }
+
+  @Test func dropsDismissalOfPipelineNoLongerReturned() {
+    let gone = pipeline(number: 1)
+    #expect(prunedDismissals([gone.dismissal], pipelines: [pipeline(number: 2)], now: now).isEmpty)
+  }
+
+  @Test func keepsDismissalWhoseNewestWorkflowChangedWhilePipelineIsReturned() {
+    let dismissed = pipeline(newestWorkflowId: "workflow-1")
+    let rerun = pipeline(newestWorkflowId: "workflow-2")
+    #expect(prunedDismissals([dismissed.dismissal], pipelines: [rerun], now: now) == [dismissed.dismissal])
   }
 }
