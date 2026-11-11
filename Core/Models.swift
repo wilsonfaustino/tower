@@ -6,6 +6,14 @@ public enum ReviewDecision: String, Codable, Sendable {
   case reviewRequired = "REVIEW_REQUIRED"
 }
 
+public enum ReviewState: String, Codable, Sendable {
+  case approved = "APPROVED"
+  case changesRequested = "CHANGES_REQUESTED"
+  case commented = "COMMENTED"
+  case dismissed = "DISMISSED"
+  case pending = "PENDING"
+}
+
 public enum CheckState: String, Codable, Sendable {
   case success = "SUCCESS"
   case failure = "FAILURE"
@@ -38,13 +46,15 @@ public struct PullRequest: Codable, Sendable, Equatable {
   public var hasMoreThreadsThanFetched: Bool
   public var approvalCount: Int
   public var requiredApprovalCount: Int
+  public var viewerLatestReviewState: ReviewState?
 
   public init(
     repository: String, number: Int, title: String, url: URL, author: String, authorIsBot: Bool, isDraft: Bool,
     updatedAt: Date, headBranch: String, reviewDecision: ReviewDecision?, checkState: CheckState?,
     failedCheckCount: Int, additions: Int, deletions: Int, requestedReviewerLogins: [String],
     requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?, unresolvedThreadCount: Int = 0,
-    hasMoreThreadsThanFetched: Bool = false, approvalCount: Int = 0, requiredApprovalCount: Int = 1
+    hasMoreThreadsThanFetched: Bool = false, approvalCount: Int = 0, requiredApprovalCount: Int = 1,
+    viewerLatestReviewState: ReviewState? = nil
   ) {
     self.repository = repository
     self.number = number
@@ -68,6 +78,7 @@ public struct PullRequest: Codable, Sendable, Equatable {
     self.hasMoreThreadsThanFetched = hasMoreThreadsThanFetched
     self.approvalCount = approvalCount
     self.requiredApprovalCount = requiredApprovalCount
+    self.viewerLatestReviewState = viewerLatestReviewState
   }
 }
 

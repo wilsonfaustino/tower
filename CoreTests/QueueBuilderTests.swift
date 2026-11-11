@@ -26,7 +26,8 @@ private func pullRequest(
   unresolvedThreadCount: Int = 0,
   hasMoreThreadsThanFetched: Bool = false,
   approvalCount: Int = 0,
-  requiredApprovalCount: Int = 1
+  requiredApprovalCount: Int = 1,
+  viewerLatestReviewState: ReviewState? = nil
 ) -> PullRequest {
   PullRequest(
     repository: repository, number: number, title: title,
@@ -38,7 +39,7 @@ private func pullRequest(
     reviewCount: reviewCount,
     reviewRequestedAt: reviewRequestedHoursAgo.map { now.addingTimeInterval(-$0 * hour) },
     unresolvedThreadCount: unresolvedThreadCount, hasMoreThreadsThanFetched: hasMoreThreadsThanFetched,
-    approvalCount: approvalCount, requiredApprovalCount: requiredApprovalCount)
+    approvalCount: approvalCount, requiredApprovalCount: requiredApprovalCount, viewerLatestReviewState: viewerLatestReviewState)
 }
 
 private func ticket(key: String, statusName: String = "In Progress", updatedHoursAgo: Double = 72) -> JiraTicket {
@@ -243,6 +244,36 @@ struct QueueBuilderTests {
       pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
     ])
     #expect(items(sections, .review).first?.meta == "app-web · Ana · team web-core · 1d")
+  }
+
+  @Test func teamRequestApprovedByViewerHasNoReviewRow() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30, viewerLatestReviewState: .approved)
+    ])
+    #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func teamRequestWithoutViewerReviewHasReviewRow() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
+    ])
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func teamRequestWithViewerChangesRequestedHasReviewRow() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30,
+                  viewerLatestReviewState: .changesRequested)
+    ])
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func directRequestAfterViewerApprovalHasReviewRow() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "Ana", requestedReviewerLogins: ["me"], requestedTeamSlugs: ["web-core"],
+                  reviewRequestedHoursAgo: 30, viewerLatestReviewState: .approved)
+    ])
+    #expect(items(sections, .review).count == 1)
   }
 
   @Test func ticketWithoutPullRequestShowsNoPR() {

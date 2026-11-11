@@ -142,6 +142,7 @@ private let searchQuery = """
       checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
     reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
     reviews(first: 1) { totalCount }
+    viewerLatestReview { state }
     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
   }
   fragment AuthoredPullRequestFields on PullRequest {
@@ -234,6 +235,7 @@ private struct PullRequestNode: Decodable {
   var commits: Commits?
   var reviewRequests: ReviewRequests?
   var reviews: TotalCount?
+  var viewerLatestReview: Review?
   var timelineItems: Timeline?
   var baseRef: BaseRef?
   var latestOpinionatedReviews: Reviews?
@@ -260,7 +262,8 @@ private struct PullRequestNode: Decodable {
       unresolvedThreadCount: reviewThreads?.nodes.filter { !$0.isResolved }.count ?? 0,
       hasMoreThreadsThanFetched: (reviewThreads?.totalCount ?? 0) > reviewThreadPageSize,
       approvalCount: latestOpinionatedReviews?.nodes.filter { $0.state == "APPROVED" }.count ?? 0,
-      requiredApprovalCount: requiredApprovalCounts.max() ?? 1)
+      requiredApprovalCount: requiredApprovalCounts.max() ?? 1,
+      viewerLatestReviewState: viewerLatestReview.flatMap { ReviewState(rawValue: $0.state) })
   }
 }
 
