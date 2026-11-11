@@ -237,6 +237,9 @@
           "reviews": {
             "totalCount": 0
           },
+          "viewerLatestReview": {
+            "state": "APPROVED"
+          },
           "timelineItems": {
             "nodes": [
               {
@@ -282,6 +285,9 @@
                 "requestedReviewer": {}
               }
             ]
+          },
+          "viewerLatestReview": {
+            "state": "COMMENTED"
           },
           "reviews": {
             "totalCount": 0

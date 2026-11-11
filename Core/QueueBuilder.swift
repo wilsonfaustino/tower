@@ -42,10 +42,14 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
     }
   }
 
-  for pullRequest in input.reviewRequests where !pullRequest.authorIsBot {
+  // The search also matches team requests, which stay after the viewer approves. A direct request always shows.
+  let openReviewRequests = input.reviewRequests.filter {
+    $0.requestedReviewerLogins.contains(input.viewerLogin) || $0.viewerLatestReviewState != .approved
+  }
+  for pullRequest in openReviewRequests where !pullRequest.authorIsBot {
     itemsByKind[.review, default: []].append(reviewItem(pullRequest, viewerLogin: input.viewerLogin, now: now))
   }
-  let botPullRequestsByAuthor = Dictionary(grouping: input.reviewRequests.filter(\.authorIsBot), by: \.author)
+  let botPullRequestsByAuthor = Dictionary(grouping: openReviewRequests.filter(\.authorIsBot), by: \.author)
   for (botLogin, pullRequests) in botPullRequestsByAuthor {
     itemsByKind[.review, default: []].append(botReviewItem(botLogin: botLogin, pullRequests: pullRequests, now: now))
   }
