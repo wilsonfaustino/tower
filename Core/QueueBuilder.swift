@@ -6,16 +6,18 @@ public struct QueueInput: Sendable {
   public var reviewRequests: [PullRequest]
   public var jiraTickets: [JiraTicket]
   public var pipelines: [Pipeline]
+  public var dismissedPipelines: Set<PipelineDismissal>
 
   public init(
     viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
-    pipelines: [Pipeline]
+    pipelines: [Pipeline], dismissedPipelines: Set<PipelineDismissal> = []
   ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
     self.reviewRequests = reviewRequests
     self.jiraTickets = jiraTickets
     self.pipelines = pipelines
+    self.dismissedPipelines = dismissedPipelines
   }
 }
 
@@ -63,8 +65,12 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   for pipeline in newestPipelines {
     switch pipeline.state {
     case .failed:
+      // Checked after the newest per key, so a dismissed newest pipeline does not bring back an older failure.
+      if input.dismissedPipelines.contains(pipeline.dismissal) { break }
       itemsByKind[.fix, default: []].append(
-        pipelineItem(pipeline, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), now: now))
+        pipelineItem(
+          pipeline, symbol: .failing, badge: Badge(text: "Pipeline failed", variant: .failing), now: now,
+          dismissal: pipeline.dismissal))
     case .running:
       itemsByKind[.watch, default: []].append(
         pipelineItem(pipeline, symbol: .running, badge: Badge(text: "Running", variant: .neutral), now: now))
@@ -198,10 +204,12 @@ func newestPipelinePerKey(_ pipelines: [Pipeline]) -> [Pipeline] {
   return pipelines.filter { newestByKey[$0.itemId] == $0 }
 }
 
-private func pipelineItem(_ pipeline: Pipeline, symbol: RowSymbol, badge: Badge, now: Date) -> QueueItem {
+private func pipelineItem(
+  _ pipeline: Pipeline, symbol: RowSymbol, badge: Badge, now: Date, dismissal: PipelineDismissal? = nil
+) -> QueueItem {
   let repository = pipeline.projectSlug.split(separator: "/").last.map(String.init) ?? pipeline.projectSlug
   return QueueItem(
     id: pipeline.itemId, title: "\(repository) \(pipeline.ref)",
     meta: "#\(pipeline.number) · \(pipeline.refIsTag ? "tag" : "branch") · \(shortAge(from: pipeline.createdAt, now: now))",
-    url: pipeline.url, symbol: symbol, badge: badge, sortDate: pipeline.createdAt)
+    url: pipeline.url, symbol: symbol, badge: badge, sortDate: pipeline.createdAt, dismissal: dismissal)
 }

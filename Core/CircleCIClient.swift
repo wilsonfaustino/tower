@@ -55,11 +55,11 @@ public struct CircleCIClient: Sendable {
     return page.items.filter { now.timeIntervalSince($0.createdAt) <= pipelineWindow }.map { item in
       // The workflow state replaces this placeholder state.
       let pipeline = Pipeline(
-        projectSlug: item.projectSlug, number: item.number, ref: item.vcs.tag ?? item.vcs.branch ?? "",
+        id: item.id, projectSlug: item.projectSlug, number: item.number, ref: item.vcs.tag ?? item.vcs.branch ?? "",
         refIsTag: item.vcs.tag != nil, triggerType: item.trigger.type,
         hasPullRequest: !(item.vcs.reviewUrl ?? "").isEmpty, createdAt: item.createdAt, state: .succeeded,
-        url: Self.webURL(slug: item.projectSlug, number: item.number))
-      return Candidate(id: item.id, pipelineState: item.state, pipeline: pipeline)
+        url: Self.webURL(slug: item.projectSlug, number: item.number), newestWorkflowId: nil)
+      return Candidate(pipelineState: item.state, pipeline: pipeline)
     }
   }
 
@@ -72,7 +72,7 @@ public struct CircleCIClient: Sendable {
       pipeline.state = .failed
       return pipeline
     }
-    guard let workflowURL = Self.apiURL("pipeline/\(candidate.id)/workflow") else {
+    guard let workflowURL = Self.apiURL("pipeline/\(pipeline.id)/workflow") else {
       throw .unexpected("CircleCI response did not decode")
     }
     let workflows: WorkflowList = try await get(workflowURL, token: token)
@@ -85,6 +85,8 @@ public struct CircleCIClient: Sendable {
         runs.max { $0.createdAt < $1.createdAt }
       }
       pipeline.state = Self.state(workflowStatuses: newestRuns.map(\.status))
+      // A rerun adds a newer workflow, so a dismissed pipeline that fails again shows again.
+      pipeline.newestWorkflowId = workflows.items.max { $0.createdAt < $1.createdAt }?.id
     }
     return pipeline
   }
@@ -171,7 +173,6 @@ public struct CircleCIClient: Sendable {
 }
 
 private struct Candidate: Sendable {
-  var id: String
   var pipelineState: String
   var pipeline: Pipeline
 }
@@ -199,6 +200,7 @@ private struct PipelinePage: Decodable {
 
 private struct WorkflowList: Decodable {
   struct Workflow: Decodable {
+    var id: String
     var name: String
     var status: String
     var createdAt: Date
