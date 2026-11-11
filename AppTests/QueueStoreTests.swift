@@ -23,8 +23,9 @@ private func temporaryDirectory() -> URL {
   FileManager.default.temporaryDirectory.appendingPathComponent("tower-store-\(UUID().uuidString)")
 }
 
-private func temporaryDefaults() -> UserDefaults {
-  UserDefaults(suiteName: "tower-store-\(UUID().uuidString)")!
+// Hosted tests run inside Tower.app, so each store gets its own defaults suite, not the owner's settings.
+private func temporaryDefaults(suiteName: String = "tower-store-\(UUID().uuidString)") -> UserDefaults {
+  UserDefaults(suiteName: suiteName)!
 }
 
 // Answers each source by host, so one stub serves the whole refresh.
@@ -142,7 +143,9 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
 @MainActor struct QueueStoreDismissTests {
   @Test func dismissHidesTheFailedPipelineAndKeepsItForTheNextLaunch() throws {
     let cacheDirectory = try cacheDirectoryWithFailedPipeline()
-    let defaults = temporaryDefaults()
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
     let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
     store.loadCache()
     let fixItem = try #require(store.sections.first { $0.kind == .fix }?.items.first)
@@ -157,7 +160,10 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
 
   @Test func successfulRefreshDropsDismissalsOfPipelinesNoLongerReturned() async throws {
     let cacheDirectory = try cacheDirectoryWithFailedPipeline()
-    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
     store.loadCache()
     store.dismiss(try #require(store.sections.first?.items.first))
     #expect(store.dismissedPipelines == [failedPipeline.dismissal])
@@ -167,7 +173,11 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
 
   @Test func failedRefreshKeepsDismissals() async throws {
     let cacheDirectory = try cacheDirectoryWithFailedPipeline()
-    let store = makeStore(transport: try routingTransport(circleci: 500), cacheDirectory: cacheDirectory)
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(
+      transport: try routingTransport(circleci: 500), cacheDirectory: cacheDirectory, defaults: defaults)
     store.loadCache()
     store.dismiss(try #require(store.sections.first?.items.first))
     await store.refresh()
