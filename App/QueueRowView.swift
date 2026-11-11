@@ -5,9 +5,27 @@ struct QueueRowView: View {
   let item: QueueItem
   let isSelected: Bool
   let open: () -> Void
+  let showDetails: () -> Void
+  let copyLink: () -> Void
   @State private var isHovered = false
 
+  // Only PR rows get the context menu and the extra actions; other rows keep their single action.
   var body: some View {
+    if item.details != nil {
+      row
+        .contextMenu {
+          Button("Show Details", action: showDetails).keyboardShortcut(.space, modifiers: [])
+          Button("Open in Browser", action: open)
+          Button("Copy Link", action: copyLink).keyboardShortcut("c")
+        }
+        .accessibilityAction(named: "Show details", showDetails)
+        .accessibilityAction(named: "Copy link", copyLink)
+    } else {
+      row
+    }
+  }
+
+  private var row: some View {
     HStack(spacing: Theme.Spacing.s) {
       Image(systemName: item.symbol.rawValue)
         .font(.system(size: Theme.Metrics.symbolSize))

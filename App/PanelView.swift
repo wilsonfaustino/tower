@@ -7,6 +7,7 @@ struct PanelView: View {
   let close: () -> Void
   let openSettings: () -> Void
   @State private var selectedItemId: String?
+  @State private var popoverItemId: String?
   @State private var contentHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
 
@@ -24,6 +25,10 @@ struct PanelView: View {
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
         }
+        // Gives keyboard focus back to the list, with the same row selected, when the popover closes.
+        .onChange(of: popoverItemId) { _, newValue in
+          if newValue == nil { isListFocused = true }
+        }
       }
     }
     .frame(width: Theme.Metrics.panelWidth)
@@ -35,12 +40,18 @@ struct PanelView: View {
       // The panel may open without activating the app, so the activation refresh can miss the Reconnect return.
       if store.hasAuthenticationFailure { Task { await store.refresh() } }
     }
-    .onKeyPress(.downArrow) { moveSelection(by: 1) }
-    .onKeyPress(.upArrow) { moveSelection(by: -1) }
+    .onKeyPress(.downArrow) { handle(.downArrow) }
+    .onKeyPress(.upArrow) { handle(.upArrow) }
     .onKeyPress(.return) {
       guard let item = allItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
       open(item)
       return .handled
+    }
+    .onKeyPress(.space) { handle(.space) }
+    .onKeyPress(.escape) { handle(.escape) }
+    .onKeyPress(keys: ["c"]) { press in
+      guard press.modifiers.contains(.command) else { return .ignored }
+      return handle(.copy)
     }
   }
 
@@ -91,7 +102,9 @@ struct PanelView: View {
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
       case .queue:
         ForEach(store.sections) { section in
-          QueueSectionView(section: section, selectedItemId: selectedItemId, open: open)
+          QueueSectionView(
+            section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
+            showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, handlePopoverInput: handle)
         }
       case .empty:
         StateMessageView(
@@ -132,6 +145,22 @@ struct PanelView: View {
     guard let nextItemId = nextSelectedItemId(in: allItems, after: selectedItemId, offset: offset) else { return .ignored }
     selectedItemId = nextItemId
     return .handled
+  }
+
+  private func handle(_ input: PanelInput) -> KeyPress.Result {
+    let selectedItem = allItems.first(where: { $0.id == selectedItemId })
+    let action = panelAction(
+      for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil)
+    let outcome = panelKeyOutcome(for: action, selectedItemId: selectedItemId, popoverItemId: popoverItemId)
+    popoverItemId = outcome.popoverItemId
+    if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
+    if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
+    return outcome.isHandled ? .handled : .ignored
+  }
+
+  private func showDetails(_ item: QueueItem) {
+    selectedItemId = item.id
+    popoverItemId = item.id
   }
 
   private func open(_ item: QueueItem) {
@@ -196,4 +225,57 @@ func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, of
     nextIndex = offset > 0 ? 0 : items.count - 1
   }
   return items[nextIndex].id
+}
+
+enum PanelInput: Sendable {
+  case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick
+}
+
+enum PanelAction: Equatable, Sendable {
+  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
+  case copyLink, showContextMenu, closePanel, ignore
+}
+
+// Click, Cmd-click and Return work on every row. Space, Cmd-C and right-click act only on rows with PR details.
+func panelAction(for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool) -> PanelAction {
+  switch input {
+  case .click, .returnKey: return .openAndClosePanel
+  case .commandClick: return .openInBackground
+  case .space:
+    if isPopoverOpen { return .closePopover }
+    return selectedItemHasDetails ? .showPopover : .ignore
+  case .escape: return isPopoverOpen ? .closePopover : .closePanel
+  case .upArrow: return .closePopoverAndMoveSelection(offset: -1)
+  case .downArrow: return .closePopoverAndMoveSelection(offset: 1)
+  case .copy: return selectedItemHasDetails ? .copyLink : .ignore
+  case .rightClick: return selectedItemHasDetails ? .showContextMenu : .ignore
+  }
+}
+
+struct PanelKeyOutcome: Equatable {
+  var popoverItemId: String?
+  var selectionOffset: Int?
+  var copiesSelectedLink = false
+  var isHandled = true
+}
+
+// Esc with no popover is not handled, so it goes on to PanelWindow.cancelOperation, which closes the panel.
+func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverItemId: String?) -> PanelKeyOutcome {
+  switch action {
+  case .closePopoverAndMoveSelection(let offset):
+    return PanelKeyOutcome(popoverItemId: nil, selectionOffset: offset)
+  case .showPopover:
+    return PanelKeyOutcome(popoverItemId: selectedItemId)
+  case .closePopover:
+    return PanelKeyOutcome(popoverItemId: nil)
+  case .copyLink:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, copiesSelectedLink: true)
+  case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
+  }
+}
+
+func writeLink(_ url: URL, to pasteboard: NSPasteboard) {
+  pasteboard.clearContents()
+  pasteboard.setString(url.absoluteString, forType: .string)
 }

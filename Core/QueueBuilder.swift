@@ -83,6 +83,10 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
 }
 
 extension PullRequest {
+  var details: PullRequestDetails {
+    PullRequestDetails(
+      title: title, reference: "#\(number)", repository: repository, additions: additions, deletions: deletions)
+  }
   var isFailing: Bool { checkState == .failure || checkState == .error }
   var itemId: String { "pr:\(repository)#\(number)" }
 }
@@ -92,7 +96,7 @@ private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: 
     id: pullRequest.itemId, title: pullRequest.title,
     meta: "\(pullRequest.repository) · \(shortAge(from: pullRequest.updatedAt, now: now))",
     url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt,
-    strip: statusStrip(pullRequest), reference: "#\(pullRequest.number)")
+    strip: statusStrip(pullRequest), reference: "#\(pullRequest.number)", details: pullRequest.details)
 }
 
 private func statusStrip(_ pullRequest: PullRequest) -> StatusStrip {
@@ -130,7 +134,7 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
   let badge =
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
-    : Badge(text: "+\(pullRequest.additions) \u{2212}\(pullRequest.deletions)", variant: .neutral)
+    : nil
   var metaParts = [pullRequest.repository, pullRequest.author]
   if !isDirectRequest, let teamSlug = pullRequest.requestedTeamSlugs.first {
     metaParts.append("team \(teamSlug)")
@@ -138,7 +142,8 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
   metaParts.append(shortAge(from: requestedAt, now: now))
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, meta: metaParts.joined(separator: " · "),
-    url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)")
+    url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
+    details: pullRequest.details)
 }
 
 // Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.

@@ -81,6 +81,26 @@ import Testing
     }
   }
 
+  // A click in the list takes key status from the popover, so the panel stays open.
+  @Test func popoverKeyLossToThePanelKeepsThePanelOpen() async {
+    await withPopover { controller, popover in
+      controller.panel.makeKey()
+      NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: popover)
+      for _ in 0..<10 { await Task.yield() }
+      #expect(controller.isPanelVisible)
+    }
+  }
+
+  @Test func panelKeyLossWithAPopoverToAnotherAppClosesThePanel() async {
+    await withPopover { controller, _ in
+      await withOtherAppWindow { otherWindow in
+        otherWindow.makeKeyAndOrderFront(nil)
+        await yieldUntil { !controller.isPanelVisible }
+        #expect(!controller.isPanelVisible)
+      }
+    }
+  }
+
   @Test func buttonFollowsStoreChanges() async {
     let store = QueueStore()
     let controller = StatusItemController(store: store, openSettings: {}, quit: {})
@@ -91,4 +111,30 @@ import Testing
     #expect(controller.statusItem.button?.accessibilityLabel() == "Tower, 3 items to fix")
     NSStatusBar.system.removeStatusItem(controller.statusItem)
   }
+}
+
+@MainActor private func withPopover(_ body: (StatusItemController, NSWindow) async -> Void) async {
+  let controller = StatusItemController(store: QueueStore(), openSettings: {}, quit: {})
+  controller.showPanel()
+  let popover = NSWindow(
+    contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.titled], backing: .buffered, defer: true)
+  popover.isReleasedWhenClosed = false
+  controller.panel.addChildWindow(popover, ordered: .above)
+  await body(controller, popover)
+  controller.closePanel()
+  NSStatusBar.system.removeStatusItem(controller.statusItem)
+}
+
+// The key loss decision runs on the next main actor turn.
+@MainActor private func yieldUntil(_ condition: () -> Bool) async {
+  for _ in 0..<10 where !condition() { await Task.yield() }
+}
+
+// Stands in for a window of another app taking key status.
+@MainActor private func withOtherAppWindow(_ body: (NSWindow) async -> Void) async {
+  let otherWindow = NSWindow(
+    contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.titled], backing: .buffered, defer: true)
+  otherWindow.isReleasedWhenClosed = false
+  await body(otherWindow)
+  otherWindow.orderOut(nil)
 }

@@ -28,6 +28,9 @@ enum Theme {
     static let iconColumn: CGFloat = 20
     static let symbolSize: CGFloat = 15
     static let openArrowSize: CGFloat = 11
+    static let popoverWidth: CGFloat = 280
+    static let popoverPadding: CGFloat = 14
+    static let popoverSpacing: CGFloat = 10
   }
 
   enum Fonts {
@@ -39,6 +42,8 @@ enum Theme {
     static let sectionCount = Font.subheadline.monospacedDigit()
     static let rowMeta = Font.subheadline.monospacedDigit()
     static let badge = Font.caption.weight(.semibold)
+    static let popoverTitle = Font.body.weight(.semibold)
+    static let popoverDiff = Font.title3.weight(.semibold).monospacedDigit()
   }
 
   static let textPrimary = Color(nsColor: .labelColor)

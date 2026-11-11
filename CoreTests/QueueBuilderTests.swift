@@ -138,13 +138,15 @@ struct QueueBuilderTests {
     #expect(mergeItems.first?.symbol == .merge)
   }
 
-  @Test func recentReviewRequestShowsDiffSize() {
+  @Test func recentReviewRequestHasNoBadgeAndCarriesDetails() {
     let sections = queue(reviewRequests: [
-      pullRequest(repository: "ui-kit", number: 412, author: "Rui", additions: 12, deletions: 4,
+      pullRequest(repository: "ui-kit", number: 412, title: "Add tooltip", author: "Rui", additions: 12, deletions: 4,
                   requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 23)
     ])
     let reviewItem = items(sections, .review).first
-    #expect(reviewItem?.badge == Badge(text: "+12 \u{2212}4", variant: .neutral))
+    #expect(reviewItem?.badge == nil)
+    #expect(reviewItem?.details == PullRequestDetails(
+      title: "Add tooltip", reference: "#412", repository: "ui-kit", additions: 12, deletions: 4))
     #expect(reviewItem?.meta == "ui-kit · Rui · 23h")
     #expect(reviewItem?.reference == "#412")
     #expect(reviewItem?.symbol == .review)
@@ -157,11 +159,54 @@ struct QueueBuilderTests {
     #expect(items(sections, .review).first?.badge == Badge(text: "Waiting 1d", variant: .urgent))
   }
 
-  @Test func oldTeamReviewRequestStaysNeutral() {
+  @Test func oldTeamReviewRequestHasNoBadge() {
     let sections = queue(reviewRequests: [
       pullRequest(author: "Ana", additions: 3, deletions: 1, requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 50)
     ])
-    #expect(items(sections, .review).first?.badge == Badge(text: "+3 \u{2212}1", variant: .neutral))
+    #expect(items(sections, .review).first?.badge == nil)
+  }
+
+  @Test func authoredPullRequestCarriesDetails() {
+    let sections = queue(authored: [
+      pullRequest(repository: "api-core", number: 88, title: "Cache tokens", additions: 48, deletions: 12)
+    ])
+    #expect(items(sections, .waiting).first?.details == PullRequestDetails(
+      title: "Cache tokens", reference: "#88", repository: "api-core", additions: 48, deletions: 12))
+  }
+
+  @Test func diffPhraseUsesPluralForms() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 48, deletions: 12)
+    #expect(details.diffAccessibilityPhrase == "48 lines added, 12 lines removed")
+  }
+
+  @Test func diffPhraseUsesSingularForms() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 1, deletions: 1)
+    #expect(details.diffAccessibilityPhrase == "1 line added, 1 line removed")
+  }
+
+  @Test func diffPhraseUsesPluralFormsForZero() {
+    let details = PullRequestDetails(title: "Change", reference: "#1", repository: "app-web", additions: 0, deletions: 0)
+    #expect(details.diffAccessibilityPhrase == "0 lines added, 0 lines removed")
+  }
+
+  @Test func diffTextUsesSignsAndLocaleGrouping() {
+    let details = PullRequestDetails(
+      title: "Change", reference: "#1", repository: "app-web", additions: 1204, deletions: 318)
+    #expect(details.additionsText(locale: Locale(identifier: "en_US")) == "+1,204")
+    #expect(details.deletionsText(locale: Locale(identifier: "en_US")) == "\u{2212}318")
+    #expect(details.additionsText(locale: Locale(identifier: "de_DE")) == "+1.204")
+  }
+
+  @Test func botTicketAndPipelineRowsHaveNoDetails() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
+      ],
+      tickets: [ticket(key: "PROJ-1")],
+      pipelines: [pipeline()])
+    let allItems = sections.flatMap(\.items)
+    #expect(allItems.count == 3)
+    #expect(allItems.allSatisfy { $0.details == nil })
   }
 
   @Test func botReviewRequestsCollapseIntoOneRow() throws {

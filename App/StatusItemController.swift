@@ -10,7 +10,7 @@ import SwiftUI
   private let store: QueueStore
   private let openSettings: () -> Void
   private let quit: () -> Void
-  private let panel = PanelWindow()
+  let panel = PanelWindow()
   private var outsideClickMonitor: Any?
 
   init(store: QueueStore, openSettings: @escaping () -> Void, quit: @escaping () -> Void) {
@@ -25,6 +25,8 @@ import SwiftUI
     configureButton()
     panel.delegate = self
     panel.onCancel = { [weak self] in self?.closePanel() }
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(childWindowDidResignKey), name: NSWindow.didResignKeyNotification, object: nil)
     trackMenuBarState()
   }
 
@@ -134,7 +136,31 @@ import SwiftUI
 
   // Covers a click in another Tower window and Cmd-Tab to another app.
   func windowDidResignKey(_ notification: Notification) {
-    closePanel()
+    handleKeyLoss(resignedChild: nil)
+  }
+
+  // A row popover is a child window of the panel, so its key loss does not reach windowDidResignKey.
+  @objc private func childWindowDidResignKey(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow, window.parent === panel else { return }
+    handleKeyLoss(resignedChild: window)
+  }
+
+  private func handleKeyLoss(resignedChild: NSWindow?) {
+    guard resignedChild != nil || panel.childWindows?.isEmpty == false else {
+      closePanel()
+      return
+    }
+    // Inside the resign notification the new key window is not set yet, so decide on the next main actor turn.
+    Task { @MainActor [weak self] in
+      guard let self, panel.isVisible else { return }
+      switch panelKeyChangeAction(
+        newKeyWindow: NSApp.keyWindow, panel: panel, resignedChildIsVisible: resignedChild?.isVisible)
+      {
+      case .keepOpen: break
+      case .focusPanel: panel.makeKey()
+      case .closePanel: closePanel()
+      }
+    }
   }
 }
 
@@ -156,4 +182,20 @@ func panelOrigin(anchor: NSRect, panelSize: NSSize, visibleFrame: NSRect, gap: C
   let originX = min(max(anchor.minX, visibleFrame.minX), visibleFrame.maxX - panelSize.width)
   let originY = anchor.minY - gap - panelSize.height
   return NSPoint(x: originX, y: originY)
+}
+
+enum PanelKeyChangeAction {
+  case keepOpen
+  case focusPanel
+  case closePanel
+}
+
+// Runs after key status settles. resignedChildIsVisible is nil when the panel itself resigned key,
+// otherwise it tells whether the child window (a row popover) is still on screen.
+func panelKeyChangeAction(newKeyWindow: NSWindow?, panel: NSWindow, resignedChildIsVisible: Bool?)
+  -> PanelKeyChangeAction
+{
+  if let newKeyWindow, newKeyWindow === panel || newKeyWindow.parent === panel { return .keepOpen }
+  if newKeyWindow == nil && resignedChildIsVisible == false { return .focusPanel }
+  return .closePanel
 }
