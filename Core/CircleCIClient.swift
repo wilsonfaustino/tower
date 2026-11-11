@@ -80,7 +80,11 @@ public struct CircleCIClient: Sendable {
       // No workflows means setup still runs, or the config filters removed every workflow.
       pipeline.state = Self.setupPipelineStates.contains(candidate.pipelineState) ? .running : .succeeded
     } else {
-      pipeline.state = Self.state(workflowStatuses: workflows.items.map(\.status))
+      // A rerun adds a new workflow with the same name, so only the newest run of each name counts.
+      let newestRuns = Dictionary(grouping: workflows.items, by: \.name).values.compactMap { runs in
+        runs.max { $0.createdAt < $1.createdAt }
+      }
+      pipeline.state = Self.state(workflowStatuses: newestRuns.map(\.status))
     }
     return pipeline
   }
@@ -194,7 +198,11 @@ private struct PipelinePage: Decodable {
 }
 
 private struct WorkflowList: Decodable {
-  struct Workflow: Decodable { var status: String }
+  struct Workflow: Decodable {
+    var name: String
+    var status: String
+    var createdAt: Date
+  }
 
   var items: [Workflow]
 }

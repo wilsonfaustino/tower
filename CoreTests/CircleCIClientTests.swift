@@ -84,8 +84,15 @@ private final class SlowTransport: HTTPTransport, @unchecked Sendable {
   }
 }
 
+// Each status gets its own workflow name, so no workflow is a rerun of another.
 private func workflowList(statuses: [String]) throws -> Data {
-  let items = statuses.map { ["id": UUID().uuidString, "name": "release", "status": $0] }
+  try workflowList(runs: statuses.enumerated().map { index, status in
+    (name: "workflow-\(index)", status: status, createdAt: "2027-01-15T09:43:17.162Z")
+  })
+}
+
+private func workflowList(runs: [(name: String, status: String, createdAt: String)]) throws -> Data {
+  let items = runs.map { ["id": UUID().uuidString, "name": $0.name, "status": $0.status, "created_at": $0.createdAt] }
   return try JSONSerialization.data(withJSONObject: ["items": items])
 }
 
@@ -206,6 +213,32 @@ struct CircleCIClientTests {
 
   @Test func succeededWorkflowsAreSucceeded() async throws {
     #expect(try await releaseState(workflowFixture: "circleci-workflows-success.json") == .succeeded)
+  }
+
+  @Test func successfulRerunAfterFailedRunsIsSucceeded() async throws {
+    let workflowData = try workflowList(runs: [
+      (name: "setup", status: "success", createdAt: "2027-01-15T09:43:17.162Z"),
+      (name: "trunk-based", status: "failed", createdAt: "2027-01-15T09:44:25.166Z"),
+      (name: "trunk-based", status: "failed", createdAt: "2027-01-15T10:10:02.511Z"),
+      (name: "trunk-based", status: "success", createdAt: "2027-01-15T10:40:48.903Z"),
+    ])
+    #expect(try await releaseState(workflowData: workflowData) == .succeeded)
+  }
+
+  @Test func failedRerunAfterSuccessfulRunIsFailed() async throws {
+    let workflowData = try workflowList(runs: [
+      (name: "trunk-based", status: "success", createdAt: "2027-01-15T09:44:25.166Z"),
+      (name: "trunk-based", status: "failed", createdAt: "2027-01-15T10:10:02.511Z"),
+    ])
+    #expect(try await releaseState(workflowData: workflowData) == .failed)
+  }
+
+  @Test func runningRerunAfterFailedRunIsRunning() async throws {
+    let workflowData = try workflowList(runs: [
+      (name: "trunk-based", status: "running", createdAt: "2027-01-15T10:10:02.511Z"),
+      (name: "trunk-based", status: "failed", createdAt: "2027-01-15T09:44:25.166Z"),
+    ])
+    #expect(try await releaseState(workflowData: workflowData) == .running)
   }
 
   @Test func erroredPipelineIsFailed() async throws {
