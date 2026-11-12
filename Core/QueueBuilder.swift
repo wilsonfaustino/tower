@@ -104,7 +104,7 @@ extension PullRequest {
 private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: Badge?, now: Date) -> QueueItem {
   QueueItem(
     id: pullRequest.itemId, title: pullRequest.title,
-    meta: "\(pullRequest.repository) · \(shortAge(from: pullRequest.updatedAt, now: now))",
+    metaLead: pullRequest.repository, meta: shortAge(from: pullRequest.updatedAt, now: now),
     url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt,
     strip: statusStrip(pullRequest), reference: "#\(pullRequest.number)", details: pullRequest.details)
 }
@@ -145,13 +145,14 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : nil
-  var metaParts = [pullRequest.repository, pullRequest.author]
+  var metaParts = [pullRequest.author]
   if !isDirectRequest, let teamSlug = pullRequest.requestedTeamSlugs.first {
     metaParts.append("team \(teamSlug)")
   }
   metaParts.append(shortAge(from: requestedAt, now: now))
   return QueueItem(
-    id: pullRequest.itemId, title: pullRequest.title, meta: metaParts.joined(separator: " · "),
+    id: pullRequest.itemId, title: pullRequest.title, metaLead: pullRequest.repository,
+    meta: metaParts.joined(separator: " · "),
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
     details: pullRequest.details)
 }

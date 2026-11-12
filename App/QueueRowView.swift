@@ -48,10 +48,20 @@ struct QueueRowView: View {
           .lineLimit(1)
           .truncationMode(.tail)
         HStack(spacing: 6) {
-          Text(item.meta)
-            .font(Theme.Fonts.rowMeta)
-            .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
-            .lineLimit(1)
+          // Stack spacing instead of spaces around the dot, which bidi moves in right-to-left.
+          HStack(spacing: Theme.Spacing.xs) {
+            if let metaLead = item.metaLead {
+              // Middle truncation, as Finder does for file names, keeps both ends of a long repo name.
+              Text(metaLead).truncationMode(.middle)
+              Text("·").layoutPriority(1)
+              Text(item.metaTail).layoutPriority(1)
+            } else {
+              Text(item.metaTail)
+            }
+          }
+          .font(Theme.Fonts.rowMeta)
+          .foregroundStyle(isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary)
+          .lineLimit(1)
           if let strip = item.strip, !strip.isEmpty {
             StatusStripView(strip: strip, isSelected: isSelected)
           }

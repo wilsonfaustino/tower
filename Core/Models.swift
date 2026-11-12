@@ -282,7 +282,9 @@ public struct PullRequestDetails: Equatable, Sendable {
 public struct QueueItem: Identifiable, Equatable, Sendable {
   public var id: String
   public var title: String
-  public var meta: String
+  // The repo on PR rows. The row truncates it in the middle, so metaTail (author, team, age) stays visible.
+  public var metaLead: String?
+  public var metaTail: String
   public var url: URL
   public var symbol: RowSymbol
   public var badge: Badge?
@@ -296,13 +298,14 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var dismissal: PipelineDismissal?
 
   public init(
-    id: String, title: String, meta: String, url: URL, symbol: RowSymbol, badge: Badge?, sortDate: Date,
-    strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil,
+    id: String, title: String, metaLead: String? = nil, meta: String, url: URL, symbol: RowSymbol, badge: Badge?,
+    sortDate: Date, strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil,
     dismissal: PipelineDismissal? = nil
   ) {
     self.id = id
     self.title = title
-    self.meta = meta
+    self.metaLead = metaLead
+    self.metaTail = meta
     self.url = url
     self.symbol = symbol
     self.badge = badge
@@ -311,6 +314,11 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.reference = reference
     self.details = details
     self.dismissal = dismissal
+  }
+
+  public var meta: String {
+    guard let metaLead else { return metaTail }
+    return "\(metaLead) · \(metaTail)"
   }
 }
 
