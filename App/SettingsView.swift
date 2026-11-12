@@ -78,10 +78,8 @@ struct SettingsView: View {
 
   private func testJira() {
     saveToken()
-    jiraTestResult = nil
-    // A failed save leaves the old token in the Keychain, so a test would check the wrong token.
-    guard jiraTokenSaveError == nil else { return }
     isTestingJira = true
+    jiraTestResult = nil
     Task {
       do throws(SourceFailure) {
         _ = try await JiraClient(settings: JiraSettingsKeys.load(), transport: URLSessionTransport()).fetch()
@@ -96,9 +94,8 @@ struct SettingsView: View {
 
   private func testCircleCI() {
     saveCircleCIToken()
-    circleciTestResult = nil
-    guard circleciTokenSaveError == nil else { return }
     isTestingCircleCI = true
+    circleciTestResult = nil
     let settings = CircleCISettingsKeys.load()
     let projectCount = settings?.projectSlugs.count ?? 0
     Task {
