@@ -1,4 +1,5 @@
 import Core
+import Security
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,10 +7,12 @@ struct SettingsView: View {
   @AppStorage(JiraSettingsKeys.siteURL) private var jiraSiteURL = ""
   @AppStorage(JiraSettingsKeys.email) private var jiraEmail = ""
   @State private var jiraToken = KeychainStore.read(account: KeychainStore.jiraTokenAccount) ?? ""
+  @State private var jiraTokenSaveError: String?
   @State private var jiraTestResult: String?
   @State private var isTestingJira = false
   @AppStorage(CircleCISettingsKeys.projectSlugs) private var circleciProjectSlugs = ""
   @State private var circleciToken = KeychainStore.read(account: KeychainStore.circleciTokenAccount) ?? ""
+  @State private var circleciTokenSaveError: String?
   @State private var circleciTestResult: String?
   @State private var isTestingCircleCI = false
 
@@ -23,9 +26,11 @@ struct SettingsView: View {
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
+        SettingsCaption(text: jiraSiteURLHint(jiraSiteURL))
         TextField("Email", text: $jiraEmail)
         SecureField("API token", text: $jiraToken)
           .onSubmit(saveToken)
+        SettingsCaption(text: jiraTokenSaveError)
         HStack {
           Button("Test connection", action: testJira)
             .disabled(isTestingJira)
@@ -37,6 +42,7 @@ struct SettingsView: View {
       Section("CircleCI") {
         SecureField("API token", text: $circleciToken)
           .onSubmit(saveCircleCIToken)
+        SettingsCaption(text: circleciTokenSaveError)
         LabeledContent("Projects") {
           TextEditor(text: $circleciProjectSlugs)
             .font(.body.monospaced())
@@ -63,11 +69,11 @@ struct SettingsView: View {
   }
 
   private func saveToken() {
-    saveTrimmedToken(jiraToken, account: KeychainStore.jiraTokenAccount)
+    jiraTokenSaveError = saveTrimmedToken(jiraToken, account: KeychainStore.jiraTokenAccount)
   }
 
   private func saveCircleCIToken() {
-    saveTrimmedToken(circleciToken, account: KeychainStore.circleciTokenAccount)
+    circleciTokenSaveError = saveTrimmedToken(circleciToken, account: KeychainStore.circleciTokenAccount)
   }
 
   private func testJira() {
@@ -131,15 +137,31 @@ func circleciConnectedText(projectCount: Int) -> String {
 }
 
 // An empty token deletes the Keychain item, so clearing the field signs the source out.
+// Returns the text to show when the Keychain write fails, or nil.
 func saveTrimmedToken(
   _ token: String, account: String,
   write: (String, String) throws -> Void = KeychainStore.write(_:account:),
   delete: (String) -> Void = KeychainStore.delete(account:)
-) {
+) -> String? {
   let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
   if trimmedToken.isEmpty {
     delete(account)
-  } else {
-    try? write(trimmedToken, account)
+    return nil
   }
+  do {
+    try write(trimmedToken, account)
+    return nil
+  } catch let keychainError as KeychainError {
+    let reason = SecCopyErrorMessageString(keychainError.status, nil) as String? ?? "OSStatus \(keychainError.status)"
+    return "Can’t save the token: \(reason)"
+  } catch {
+    return "Can’t save the token: \(error.localizedDescription)"
+  }
+}
+
+// Mirrors the site check in JiraSettingsKeys.load, and also asks for https so the token never goes out in cleartext.
+func jiraSiteURLHint(_ siteURL: String) -> String? {
+  guard !siteURL.isEmpty else { return nil }
+  if let site = URL(string: siteURL), site.scheme?.lowercased() == "https", site.host() != nil { return nil }
+  return "Use the full URL, for example https://acme.atlassian.net"
 }

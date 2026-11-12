@@ -52,3 +52,16 @@ struct AuthBannerView: View {
     .background(Theme.surfaceHover, in: RoundedRectangle(cornerRadius: Theme.Radius.banner))
   }
 }
+
+// Shows nothing when the text is nil, so a Settings section can pass an optional hint or error.
+struct SettingsCaption: View {
+  let text: String?
+
+  var body: some View {
+    if let text {
+      Text(text)
+        .font(.caption)
+        .foregroundStyle(Theme.textSecondary)
+    }
+  }
+}
