@@ -141,13 +141,19 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
 
   @Test func refreshWithoutJiraSettingsDeletesJiraCache() async throws {
     let cacheDirectory = temporaryDirectory()
-    let configuredStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
-    await configuredStore.refresh()
+    var currentJiraSettings: JiraSettings? = jiraSettings
+    let store = QueueStore(
+      tokenProvider: StubTokenProvider(result: .success("gh-token")), transport: try routingTransport(),
+      cacheDirectory: cacheDirectory, loadJiraSettings: { currentJiraSettings }, loadCircleCISettings: { circleciSettings },
+      loadGitHubOrganizations: { [] }, defaults: temporaryDefaults())
+    await store.refresh()
     let jiraCacheFile = cacheDirectory.appendingPathComponent("jira.json")
     #expect(FileManager.default.fileExists(atPath: jiraCacheFile.path()))
-    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, jira: nil)
+    #expect(store.jiraFetchedAt != nil)
+    currentJiraSettings = nil
     await store.refresh()
     #expect(!FileManager.default.fileExists(atPath: jiraCacheFile.path()))
+    #expect(store.jiraTickets == nil)
     #expect(store.jiraFetchedAt == nil)
   }
 }
