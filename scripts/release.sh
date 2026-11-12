@@ -41,11 +41,14 @@ if [[ -z "$version" ]]; then
 fi
 
 if (( ! allow_dirty )); then
-  if [[ -n "$(git status --porcelain)" ]]; then
+  # Assign first, so set -e stops the script when git fails instead of reading empty output as clean.
+  working_tree_changes="$(git status --porcelain)"
+  version_tag="$(git tag --points-at HEAD --list "v$version")"
+  if [[ -n "$working_tree_changes" ]]; then
     echo "error: the working tree has uncommitted changes. Commit them, or use --allow-dirty for a local test build" >&2
     exit 1
   fi
-  if [[ -z "$(git tag --points-at HEAD --list "v$version")" ]]; then
+  if [[ -z "$version_tag" ]]; then
     echo "error: HEAD has no tag v$version. Run: git tag v$version, or use --allow-dirty for a local test build" >&2
     exit 1
   fi
