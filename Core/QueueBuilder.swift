@@ -173,12 +173,14 @@ private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest],
   let matchedPullRequests = authoredPullRequests.filter {
     ticketKey(ticket.key, matches: $0.title) || ticketKey(ticket.key, matches: $0.headBranch)
   }
+  // A draft counts as the ticket's PR, but you do not ask for a review on a draft.
+  let nonDraftPullRequests = matchedPullRequests.filter { !$0.isDraft }
   let symbol: RowSymbol
   let badgeText: String
   if matchedPullRequests.isEmpty {
     symbol = .noPullRequest
     badgeText = "No PR"
-  } else if matchedPullRequests.allSatisfy(\.hasNoReviewer) {
+  } else if !nonDraftPullRequests.isEmpty && nonDraftPullRequests.allSatisfy(\.hasNoReviewer) {
     symbol = .noReviewer
     badgeText = "No reviewer"
   } else {

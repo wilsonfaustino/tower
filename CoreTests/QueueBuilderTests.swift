@@ -319,6 +319,33 @@ struct QueueBuilderTests {
     #expect(tidyItem?.symbol == .noReviewer)
   }
 
+  @Test func ticketWithOnlyDraftPullRequestIsHidden() {
+    let sections = queue(
+      authored: [pullRequest(isDraft: true, headBranch: "proj-1440-export")],
+      tickets: [ticket(key: "PROJ-1440")])
+    #expect(items(sections, .tidy).isEmpty)
+  }
+
+  @Test func ticketWithUnreviewedDraftAndNonDraftShowsNoReviewer() {
+    let sections = queue(
+      authored: [
+        pullRequest(number: 1, isDraft: true, headBranch: "proj-1440-export"),
+        pullRequest(number: 2, headBranch: "proj-1440-import"),
+      ],
+      tickets: [ticket(key: "PROJ-1440")])
+    #expect(items(sections, .tidy).first?.badge == Badge(text: "No reviewer", variant: .neutral))
+  }
+
+  @Test func reviewedDraftDoesNotHideUnreviewedNonDraft() {
+    let sections = queue(
+      authored: [
+        pullRequest(number: 1, isDraft: true, headBranch: "proj-1440-export", reviewCount: 1),
+        pullRequest(number: 2, headBranch: "proj-1440-import"),
+      ],
+      tickets: [ticket(key: "PROJ-1440")])
+    #expect(items(sections, .tidy).first?.badge == Badge(text: "No reviewer", variant: .neutral))
+  }
+
   @Test func ticketWithReviewedPullRequestIsHidden() {
     let sections = queue(
       authored: [pullRequest(title: "PROJ-1440 export", reviewCount: 1)],
