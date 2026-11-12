@@ -91,17 +91,24 @@ struct PanelView: View {
   @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
       if store.githubStatus == .failed(.authentication) {
-        AuthBannerView(title: "GitHub sign-in expired", message: store.githubBannerMessage(now: Date())) {
-          GitHubReconnect.open(ghPath: GhCLITokenProvider().ghPath)
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+          AuthBannerView(title: "GitHub sign-in expired", message: store.githubBannerMessage(now: context.date)) {
+            GitHubReconnect.open(ghPath: GhCLITokenProvider().ghPath)
+          }
         }
       }
       if store.jiraStatus == .failed(.authentication) {
-        AuthBannerView(title: "Jira sign-in expired", message: store.jiraBannerMessage(now: Date()), reconnect: showSettings)
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+          AuthBannerView(
+            title: "Jira sign-in expired", message: store.jiraBannerMessage(now: context.date), reconnect: showSettings)
+        }
       }
       if store.circleciStatus == .failed(.authentication) {
-        AuthBannerView(
-          title: "CircleCI token expired", message: store.circleciBannerMessage(now: Date()), actionTitle: "Open Settings",
-          reconnect: showSettings)
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+          AuthBannerView(
+            title: "CircleCI token expired", message: store.circleciBannerMessage(now: context.date),
+            actionTitle: "Open Settings", reconnect: showSettings)
+        }
       }
       switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
       case .queue:
