@@ -128,11 +128,11 @@ enum DismissedPipelinesKeys {
       githubSnapshot = cached.value
       githubFetchedAt = cached.fetchedAt
     }
-    if let cached = cache.load([JiraTicket].self, name: "jira") {
+    // Without settings, an old cache would show stale data and a stale fetch age.
+    if loadJiraSettings() != nil, let cached = cache.load([JiraTicket].self, name: "jira") {
       jiraTickets = cached.value
       jiraFetchedAt = cached.fetchedAt
     }
-    // Without CircleCI settings, an old cache would show a stale fetch age.
     if loadCircleCISettings() != nil, let cached = cache.load([Pipeline].self, name: "circleci") {
       pipelines = cached.value
       circleciFetchedAt = cached.fetchedAt
@@ -183,7 +183,11 @@ enum DismissedPipelinesKeys {
       try? cache.save(Cached(value: tickets, fetchedAt: now), name: "jira")
     case .failure(let failure):
       jiraStatus = .failed(failure)
-      if failure == .notConfigured { jiraTickets = nil }
+      if failure == .notConfigured {
+        jiraTickets = nil
+        jiraFetchedAt = nil
+        cache.remove(name: "jira")
+      }
     }
     switch await circleciResult {
     case .success(let fetchedPipelines):

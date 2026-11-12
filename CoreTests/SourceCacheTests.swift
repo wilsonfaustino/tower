@@ -28,4 +28,11 @@ struct SourceCacheTests {
     try Data("not json {".utf8).write(to: directory.appendingPathComponent("github.json"))
     #expect(cache.load([String].self, name: "github") == nil)
   }
+
+  @Test func removeDeletesSavedFile() throws {
+    let (cache, _) = temporaryCache()
+    try cache.save(Cached(value: ["a"], fetchedAt: Date()), name: "jira")
+    cache.remove(name: "jira")
+    #expect(cache.load([String].self, name: "jira") == nil)
+  }
 }

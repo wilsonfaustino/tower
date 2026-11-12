@@ -28,6 +28,11 @@ public struct SourceCache: Sendable {
     try JSONEncoder().encode(cached).write(to: fileURL(name), options: .atomic)
   }
 
+  // A missing file is the normal case, so a failed removal is not an error.
+  public func remove(name: String) {
+    try? FileManager.default.removeItem(at: fileURL(name))
+  }
+
   private func fileURL(_ name: String) -> URL {
     directory.appendingPathComponent("\(name).json")
   }
