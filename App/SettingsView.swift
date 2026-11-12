@@ -26,19 +26,11 @@ struct SettingsView: View {
       }
       Section("Jira") {
         TextField("Site URL", text: $jiraSiteURL, prompt: Text("https://acme.atlassian.net"))
-        if let siteURLHint = jiraSiteURLHint(jiraSiteURL) {
-          Text(siteURLHint)
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-        }
+        SettingsCaption(text: jiraSiteURLHint(jiraSiteURL))
         TextField("Email", text: $jiraEmail)
         SecureField("API token", text: $jiraToken)
           .onSubmit(saveToken)
-        if let jiraTokenSaveError {
-          Text(jiraTokenSaveError)
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-        }
+        SettingsCaption(text: jiraTokenSaveError)
         HStack {
           Button("Test connection", action: testJira)
             .disabled(isTestingJira)
@@ -50,11 +42,7 @@ struct SettingsView: View {
       Section("CircleCI") {
         SecureField("API token", text: $circleciToken)
           .onSubmit(saveCircleCIToken)
-        if let circleciTokenSaveError {
-          Text(circleciTokenSaveError)
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-        }
+        SettingsCaption(text: circleciTokenSaveError)
         LabeledContent("Projects") {
           TextEditor(text: $circleciProjectSlugs)
             .font(.body.monospaced())
