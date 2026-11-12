@@ -77,13 +77,15 @@ DEVELOPER_ID_IDENTITY=<codesign identity name or SHA-1 hash>
 NOTARY_KEYCHAIN_PROFILE=<notarytool keychain profile>
 ```
 
+The script stops when the working tree has uncommitted changes or when `HEAD` has no tag `v<version>`. Use `scripts/release.sh --allow-dirty` to skip both checks for a local test build.
+
 To install the current version on this Mac:
 
 ```bash
 scripts/install.sh
 ```
 
-The script runs `release.sh`, quits a running Tower, replaces `/Applications/Tower.app` with the new build and opens it.
+The script runs `release.sh --allow-dirty`, quits a running Tower, replaces `/Applications/Tower.app` with the new build and opens it.
 
 ## Project layout
 

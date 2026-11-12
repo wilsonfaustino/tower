@@ -7,7 +7,7 @@ repo_root="${0:A:h:h}"
 built_app_path="$repo_root/dist/DerivedData/Build/Products/Release/Tower.app"
 installed_app_path="/Applications/Tower.app"
 
-"$repo_root/scripts/release.sh"
+"$repo_root/scripts/release.sh" --allow-dirty
 
 if pgrep -x Tower >/dev/null; then
   echo "quitting running Tower"

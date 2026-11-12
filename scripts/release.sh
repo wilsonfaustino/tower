@@ -2,10 +2,19 @@
 # Build a signed Release zip of Tower in dist/.
 # Ad-hoc signed by default. Set DEVELOPER_ID_IDENTITY (codesign identity) and
 # NOTARY_KEYCHAIN_PROFILE (notarytool keychain profile) to sign with a Developer ID and notarize.
+# Stops on a dirty tree or when HEAD has no tag v<MARKETING_VERSION>. --allow-dirty skips both checks.
 set -euo pipefail
 
 repo_root="${0:A:h:h}"
 cd "$repo_root"
+
+allow_dirty=0
+for argument in "$@"; do
+  case "$argument" in
+    --allow-dirty) allow_dirty=1 ;;
+    *) echo "error: unknown argument: $argument" >&2; exit 1 ;;
+  esac
+done
 
 # Optional, gitignored. Values already set in the environment win over the file.
 if [[ -f .env ]]; then
@@ -29,6 +38,20 @@ version="$(sed -n 's/^ *MARKETING_VERSION: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' p
 if [[ -z "$version" ]]; then
   echo "error: MARKETING_VERSION not found in project.yml" >&2
   exit 1
+fi
+
+if (( ! allow_dirty )); then
+  # Assign first, so set -e stops the script when git fails instead of reading empty output as clean.
+  working_tree_changes="$(git status --porcelain)"
+  version_tag="$(git tag --points-at HEAD --list "v$version")"
+  if [[ -n "$working_tree_changes" ]]; then
+    echo "error: the working tree has uncommitted changes. Commit them, or use --allow-dirty for a local test build" >&2
+    exit 1
+  fi
+  if [[ -z "$version_tag" ]]; then
+    echo "error: HEAD has no tag v$version. Run: git tag v$version, or use --allow-dirty for a local test build" >&2
+    exit 1
+  fi
 fi
 
 dist_dir="$repo_root/dist"
