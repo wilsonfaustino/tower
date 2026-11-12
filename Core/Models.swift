@@ -282,9 +282,11 @@ public struct PullRequestDetails: Equatable, Sendable {
 public struct QueueItem: Identifiable, Equatable, Sendable {
   public var id: String
   public var title: String
-  // The repo on PR rows. The row truncates it in the middle, so metaTail (author, team, age) stays visible.
+  // The repo on PR rows. The row truncates it in the middle, so metaTail (author, age) stays visible.
   public var metaLead: String?
   public var metaTail: String
+  // The team on team review requests. Shown last and truncated first, so a long slug does not hide the repo.
+  public var metaTeam: String?
   public var url: URL
   public var symbol: RowSymbol
   public var badge: Badge?
@@ -298,7 +300,8 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var dismissal: PipelineDismissal?
 
   public init(
-    id: String, title: String, metaLead: String? = nil, meta: String, url: URL, symbol: RowSymbol, badge: Badge?,
+    id: String, title: String, metaLead: String? = nil, meta: String, metaTeam: String? = nil, url: URL,
+    symbol: RowSymbol, badge: Badge?,
     sortDate: Date, strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil,
     dismissal: PipelineDismissal? = nil
   ) {
@@ -306,6 +309,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.title = title
     self.metaLead = metaLead
     self.metaTail = meta
+    self.metaTeam = metaTeam
     self.url = url
     self.symbol = symbol
     self.badge = badge
@@ -317,8 +321,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   }
 
   public var meta: String {
-    guard let metaLead else { return metaTail }
-    return "\(metaLead) · \(metaTail)"
+    [metaLead, metaTail, metaTeam].compactMap { $0 }.joined(separator: " · ")
   }
 }
 

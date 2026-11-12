@@ -246,11 +246,11 @@ struct QueueBuilderTests {
     let sections = queue(reviewRequests: [
       pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
     ])
-    #expect(items(sections, .review).first?.meta == "app-web · Ana · team web-core · 1d")
+    #expect(items(sections, .review).first?.meta == "app-web · Ana · 1d · team web-core")
   }
 
-  // The row truncates only the repo, so the author, team and age stay visible next to a long repo name.
-  @Test func pullRequestRowsSplitRepoFromRestOfMeta() {
+  // The row truncates the team first and then the repo, so the author and age stay visible.
+  @Test func pullRequestRowsSplitRepoAndTeamFromRestOfMeta() {
     let sections = queue(
       authored: [pullRequest(repository: "app-api", number: 45, updatedHoursAgo: 3, reviewDecision: .reviewRequired, checkState: nil)],
       reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
@@ -258,8 +258,10 @@ struct QueueBuilderTests {
     let reviewItem = items(sections, .review).first
     #expect(authoredItem?.metaLead == "app-api")
     #expect(authoredItem?.metaTail == "3h")
+    #expect(authoredItem?.metaTeam == nil)
     #expect(reviewItem?.metaLead == "app-web")
-    #expect(reviewItem?.metaTail == "Ana · team web-core · 1d")
+    #expect(reviewItem?.metaTail == "Ana · 1d")
+    #expect(reviewItem?.metaTeam == "team web-core")
   }
 
   @Test func nonPullRequestRowsKeepMetaWhole() {

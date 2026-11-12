@@ -145,14 +145,10 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : nil
-  var metaParts = [pullRequest.author]
-  if !isDirectRequest, let teamSlug = pullRequest.requestedTeamSlugs.first {
-    metaParts.append("team \(teamSlug)")
-  }
-  metaParts.append(shortAge(from: requestedAt, now: now))
+  let teamSlug = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, metaLead: pullRequest.repository,
-    meta: metaParts.joined(separator: " · "),
+    meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamSlug.map { "team \($0)" },
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
     details: pullRequest.details)
 }
