@@ -51,10 +51,15 @@ struct QueueRowView: View {
           // Stack spacing instead of spaces around the dot, which bidi moves in right-to-left.
           HStack(spacing: Theme.Spacing.xs) {
             if let metaLead = item.metaLead {
+              // Priorities: author and age keep full width, then the repo, and the team gets what is left.
               // Middle truncation, as Finder does for file names, keeps both ends of a long repo name.
-              Text(metaLead).truncationMode(.middle)
-              Text("·").layoutPriority(1).accessibilityHidden(true)
-              Text(item.metaTail).layoutPriority(1)
+              Text(metaLead).truncationMode(.middle).layoutPriority(1)
+              Text("·").layoutPriority(2).accessibilityHidden(true)
+              Text(item.metaTail).layoutPriority(2)
+              if let metaTeam = item.metaTeam {
+                Text("·").layoutPriority(2).accessibilityHidden(true)
+                Text(metaTeam).truncationMode(.tail)
+              }
             } else {
               Text(item.metaTail)
             }
