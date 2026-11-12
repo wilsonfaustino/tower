@@ -249,6 +249,27 @@ struct QueueBuilderTests {
     #expect(items(sections, .review).first?.meta == "app-web · Ana · team web-core · 1d")
   }
 
+  // The row truncates only the repo, so the author, team and age stay visible next to a long repo name.
+  @Test func pullRequestRowsSplitRepoFromRestOfMeta() {
+    let sections = queue(
+      authored: [pullRequest(repository: "app-api", number: 45, updatedHoursAgo: 3, reviewDecision: .reviewRequired, checkState: nil)],
+      reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
+    let authoredItem = items(sections, .waiting).first
+    let reviewItem = items(sections, .review).first
+    #expect(authoredItem?.metaLead == "app-api")
+    #expect(authoredItem?.metaTail == "3h")
+    #expect(reviewItem?.metaLead == "app-web")
+    #expect(reviewItem?.metaTail == "Ana · team web-core · 1d")
+  }
+
+  @Test func nonPullRequestRowsKeepMetaWhole() {
+    let sections = queue(reviewRequests: [
+      pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
+    ])
+    #expect(items(sections, .review).first?.metaLead == nil)
+    #expect(items(sections, .review).first?.metaTail == "1 repo · 2h")
+  }
+
   @Test func teamRequestApprovedByViewerHasNoReviewRow() {
     let sections = queue(reviewRequests: [
       pullRequest(author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30, viewerLatestReviewState: .approved)
