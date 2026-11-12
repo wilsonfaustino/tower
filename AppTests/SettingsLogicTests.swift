@@ -1,5 +1,6 @@
-import Core
+@testable import Core
 import Foundation
+import Security
 import Testing
 
 @testable import Tower
@@ -41,7 +42,10 @@ struct SaveTrimmedTokenTests {
   @Test func writesTheTrimmedToken() {
     var writes: [(String, String)] = []
     var deletes: [String] = []
-    saveTrimmedToken("  secret-token \n", account: "jira-api-token") { writes.append(($0, $1)) } delete: { deletes.append($0) }
+    let saveError = saveTrimmedToken("  secret-token \n", account: "jira-api-token") { writes.append(($0, $1)) } delete: {
+      deletes.append($0)
+    }
+    #expect(saveError == nil)
     #expect(writes.map(\.0) == ["secret-token"])
     #expect(writes.map(\.1) == ["jira-api-token"])
     #expect(deletes.isEmpty)
@@ -51,8 +55,40 @@ struct SaveTrimmedTokenTests {
   func blankTokenDeletesTheAccount(token: String) {
     var writeCount = 0
     var deletes: [String] = []
-    saveTrimmedToken(token, account: "circleci-api-token") { _, _ in writeCount += 1 } delete: { deletes.append($0) }
+    let saveError = saveTrimmedToken(token, account: "circleci-api-token") { _, _ in writeCount += 1 } delete: { deletes.append($0) }
+    #expect(saveError == nil)
     #expect(writeCount == 0)
     #expect(deletes == ["circleci-api-token"])
+  }
+
+  struct DiskFullError: LocalizedError {
+    var errorDescription: String? { "Disk full" }
+  }
+
+  @Test func failedWriteGivesTheErrorMessage() {
+    let saveError = saveTrimmedToken("secret-token", account: "jira-api-token") { _, _ in throw DiskFullError() } delete: { _ in }
+    #expect(saveError == "Can’t save the token: Disk full")
+  }
+
+  @Test func failedKeychainWriteNamesTheReason() {
+    let saveError = saveTrimmedToken("secret-token", account: "jira-api-token") { _, _ in
+      throw KeychainError(status: errSecInteractionNotAllowed)
+    } delete: { _ in }
+    let prefix = "Can’t save the token: "
+    #expect(saveError?.hasPrefix(prefix) == true)
+    #expect((saveError?.count ?? 0) > prefix.count)
+    #expect(saveError?.contains("KeychainError") == false)
+  }
+}
+
+struct JiraSiteURLHintTests {
+  @Test(arguments: ["acme.atlassian.net", "http://acme.atlassian.net", "https://", " https://acme.atlassian.net"])
+  func urlWithoutHTTPSGivesTheHint(siteURL: String) {
+    #expect(jiraSiteURLHint(siteURL) == "Use the full URL, for example https://acme.atlassian.net")
+  }
+
+  @Test(arguments: ["https://acme.atlassian.net", ""])
+  func fullURLOrEmptyFieldGivesNoHint(siteURL: String) {
+    #expect(jiraSiteURLHint(siteURL) == nil)
   }
 }
