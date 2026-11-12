@@ -118,13 +118,37 @@ private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int 
     await configuredStore.refresh()
     let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, jira: nil, circleci: nil)
     store.loadCache()
-    #expect(store.jiraTickets != nil)
+    #expect(store.jiraTickets == nil)
     await store.refresh()
     #expect(store.jiraStatus == .failed(.notConfigured))
     #expect(store.circleciStatus == .failed(.notConfigured))
     #expect(store.jiraTickets == nil)
     #expect(store.pipelines == nil)
     #expect(store.circleciFetchedAt == nil)
+  }
+
+  @Test func loadCacheSkipsJiraCacheWithoutJiraSettings() throws {
+    let cacheDirectory = temporaryDirectory()
+    let cachedTicket = JiraTicket(
+      key: "PROJ-1", summary: "Old ticket", statusName: "In Progress", updatedAt: Date(),
+      url: URL(string: "https://acme.atlassian.net/browse/PROJ-1")!)
+    try SourceCache(directory: cacheDirectory).save(Cached(value: [cachedTicket], fetchedAt: Date()), name: "jira")
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, jira: nil)
+    store.loadCache()
+    #expect(store.jiraTickets == nil)
+    #expect(store.jiraFetchedAt == nil)
+  }
+
+  @Test func refreshWithoutJiraSettingsDeletesJiraCache() async throws {
+    let cacheDirectory = temporaryDirectory()
+    let configuredStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    await configuredStore.refresh()
+    let jiraCacheFile = cacheDirectory.appendingPathComponent("jira.json")
+    #expect(FileManager.default.fileExists(atPath: jiraCacheFile.path()))
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, jira: nil)
+    await store.refresh()
+    #expect(!FileManager.default.fileExists(atPath: jiraCacheFile.path()))
+    #expect(store.jiraFetchedAt == nil)
   }
 }
 
