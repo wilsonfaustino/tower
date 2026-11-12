@@ -53,7 +53,7 @@ struct QueueRowView: View {
             if let metaLead = item.metaLead {
               // Middle truncation, as Finder does for file names, keeps both ends of a long repo name.
               Text(metaLead).truncationMode(.middle)
-              Text("·").layoutPriority(1)
+              Text("·").layoutPriority(1).accessibilityHidden(true)
               Text(item.metaTail).layoutPriority(1)
             } else {
               Text(item.metaTail)
