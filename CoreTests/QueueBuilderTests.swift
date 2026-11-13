@@ -69,12 +69,12 @@ private func pipeline(
 
 private func queue(
   authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = [],
-  dismissedPipelines: Set<PipelineDismissal> = []
+  dismissedPipelines: Set<PipelineDismissal> = [], merged: [MergedPullRequest] = []
 ) -> [QueueSection] {
   buildQueue(
     QueueInput(
       viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
-      pipelines: pipelines, dismissedPipelines: dismissedPipelines),
+      pipelines: pipelines, dismissedPipelines: dismissedPipelines, mergedPullRequests: merged),
     now: now)
 }
 
@@ -323,6 +323,19 @@ struct QueueBuilderTests {
     let tidyItem = items(sections, .tidy).first
     #expect(tidyItem?.badge == Badge(text: "No reviewer", variant: .neutral))
     #expect(tidyItem?.symbol == .noReviewer)
+  }
+
+  @Test func ticketWithMergedPullRequestIsHidden() {
+    let mergedByBranch = MergedPullRequest(title: "fix(timeline): handle empty heatmap", headBranch: "p40-65563-heatmap")
+    #expect(items(queue(tickets: [ticket(key: "P40-65563")], merged: [mergedByBranch]), .tidy).isEmpty)
+    let mergedByTitle = MergedPullRequest(title: "P40-65563 handle empty heatmap", headBranch: "fix/heatmap")
+    #expect(items(queue(tickets: [ticket(key: "P40-65563")], merged: [mergedByTitle]), .tidy).isEmpty)
+  }
+
+  @Test func mergedPullRequestForAnotherTicketKeepsNoPR() {
+    let otherMerged = MergedPullRequest(title: "Other work", headBranch: "p40-11111-other")
+    let tidyItem = items(queue(tickets: [ticket(key: "P40-65563")], merged: [otherMerged]), .tidy).first
+    #expect(tidyItem?.badge == Badge(text: "No PR", variant: .neutral))
   }
 
   @Test func ticketWithOnlyDraftPullRequestIsHidden() {
