@@ -370,7 +370,7 @@ public enum StatusDot: CaseIterable, Sendable {
     switch self {
     case .failing: "failing"
     case .urgent: "needs you"
-    case .ready: "ready"
+    case .ready: "passing"
     case .pending: "pending"
     }
   }
@@ -382,7 +382,8 @@ extension QueueItem {
   public var statusDot: StatusDot {
     if !children.isEmpty {
       let childDots = children.map(\.statusDot)
-      return StatusDot.allCases.first { childDots.contains($0) } ?? .pending
+      let worstFirst: [StatusDot] = [.failing, .urgent, .pending, .ready]
+      return worstFirst.first { childDots.contains($0) } ?? .pending
     }
     switch badge?.variant {
     case .failing: return .failing

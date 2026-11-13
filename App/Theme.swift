@@ -31,6 +31,11 @@ enum Theme {
     static let popoverWidth: CGFloat = 280
     static let popoverPadding: CGFloat = 14
     static let popoverSpacing: CGFloat = 10
+    static let tagMaxWidth: CGFloat = 140
+    static let statusDotSize: CGFloat = 8
+    static let pendingRingWidth: CGFloat = 1.5
+    static let disclosureSize: CGFloat = 9
+    static let childIndent: CGFloat = 20
   }
 
   enum Fonts {
@@ -42,6 +47,8 @@ enum Theme {
     static let sectionCount = Font.subheadline.monospacedDigit()
     static let rowMeta = Font.subheadline.monospacedDigit()
     static let badge = Font.caption.weight(.semibold)
+    static let tag = Font.caption
+    static let legend = Font.caption
     static let popoverTitle = Font.body.weight(.semibold)
     static let popoverDiff = Font.title3.weight(.semibold).monospacedDigit()
   }
@@ -61,6 +68,14 @@ enum Theme {
     nsColor: dynamicColor(
       light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.10),
       highContrastLight: .black.withAlphaComponent(0.14), highContrastDark: .white.withAlphaComponent(0.20)))
+  static let cardFill = Color(
+    nsColor: dynamicColor(
+      light: .black.withAlphaComponent(0.04), dark: .white.withAlphaComponent(0.05),
+      highContrastLight: .black.withAlphaComponent(0.08), highContrastDark: .white.withAlphaComponent(0.10)))
+  static let cardStroke = Color(
+    nsColor: dynamicColor(
+      light: .black.withAlphaComponent(0.10), dark: .white.withAlphaComponent(0.10),
+      highContrastLight: .black.withAlphaComponent(0.45), highContrastDark: .white.withAlphaComponent(0.50)))
 
   // Selection matches menus: the system selection color, not the accent, so any accent keeps contrast.
   static let selectionFill = Color(nsColor: .selectedContentBackgroundColor)
@@ -97,16 +112,13 @@ enum Theme {
     }
   }
 
-  // System colors stay only as badge tints: 12% light, 18% dark.
-  static func badgeFill(_ variant: BadgeVariant) -> Color {
-    let systemColor: NSColor
-    switch variant {
-    case .failing: systemColor = .systemRed
-    case .urgent: systemColor = .systemOrange
-    case .ready: systemColor = .systemGreen
-    case .neutral: return neutralBadgeFill
+  static func dotColor(_ dot: StatusDot) -> Color {
+    switch dot {
+    case .failing: statusText(.failing)
+    case .urgent: statusText(.urgent)
+    case .ready: statusText(.ready)
+    case .pending: textSecondary
     }
-    return Color(nsColor: dynamicColor(light: systemColor.withAlphaComponent(0.12), dark: systemColor.withAlphaComponent(0.18)))
   }
 
   static func hex(_ value: Int) -> NSColor {

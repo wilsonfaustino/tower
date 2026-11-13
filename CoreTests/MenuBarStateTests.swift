@@ -51,3 +51,14 @@ struct MenuBarStateAccessibilityTests {
     #expect(MenuBarState.failing(count: 3).accessibilityLabel == "Tower, 3 items to fix")
   }
 }
+
+@Suite struct MenuBarGroupTests {
+  @Test func urgentChildInsideGroupCounts() {
+    let url = URL(string: "https://example.com")!
+    let child = QueueItem(
+      id: "c", title: "c", meta: "1h", url: url, symbol: .waiting, badge: Badge(text: "Changes requested", variant: .urgent),
+      sortDate: .distantPast)
+    let group = QueueItem(id: "g", title: "g", meta: "1h", url: url, symbol: .waiting, badge: nil, sortDate: .distantPast, children: [child])
+    #expect(MenuBarState(sections: [QueueSection(kind: .waiting, items: [group])]) == .urgent(count: 1))
+  }
+}

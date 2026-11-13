@@ -4,6 +4,7 @@ import SwiftUI
 struct QueueRowView: View {
   let item: QueueItem
   let isSelected: Bool
+  var isExpanded = false
   let open: () -> Void
   let showDetails: () -> Void
   let copyLink: () -> Void
@@ -12,7 +13,12 @@ struct QueueRowView: View {
 
   // PR rows and failed pipeline rows get a context menu; other rows keep their single action.
   var body: some View {
-    if item.details != nil {
+    if isGroup {
+      row
+        .contextMenu {
+          Button("Open in Browser", action: open)
+        }
+    } else if item.details != nil {
       row
         .contextMenu {
           Button("Show Details", action: showDetails).keyboardShortcut(.space, modifiers: [])
@@ -33,8 +39,17 @@ struct QueueRowView: View {
     }
   }
 
+  private var isGroup: Bool { !item.children.isEmpty }
+
   private var row: some View {
     HStack(spacing: Theme.Spacing.s) {
+      if isGroup {
+        Image(systemName: "chevron.right")
+          .font(.system(size: Theme.Metrics.disclosureSize, weight: .semibold))
+          .foregroundStyle(isSelected ? Theme.selectionText : Theme.textSecondary)
+          .rotationEffect(.degrees(isExpanded ? 90 : 0))
+          .accessibilityHidden(true)
+      }
       Image(systemName: item.symbol.rawValue)
         .font(.system(size: Theme.Metrics.symbolSize))
         .foregroundStyle(isSelected ? Theme.selectionText : symbolColor)
@@ -42,26 +57,23 @@ struct QueueRowView: View {
         // SF Symbol descriptions ("show", "divide") would mislead; the badge text carries the meaning.
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-        titleText
+        Text(item.title)
           .font(Theme.Fonts.rowTitle)
           .foregroundStyle(isSelected ? Theme.selectionText : Theme.textPrimary)
           .lineLimit(1)
           .truncationMode(.tail)
         HStack(spacing: 6) {
           // Stack spacing instead of spaces around the dot, which bidi moves in right-to-left.
+          // Priorities: number, author and age keep full width, then the tag, and the team gets what is left.
           HStack(spacing: Theme.Spacing.xs) {
             if let tag = item.tag {
-              // Priorities: author and age keep full width, then the repo, and the team gets what is left.
-              // Middle truncation, as Finder does for file names, keeps both ends of a long repo name.
-              Text(tag).truncationMode(.middle).layoutPriority(1)
-              Text("·").layoutPriority(2).accessibilityHidden(true)
-              Text(item.metaTail).layoutPriority(2)
-              if let metaTeam = item.metaTeam {
+              TagChipView(tag: tag, isSelected: isSelected).layoutPriority(1)
+            }
+            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
+              if index > 0 {
                 Text("·").layoutPriority(2).accessibilityHidden(true)
-                Text(metaTeam).truncationMode(.tail)
               }
-            } else {
-              Text(item.metaTail)
+              Text(part.text).truncationMode(.tail).layoutPriority(part.isTeam ? 0 : 2)
             }
           }
           .font(Theme.Fonts.rowMeta)
@@ -73,14 +85,15 @@ struct QueueRowView: View {
         }
       }
       Spacer(minLength: Theme.Spacing.s)
-      if let badge = item.badge {
-        BadgeView(badge: badge, isSelected: isSelected)
+      if let statusText = rowStatusText(for: item) {
+        StatusTextView(statusText: statusText, isSelected: isSelected)
       }
+      StatusDotView(dot: item.statusDot, isSelected: isSelected)
       // Always in the layout so hover does not change the row width or the title truncation.
       Image(systemName: "arrow.up.right")
         .font(.system(size: Theme.Metrics.openArrowSize))
         .foregroundStyle(Theme.textSecondary)
-        .opacity(isHovered && !isSelected ? 1 : 0)
+        .opacity(isHovered && !isSelected && !isGroup ? 1 : 0)
         .accessibilityHidden(true)
     }
     .padding(.horizontal, Theme.Metrics.rowInset)
@@ -89,14 +102,17 @@ struct QueueRowView: View {
     .contentShape(Rectangle())
     .onHover { isHovered = $0 }
     .onTapGesture(perform: open)
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(rowAccessibilityLabel(for: item))
+    .accessibilityValue(isGroup ? (isExpanded ? "expanded" : "collapsed") : "")
     .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
   }
 
-  private var titleText: Text {
-    guard let reference = item.reference else { return Text(item.title) }
-    let referenceColor = isSelected ? Theme.selectionText.opacity(0.85) : Theme.textSecondary
-    return Text("\(Text(reference).foregroundStyle(referenceColor)) \(item.title)")
+  private var metaParts: [(text: String, isTeam: Bool)] {
+    [(item.reference, false), (item.metaTail, false), (item.metaTeam, true)].compactMap { text, isTeam in
+      guard let text, !text.isEmpty else { return nil }
+      return (text, isTeam)
+    }
   }
 
   private var rowFill: Color {
@@ -110,19 +126,108 @@ struct QueueRowView: View {
   }
 }
 
-struct BadgeView: View {
-  let badge: Badge
+// VoiceOver reads the dot meaning, because color alone does not carry it.
+func rowAccessibilityLabel(for item: QueueItem) -> String {
+  let parts = [
+    item.title, item.reference, item.tag, item.metaTail, item.metaTeam, item.strip?.accessibilityPhrase,
+    rowStatusText(for: item)?.text,
+  ]
+  // Skips the phrase when the status text already names the dot, like "Draft · failing".
+  let statusText = rowStatusText(for: item)?.text ?? ""
+  let statusPhrase = statusText.hasSuffix(item.statusDot.legendLabel) ? nil : "status \(item.statusDot.legendLabel)"
+  return (parts + [statusPhrase]).compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+}
+
+struct RowStatusText: Equatable {
+  let text: String
+  // Nil keeps the badge color. Set when the text names the dot, so the words match the dot color.
+  let dot: StatusDot?
+  let badgeVariant: BadgeVariant
+}
+
+// A failing or urgent dot always has words next to it, so color is never the only signal.
+// "Draft" with failed checks reads "Draft · failing"; a group with an urgent child reads "needs you".
+func rowStatusText(for item: QueueItem) -> RowStatusText? {
+  let dot = item.statusDot
+  let dotNeedsWords = dot == .failing || dot == .urgent
+  guard let badge = item.badge else {
+    return dotNeedsWords ? RowStatusText(text: dot.legendLabel, dot: dot, badgeVariant: .neutral) : nil
+  }
+  let badgeNamesDot = (badge.variant == .failing && dot == .failing) || (badge.variant == .urgent && dot == .urgent)
+  guard dotNeedsWords, !badgeNamesDot else {
+    return RowStatusText(text: badge.text, dot: nil, badgeVariant: badge.variant)
+  }
+  return RowStatusText(text: "\(badge.text) · \(dot.legendLabel)", dot: dot, badgeVariant: badge.variant)
+}
+
+struct StatusTextView: View {
+  let statusText: RowStatusText
   let isSelected: Bool
 
   var body: some View {
-    Text(badge.text)
+    Text(statusText.text)
       .font(Theme.Fonts.badge)
       .monospacedDigit()
-      .foregroundStyle(isSelected ? Theme.selectionText : Theme.statusText(badge.variant))
-      .padding(.vertical, 2)
-      .padding(.horizontal, 7)
-      .background(isSelected ? Theme.selectionText.opacity(0.22) : Theme.badgeFill(badge.variant), in: Capsule())
+      .foregroundStyle(isSelected ? Theme.selectionText : textColor)
       .fixedSize()
+  }
+
+  private var textColor: Color {
+    statusText.dot.map(Theme.dotColor) ?? Theme.statusText(statusText.badgeVariant)
+  }
+}
+
+struct StatusDotView: View {
+  let dot: StatusDot
+  let isSelected: Bool
+
+  var body: some View {
+    let color = isSelected ? Theme.selectionText : Theme.dotColor(dot)
+    Group {
+      if dot == .pending {
+        Circle().strokeBorder(color, lineWidth: Theme.Metrics.pendingRingWidth)
+      } else {
+        Circle().fill(color)
+      }
+    }
+    .frame(width: Theme.Metrics.statusDotSize, height: Theme.Metrics.statusDotSize)
+    .accessibilityHidden(true)
+  }
+}
+
+struct TagChipView: View {
+  let tag: String
+  let isSelected: Bool
+
+  var body: some View {
+    // Middle truncation, as Finder does for file names, keeps both ends of a long repo name.
+    MaxWidthLayout(maxWidth: Theme.Metrics.tagMaxWidth) {
+      Text(tag).lineLimit(1).truncationMode(.middle)
+    }
+    .font(Theme.Fonts.tag)
+    .foregroundStyle(isSelected ? Theme.selectionText : Theme.textSecondary)
+    .padding(.horizontal, 5)
+    .padding(.vertical, 1)
+    .background(
+      isSelected ? Theme.selectionText.opacity(0.22) : Theme.neutralBadgeFill, in: RoundedRectangle(cornerRadius: 4))
+  }
+}
+
+// Caps the width proposed to its one subview and takes the subview size. A flexible frame would instead
+// grow to the max width whenever there is room, which leaves blank space after a short tag.
+struct MaxWidthLayout: Layout {
+  let maxWidth: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    subviews.first?.sizeThatFits(cappedProposal(proposal)) ?? .zero
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+  }
+
+  private func cappedProposal(_ proposal: ProposedViewSize) -> ProposedViewSize {
+    ProposedViewSize(width: min(proposal.width ?? maxWidth, maxWidth), height: proposal.height)
   }
 }
 
@@ -132,9 +237,6 @@ struct StatusStripView: View {
 
   var body: some View {
     HStack(spacing: 7) {
-      if let checks = strip.checks {
-        checksGlyph(checks)
-      }
       if let threads = strip.threads {
         HStack(spacing: Theme.Spacing.xxs) {
           Image(systemName: "bubble.left")
@@ -151,14 +253,6 @@ struct StatusStripView: View {
     .fixedSize()
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(strip.accessibilityPhrase)
-  }
-
-  private func checksGlyph(_ checks: StatusStrip.Checks) -> some View {
-    switch checks {
-    case .passed: Image(systemName: "checkmark.circle").foregroundStyle(glyphColor(Theme.statusText(.ready)))
-    case .failed: Image(systemName: "xmark.circle").foregroundStyle(glyphColor(Theme.statusText(.failing)))
-    case .running: Image(systemName: "circle.dashed").foregroundStyle(glyphColor(Theme.textSecondary))
-    }
   }
 
   private func approvalSlots(_ approvals: StatusStrip.Approvals) -> some View {
@@ -182,5 +276,23 @@ struct StatusStripView: View {
 
   private func glyphColor(_ color: Color) -> Color {
     isSelected ? Theme.selectionText : color
+  }
+}
+
+// Hidden from VoiceOver, because each row label already names its dot.
+struct StatusLegendView: View {
+  var body: some View {
+    HStack(spacing: Theme.Spacing.m) {
+      ForEach(StatusDot.allCases, id: \.self) { dot in
+        HStack(spacing: Theme.Spacing.xs) {
+          StatusDotView(dot: dot, isSelected: false)
+          Text(dot.legendLabel)
+        }
+      }
+    }
+    .font(Theme.Fonts.legend)
+    .foregroundStyle(Theme.textSecondary)
+    .frame(maxWidth: .infinity)
+    .accessibilityHidden(true)
   }
 }

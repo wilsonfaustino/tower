@@ -48,15 +48,13 @@ private let highContrastDark = NSColor(srgbRed: 1, green: 1, blue: 0, alpha: 1)
     #expect(resolved(color, in: .darkAqua) == dark)
   }
 
-  @Test func neutralUsesTheSecondaryTextAndNeutralFill() {
+  @Test func neutralUsesTheSecondaryText() {
     #expect(Theme.statusText(.neutral) == Theme.textSecondary)
-    #expect(Theme.badgeFill(.neutral) == Theme.neutralBadgeFill)
   }
 
   @Test(arguments: [BadgeVariant.failing, .urgent, .ready])
   func statusVariantsHaveTheirOwnColors(variant: BadgeVariant) {
     #expect(Theme.statusText(variant) != Theme.textSecondary)
-    #expect(Theme.badgeFill(variant) != Theme.neutralBadgeFill)
   }
 
   @Test(arguments: [BadgeVariant.failing, .ready])

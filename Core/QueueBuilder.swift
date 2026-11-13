@@ -53,7 +53,11 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   }
   let botPullRequestsByAuthor = Dictionary(grouping: openReviewRequests.filter(\.authorIsBot), by: \.author)
   for (botLogin, pullRequests) in botPullRequestsByAuthor {
-    itemsByKind[.review, default: []].append(botReviewItem(botLogin: botLogin, pullRequests: pullRequests, now: now))
+    itemsByKind[.review, default: []].append(
+      botReviewItem(botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin, now: now))
+  }
+  if let waitingItems = itemsByKind[.waiting] {
+    itemsByKind[.waiting] = groupedByTitlePrefix(waitingItems, now: now)
   }
 
   for ticket in input.jiraTickets {
@@ -153,20 +157,61 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     details: pullRequest.details)
 }
 
+private func gitHubPullsSearchURL(_ searchQuery: String) -> URL {
+  let urlSafeCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+  let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: urlSafeCharacters) ?? ""
+  return URL(string: "https://github.com/pulls?q=\(encodedQuery)")!
+}
+
 // Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.
-private func botReviewItem(botLogin: String, pullRequests: [PullRequest], now: Date) -> QueueItem {
+private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewerLogin: String, now: Date) -> QueueItem {
   let oldestRequest = pullRequests.map { $0.reviewRequestedAt ?? $0.updatedAt }.min() ?? now
   let repositoryCount = Set(pullRequests.map(\.repository)).count
   let displayName = botLogin.replacingOccurrences(of: "[bot]", with: "").capitalized
-  let searchQuery = "is:pr is:open review-requested:@me author:app/\(botLogin)"
-  let urlSafeCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
-  let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: urlSafeCharacters) ?? ""
+  let children = pullRequests.map { reviewItem($0, viewerLogin: viewerLogin, now: now) }.sorted { $0.sortDate < $1.sortDate }
   return QueueItem(
     id: "bots:\(botLogin)",
-    title: "\(pullRequests.count) \(displayName) \(pullRequests.count == 1 ? "PR" : "PRs")",
+    title: "\(pullRequests.count) \(displayName) \(pullRequests.count == 1 ? "PR" : "PRs")", tag: "bot",
     meta: "\(repositoryCount) \(repositoryCount == 1 ? "repo" : "repos") · \(shortAge(from: oldestRequest, now: now))",
-    url: URL(string: "https://github.com/pulls?q=\(encodedQuery)")!,
-    symbol: .review, badge: Badge(text: "Bot", variant: .neutral), sortDate: oldestRequest)
+    url: gitHubPullsSearchURL("is:pr is:open review-requested:@me author:app/\(botLogin)"),
+    symbol: .review, badge: nil, sortDate: oldestRequest, children: children)
+}
+
+// This many waiting PRs in one repo with the same title prefix (the text before the first ":") become one group row.
+private let minimumTitleGroupSize = 3
+
+private struct TitleGroupKey: Hashable {
+  var repository: String
+  var prefix: String
+}
+
+private func titleGroupKey(_ item: QueueItem) -> TitleGroupKey? {
+  guard let repository = item.tag, let colonIndex = item.title.firstIndex(of: ":") else { return nil }
+  let prefix = item.title[..<colonIndex].trimmingCharacters(in: .whitespaces)
+  return prefix.isEmpty ? nil : TitleGroupKey(repository: repository, prefix: prefix)
+}
+
+// Keeps the input order. A group takes the place of its first member.
+private func groupedByTitlePrefix(_ waitingItems: [QueueItem], now: Date) -> [QueueItem] {
+  let itemsByGroupKey = Dictionary(grouping: waitingItems, by: titleGroupKey)
+  var emittedGroupKeys: Set<TitleGroupKey> = []
+  return waitingItems.compactMap { item in
+    guard let groupKey = titleGroupKey(item), let members = itemsByGroupKey[groupKey],
+      members.count >= minimumTitleGroupSize
+    else { return item }
+    guard emittedGroupKeys.insert(groupKey).inserted else { return nil }
+    return titleGroupItem(groupKey, members: members, now: now)
+  }
+}
+
+// The group sorts where its oldest PR would, and its age is the newest PR's age.
+private func titleGroupItem(_ groupKey: TitleGroupKey, members: [QueueItem], now: Date) -> QueueItem {
+  let children = members.sorted { $0.sortDate < $1.sortDate }
+  return QueueItem(
+    id: "group:\(groupKey.repository):\(groupKey.prefix)", title: "\(groupKey.prefix) · \(children.count) PRs",
+    tag: groupKey.repository, meta: shortAge(from: children.last!.sortDate, now: now),
+    url: gitHubPullsSearchURL("is:pr is:open author:@me in:title \"\(groupKey.prefix)\""),
+    symbol: .waiting, badge: nil, sortDate: children.first!.sortDate, children: children)
 }
 
 private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest], now: Date) -> QueueItem? {
@@ -187,8 +232,8 @@ private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest],
     return nil
   }
   return QueueItem(
-    id: "jira:\(ticket.key)", title: ticket.summary,
-    meta: "\(ticket.key) · \(ticket.statusName) · \(shortAge(from: ticket.updatedAt, now: now))",
+    id: "jira:\(ticket.key)", title: ticket.summary, tag: ticket.key,
+    meta: "\(ticket.statusName) · \(shortAge(from: ticket.updatedAt, now: now))",
     url: ticket.url, symbol: symbol, badge: Badge(text: badgeText, variant: .neutral), sortDate: ticket.updatedAt)
 }
 
@@ -212,7 +257,7 @@ private func pipelineItem(
 ) -> QueueItem {
   let repository = pipeline.projectSlug.split(separator: "/").last.map(String.init) ?? pipeline.projectSlug
   return QueueItem(
-    id: pipeline.itemId, title: "\(repository) \(pipeline.ref)",
+    id: pipeline.itemId, title: pipeline.ref, tag: repository,
     meta: "#\(pipeline.number) · \(pipeline.refIsTag ? "tag" : "branch") · \(shortAge(from: pipeline.createdAt, now: now))",
     url: pipeline.url, symbol: symbol, badge: badge, sortDate: pipeline.createdAt, dismissal: dismissal)
 }

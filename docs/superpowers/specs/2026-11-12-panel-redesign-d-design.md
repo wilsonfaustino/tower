@@ -14,7 +14,10 @@ The panel scrolls even when only a few items need the owner. Long repo names tru
 - Row: symbol, title (full width, no PR number), then a meta line that starts with a **tag chip** (repo, Jira key, or "bot") followed by `#number · author · age · team`.
 - The capsule badge becomes **short text plus a status dot** on the right. The dot is `QueueItem.statusDot`. The text is the badge text. Color is never the only signal: the text and the VoiceOver label carry the meaning.
 - The status strip keeps threads and approvals. The checks glyph goes away, because the dot shows the checks.
-- A **legend** under the list: failing, needs you, ready, pending.
+- A **legend** at the bottom of the panel: failing, needs you, passing, pending.
+- A failing or urgent dot always has words next to it: the badge text, or the dot meaning (`Draft · failing`, `needs you` on a group).
+- Pinned Watch rows put on-hold pipelines first, so one never hides behind "+N more".
+- Group rows: click toggles; Cmd-click and the context menu "Open in Browser" open the group search.
 - **Outline groups**: a row with `children` expands in place, with a disclosure chevron. The child rows are indented. Groups are collapsed by default.
   - The Dependabot or Renovate row (one per bot) gets the bot PRs as children.
   - Waiting: 3 or more PRs in the same repo with the same title prefix (the text before the first ":", for example `chore(feature-flags)`) become one group.
@@ -33,7 +36,7 @@ The panel scrolls even when only a few items need the owner. Long repo names tru
 - On a group row: Right expands, Left collapses, Return and click toggle. On a child row, Left moves the selection to its group.
 - Switching tabs clears the selection.
 - Empty Needs you tab: the existing "Clear skies" state inside the tab. Empty Waiting tab: "Nothing waiting on others."
-- Banners and the offline and failed states stay above the tabs, as today.
+- Banners sit at the top of the tab content, under the tab control, so they show on both tabs. The offline and failed states replace the tab content, as today.
 
 ## Approaches considered
 
@@ -47,6 +50,9 @@ The panel scrolls even when only a few items need the owner. Long repo names tru
 - The group title is the shared title prefix plus the count, for example `chore(feature-flags) · 4 PRs`. The group URL is a GitHub search for the viewer's open PRs with that prefix in the title.
 - Pipeline rows: title is the ref (`main`), tag is the repo.
 - Jira rows: tag is the key; the meta line is `status · age`.
+- The bot row drops its "Bot" badge, because the tag already says "bot".
+- A group dot is the worst child dot, with pending above passing.
+- Known gap: the title group search covers all repos, because PR data has no repo owner for a `repo:` filter.
 
 ## Shared Core API (already on the branch)
 

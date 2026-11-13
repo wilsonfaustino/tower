@@ -8,12 +8,19 @@ struct PanelView: View {
   let openSettings: () -> Void
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
+  @State private var selectedTab = PanelTab.needsYou
+  @State private var expandedItemIds: Set<String> = []
   @State private var contentHeight: CGFloat = 0
+  @State private var pinnedHeight: CGFloat = 0
+  @State private var tabPickerHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
 
   var body: some View {
     VStack(spacing: 0) {
       header
+      if showsTabs {
+        tabPicker.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tabPickerHeight = $0 }
+      }
       Divider()
       ScrollViewReader { proxy in
         ScrollView {
@@ -21,7 +28,9 @@ struct PanelView: View {
             .padding(Theme.Spacing.s)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
-        .frame(height: min(max(contentHeight, 1), Theme.Metrics.panelMaxHeight))
+        // The tabs, pinned rows and legend share the max height, so the whole panel keeps its cap.
+        .frame(
+          height: min(max(contentHeight, 1), max(Theme.Metrics.panelMaxHeight - tabPickerHeight - pinnedHeight, 1)))
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
         }
@@ -30,8 +39,17 @@ struct PanelView: View {
           if newValue == nil { isListFocused = true }
         }
       }
+      if showsTabs {
+        pinnedContent
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pinnedHeight = $0 }
+      }
     }
     .frame(width: Theme.Metrics.panelWidth)
+    .onChange(of: selectedTab) {
+      selectedItemId = nil
+      popoverItemId = nil
+      isListFocused = true
+    }
     .focusable()
     .focusEffectDisabled()
     .focused($isListFocused)
@@ -43,8 +61,15 @@ struct PanelView: View {
     .onKeyPress(.downArrow) { handle(.downArrow) }
     .onKeyPress(.upArrow) { handle(.upArrow) }
     .onKeyPress(.return) {
-      guard let item = allItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
-      open(item)
+      guard let item = selectableItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
+      activate(item)
+      return .handled
+    }
+    .onKeyPress(.rightArrow) { handleDisclosure(.right) }
+    .onKeyPress(.leftArrow) { handleDisclosure(.left) }
+    .onKeyPress(keys: ["1", "2"]) { press in
+      guard press.modifiers.contains(.command), showsTabs else { return .ignored }
+      selectedTab = press.characters == "1" ? .needsYou : .waiting
       return .handled
     }
     .onKeyPress(.space) { handle(.space) }
@@ -88,6 +113,63 @@ struct PanelView: View {
     .padding(.vertical, Theme.Spacing.m)
   }
 
+  private var tabPicker: some View {
+    Picker("Tab", selection: $selectedTab) {
+      ForEach(PanelTab.allCases, id: \.self) { tab in
+        Text("\(tab.title) \(tabItemCount(in: store.sections, tab: tab))").tag(tab)
+      }
+    }
+    .pickerStyle(.segmented)
+    .labelsHidden()
+    .padding(.horizontal, Theme.Spacing.l)
+    .padding(.bottom, Theme.Spacing.s)
+  }
+
+  @ViewBuilder private var tabContent: some View {
+    let tabSections = sections(store.sections, in: selectedTab)
+    if tabSections.isEmpty {
+      switch selectedTab {
+      case .needsYou:
+        StateMessageView(
+          symbol: "checkmark.seal", title: "Clear skies", message: "Nothing needs you right now.",
+          footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
+      case .waiting:
+        StateMessageView(symbol: "hourglass", title: "Nothing waiting", message: "Nothing waiting on others.")
+      }
+    } else {
+      ForEach(tabSections) { section in
+        sectionView(section)
+      }
+    }
+  }
+
+  // Watch rows sit below the scroll view on both tabs, so running pipelines stay in sight.
+  private var pinnedContent: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+      if let watchSection = store.sections.first(where: { $0.kind == .watch }) {
+        sectionView(watchSection, visibleItemLimit: pinnedWatchRowLimit)
+      }
+      if !selectableItems.isEmpty {
+        StatusLegendView()
+      }
+    }
+    .padding(.horizontal, Theme.Spacing.s)
+    .padding(.bottom, Theme.Spacing.s)
+  }
+
+  private func sectionView(_ section: QueueSection, visibleItemLimit: Int = .max) -> some View {
+    QueueSectionView(
+      section: section, selectedItemId: selectedItemId, expandedItemIds: expandedItemIds,
+      visibleItemLimit: visibleItemLimit, popoverItemId: $popoverItemId, open: activate, showDetails: showDetails,
+      copyLink: { writeLink($0.url, to: .general) }, dismiss: store.dismiss, handlePopoverInput: handle)
+  }
+
+  private var panelState: PanelContent {
+    panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty)
+  }
+
+  private var showsTabs: Bool { panelState == .queue || panelState == .empty }
+
   @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
       if store.githubStatus == .failed(.authentication) {
@@ -110,18 +192,9 @@ struct PanelView: View {
             actionTitle: "Open Settings", reconnect: showSettings)
         }
       }
-      switch panelContent(sources: store.panelSources, hasItems: !store.sections.isEmpty) {
-      case .queue:
-        ForEach(store.sections) { section in
-          QueueSectionView(
-            section: section, selectedItemId: selectedItemId, popoverItemId: $popoverItemId, open: open,
-            showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: store.dismiss,
-            handlePopoverInput: handle)
-        }
-      case .empty:
-        StateMessageView(
-          symbol: "checkmark.seal", title: "Clear skies", message: "Nothing needs you right now.",
-          footnote: store.todaySummary.map { todaySummaryText(reviews: $0.reviews, merges: $0.merges) })
+      switch panelState {
+      case .queue, .empty:
+        tabContent
       case .offline:
         StateMessageView(
           symbol: "wifi.slash",
@@ -151,16 +224,35 @@ struct PanelView: View {
     panelSubtitle(sources: store.panelSources, now: now)
   }
 
-  private var allItems: [QueueItem] { store.sections.flatMap(\.items) }
+  private var selectableItems: [QueueItem] {
+    guard showsTabs else { return [] }
+    return selectableRows(in: store.sections, tab: selectedTab, expandedItemIds: expandedItemIds)
+  }
 
   private func moveSelection(by offset: Int) -> KeyPress.Result {
-    guard let nextItemId = nextSelectedItemId(in: allItems, after: selectedItemId, offset: offset) else { return .ignored }
+    guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, offset: offset) else {
+      return .ignored
+    }
     selectedItemId = nextItemId
     return .handled
   }
 
+  private func handleDisclosure(_ direction: DisclosureDirection) -> KeyPress.Result {
+    let outcome = disclosureOutcome(
+      for: direction, selectedItemId: selectedItemId, in: sections(store.sections, in: selectedTab),
+      expandedItemIds: expandedItemIds)
+    switch outcome {
+    case .expand(let groupId): expandedItemIds.insert(groupId)
+    case .collapse(let groupId): expandedItemIds.remove(groupId)
+    case .selectGroup(let groupId): selectedItemId = groupId
+    case .ignore: return .ignored
+    }
+    popoverItemId = nil
+    return .handled
+  }
+
   private func handle(_ input: PanelInput) -> KeyPress.Result {
-    let selectedItem = allItems.first(where: { $0.id == selectedItemId })
+    let selectedItem = selectableItems.first(where: { $0.id == selectedItemId })
     let action = panelAction(
       for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil,
       selectedItemIsDismissible: selectedItem?.dismissal != nil)
@@ -175,6 +267,17 @@ struct PanelView: View {
   private func showDetails(_ item: QueueItem) {
     selectedItemId = item.id
     popoverItemId = item.id
+  }
+
+  // Click and Return toggle a group row and open any other row. Cmd-click opens a group's search.
+  private func activate(_ item: QueueItem) {
+    guard !item.children.isEmpty, !NSEvent.modifierFlags.contains(.command) else { return open(item) }
+    selectedItemId = item.id
+    if expandedItemIds.contains(item.id) {
+      expandedItemIds.remove(item.id)
+    } else {
+      expandedItemIds.insert(item.id)
+    }
   }
 
   private func open(_ item: QueueItem) {
@@ -239,6 +342,62 @@ func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, of
     nextIndex = offset > 0 ? 0 : items.count - 1
   }
   return items[nextIndex].id
+}
+
+// A group counts as its children, so the label matches the rows the owner can expand to.
+func tabItemCount(in sections: [QueueSection], tab: PanelTab) -> Int {
+  Core.sections(sections, in: tab).reduce(0) { $0 + rowCount(of: $1) }
+}
+
+func rowCount(of section: QueueSection) -> Int {
+  section.items.reduce(0) { $0 + max($1.children.count, 1) }
+}
+
+let pinnedWatchRowLimit = 2
+
+func pinnedWatchRows(in sections: [QueueSection]) -> [QueueItem] {
+  let watchItems = sections.first { $0.kind == .watch }?.items ?? []
+  let urgentFirst = watchItems.filter { $0.statusDot == .urgent } + watchItems.filter { $0.statusDot != .urgent }
+  return Array(urgentFirst.prefix(pinnedWatchRowLimit))
+}
+
+func visibleRows(in sections: [QueueSection], expandedItemIds: Set<String>) -> [QueueItem] {
+  sections.flatMap(\.items).flatMap { item in
+    [item] + (expandedItemIds.contains(item.id) ? item.children : [])
+  }
+}
+
+// Up and Down go through the tab rows, then the pinned Watch rows.
+func selectableRows(in sections: [QueueSection], tab: PanelTab, expandedItemIds: Set<String>) -> [QueueItem] {
+  visibleRows(in: Core.sections(sections, in: tab), expandedItemIds: expandedItemIds) + pinnedWatchRows(in: sections)
+}
+
+enum DisclosureDirection: Sendable {
+  case left, right
+}
+
+enum DisclosureOutcome: Equatable, Sendable {
+  case expand(String), collapse(String), selectGroup(String), ignore
+}
+
+func disclosureOutcome(
+  for direction: DisclosureDirection, selectedItemId: String?, in sections: [QueueSection],
+  expandedItemIds: Set<String>
+) -> DisclosureOutcome {
+  guard let selectedItemId else { return .ignore }
+  for item in sections.flatMap(\.items) where !item.children.isEmpty {
+    let isExpanded = expandedItemIds.contains(item.id)
+    if item.id == selectedItemId {
+      switch direction {
+      case .right: return isExpanded ? .ignore : .expand(item.id)
+      case .left: return isExpanded ? .collapse(item.id) : .ignore
+      }
+    }
+    if isExpanded, item.children.contains(where: { $0.id == selectedItemId }) {
+      return direction == .left ? .selectGroup(item.id) : .ignore
+    }
+  }
+  return .ignore
 }
 
 enum PanelInput: Sendable {
