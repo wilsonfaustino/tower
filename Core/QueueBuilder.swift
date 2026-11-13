@@ -104,7 +104,7 @@ extension PullRequest {
 private func authoredItem(_ pullRequest: PullRequest, symbol: RowSymbol, badge: Badge?, now: Date) -> QueueItem {
   QueueItem(
     id: pullRequest.itemId, title: pullRequest.title,
-    metaLead: pullRequest.repository, meta: shortAge(from: pullRequest.updatedAt, now: now),
+    tag: pullRequest.repository, meta: shortAge(from: pullRequest.updatedAt, now: now),
     url: pullRequest.url, symbol: symbol, badge: badge, sortDate: pullRequest.updatedAt,
     strip: statusStrip(pullRequest), reference: "#\(pullRequest.number)", details: pullRequest.details)
 }
@@ -147,7 +147,7 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     : nil
   let teamSlug = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first
   return QueueItem(
-    id: pullRequest.itemId, title: pullRequest.title, metaLead: pullRequest.repository,
+    id: pullRequest.itemId, title: pullRequest.title, tag: pullRequest.repository,
     meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamSlug.map { "team \($0)" },
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
     details: pullRequest.details)

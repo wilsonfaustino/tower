@@ -256,10 +256,10 @@ struct QueueBuilderTests {
       reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
     let authoredItem = items(sections, .waiting).first
     let reviewItem = items(sections, .review).first
-    #expect(authoredItem?.metaLead == "app-api")
+    #expect(authoredItem?.tag == "app-api")
     #expect(authoredItem?.metaTail == "3h")
     #expect(authoredItem?.metaTeam == nil)
-    #expect(reviewItem?.metaLead == "app-web")
+    #expect(reviewItem?.tag == "app-web")
     #expect(reviewItem?.metaTail == "Ana · 1d")
     #expect(reviewItem?.metaTeam == "team web-core")
   }
@@ -268,7 +268,7 @@ struct QueueBuilderTests {
     let sections = queue(reviewRequests: [
       pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
     ])
-    #expect(items(sections, .review).first?.metaLead == nil)
+    #expect(items(sections, .review).first?.tag == nil)
     #expect(items(sections, .review).first?.metaTail == "1 repo · 2h")
   }
 

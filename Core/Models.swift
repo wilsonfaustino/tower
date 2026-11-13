@@ -282,8 +282,8 @@ public struct PullRequestDetails: Equatable, Sendable {
 public struct QueueItem: Identifiable, Equatable, Sendable {
   public var id: String
   public var title: String
-  // The repo on PR rows. The row truncates it in the middle, so metaTail (author, age) stays visible.
-  public var metaLead: String?
+  // The short source label shown as a tag before the meta line: the repo, a Jira key, or "bot".
+  public var tag: String?
   public var metaTail: String
   // The team on team review requests. Shown last and truncated first, so a long slug does not hide the repo.
   public var metaTeam: String?
@@ -298,16 +298,18 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var details: PullRequestDetails?
   // Set only on failed pipeline rows, the rows the owner can dismiss.
   public var dismissal: PipelineDismissal?
+  // Non-empty on a group row (bot PRs, PRs with the same title prefix). The panel expands it in place.
+  public var children: [QueueItem]
 
   public init(
-    id: String, title: String, metaLead: String? = nil, meta: String, metaTeam: String? = nil, url: URL,
+    id: String, title: String, tag: String? = nil, meta: String, metaTeam: String? = nil, url: URL,
     symbol: RowSymbol, badge: Badge?,
     sortDate: Date, strip: StatusStrip? = nil, reference: String? = nil, details: PullRequestDetails? = nil,
-    dismissal: PipelineDismissal? = nil
+    dismissal: PipelineDismissal? = nil, children: [QueueItem] = []
   ) {
     self.id = id
     self.title = title
-    self.metaLead = metaLead
+    self.tag = tag
     self.metaTail = meta
     self.metaTeam = metaTeam
     self.url = url
@@ -318,10 +320,11 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
     self.reference = reference
     self.details = details
     self.dismissal = dismissal
+    self.children = children
   }
 
   public var meta: String {
-    [metaLead, metaTail, metaTeam].compactMap { $0 }.joined(separator: " · ")
+    [tag, metaTail, metaTeam].compactMap { $0 }.joined(separator: " · ")
   }
 }
 
@@ -333,5 +336,64 @@ public struct QueueSection: Identifiable, Equatable, Sendable {
   public init(kind: SectionKind, items: [QueueItem]) {
     self.kind = kind
     self.items = items
+  }
+}
+
+// The panel tabs. Watch rows are not in a tab: the panel pins them below both tabs.
+public enum PanelTab: String, CaseIterable, Sendable {
+  case needsYou, waiting
+
+  public var title: String {
+    switch self {
+    case .needsYou: "Needs you"
+    case .waiting: "Waiting"
+    }
+  }
+
+  public var sectionKinds: [SectionKind] {
+    switch self {
+    case .needsYou: [.fix, .review, .merge, .tidy]
+    case .waiting: [.waiting]
+    }
+  }
+}
+
+public func sections(_ sections: [QueueSection], in tab: PanelTab) -> [QueueSection] {
+  sections.filter { tab.sectionKinds.contains($0.kind) }
+}
+
+// The row status dot. The legend under the list names each case.
+public enum StatusDot: CaseIterable, Sendable {
+  case failing, urgent, ready, pending
+
+  public var legendLabel: String {
+    switch self {
+    case .failing: "failing"
+    case .urgent: "needs you"
+    case .ready: "ready"
+    case .pending: "pending"
+    }
+  }
+}
+
+extension QueueItem {
+  // A failing, urgent or ready badge sets the dot. Otherwise the checks set it, so a draft with failed checks is red.
+  // A group row takes the worst dot of its children.
+  public var statusDot: StatusDot {
+    if !children.isEmpty {
+      let childDots = children.map(\.statusDot)
+      return StatusDot.allCases.first { childDots.contains($0) } ?? .pending
+    }
+    switch badge?.variant {
+    case .failing: return .failing
+    case .urgent: return .urgent
+    case .ready: return .ready
+    case .neutral, nil: break
+    }
+    switch strip?.checks {
+    case .passed: return .ready
+    case .failed: return .failing
+    case .running, nil: return .pending
+    }
   }
 }
