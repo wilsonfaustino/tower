@@ -224,7 +224,8 @@ enum DismissedPipelinesKeys {
       authoredPullRequests: githubSnapshot?.authoredPullRequests ?? [],
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
       jiraTickets: jiraTickets ?? [],
-      pipelines: pipelines ?? [], dismissedPipelines: dismissedPipelines)
+      pipelines: pipelines ?? [], dismissedPipelines: dismissedPipelines,
+      mergedPullRequests: githubSnapshot?.recentlyMergedPullRequests ?? [])
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }

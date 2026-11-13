@@ -7,10 +7,11 @@ public struct QueueInput: Sendable {
   public var jiraTickets: [JiraTicket]
   public var pipelines: [Pipeline]
   public var dismissedPipelines: Set<PipelineDismissal>
+  public var mergedPullRequests: [MergedPullRequest]
 
   public init(
     viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
-    pipelines: [Pipeline], dismissedPipelines: Set<PipelineDismissal> = []
+    pipelines: [Pipeline], dismissedPipelines: Set<PipelineDismissal> = [], mergedPullRequests: [MergedPullRequest] = []
   ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
@@ -18,6 +19,7 @@ public struct QueueInput: Sendable {
     self.jiraTickets = jiraTickets
     self.pipelines = pipelines
     self.dismissedPipelines = dismissedPipelines
+    self.mergedPullRequests = mergedPullRequests
   }
 }
 
@@ -57,7 +59,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   }
 
   for ticket in input.jiraTickets {
-    if let item = tidyItem(ticket, authoredPullRequests: input.authoredPullRequests, now: now) {
+    if let item = tidyItem(
+      ticket, authoredPullRequests: input.authoredPullRequests, mergedPullRequests: input.mergedPullRequests, now: now)
+    {
       itemsByKind[.tidy, default: []].append(item)
     }
   }
@@ -169,7 +173,14 @@ private func botReviewItem(botLogin: String, pullRequests: [PullRequest], now: D
     symbol: .review, badge: Badge(text: "Bot", variant: .neutral), sortDate: oldestRequest)
 }
 
-private func tidyItem(_ ticket: JiraTicket, authoredPullRequests: [PullRequest], now: Date) -> QueueItem? {
+private func tidyItem(
+  _ ticket: JiraTicket, authoredPullRequests: [PullRequest], mergedPullRequests: [MergedPullRequest], now: Date
+) -> QueueItem? {
+  // A merged PR means the code is done and the ticket waits for a deploy or a status change, not for the owner.
+  let hasMergedPullRequest = mergedPullRequests.contains {
+    ticketKey(ticket.key, matches: $0.title) || ticketKey(ticket.key, matches: $0.headBranch)
+  }
+  if hasMergedPullRequest { return nil }
   let matchedPullRequests = authoredPullRequests.filter {
     ticketKey(ticket.key, matches: $0.title) || ticketKey(ticket.key, matches: $0.headBranch)
   }

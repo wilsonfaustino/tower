@@ -82,6 +82,17 @@ public struct PullRequest: Codable, Sendable, Equatable {
   }
 }
 
+// A PR merged in the last 30 days. Tidy reads it, so a ticket whose PR already merged is not "No PR".
+public struct MergedPullRequest: Codable, Sendable, Equatable {
+  public var title: String
+  public var headBranch: String
+
+  public init(title: String, headBranch: String) {
+    self.title = title
+    self.headBranch = headBranch
+  }
+}
+
 public struct JiraTicket: Codable, Sendable, Equatable {
   public var key: String
   public var summary: String
