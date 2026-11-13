@@ -43,13 +43,19 @@ public struct GitHubSnapshot: Codable, Sendable, Equatable {
   public var reviewRequests: [PullRequest]
   public var reviewsSubmittedToday: Int
   public var mergedToday: Int
+  // Optional so a snapshot cached before this field existed still decodes.
+  public var recentlyMergedPullRequests: [MergedPullRequest]?
 
-  public init(viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], reviewsSubmittedToday: Int, mergedToday: Int) {
+  public init(
+    viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], reviewsSubmittedToday: Int,
+    mergedToday: Int, recentlyMergedPullRequests: [MergedPullRequest]? = []
+  ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
     self.reviewRequests = reviewRequests
     self.reviewsSubmittedToday = reviewsSubmittedToday
     self.mergedToday = mergedToday
+    self.recentlyMergedPullRequests = recentlyMergedPullRequests
   }
 }
 
@@ -76,11 +82,14 @@ public struct GitHubClient: Sendable {
     let token = try await tokenProvider.token()
     // GitHub reads a bare date as UTC, so send the local start of day with its offset.
     let today = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: now))
+    let recentlyMergedStart = Calendar.current.date(byAdding: .day, value: -recentlyMergedDays, to: now) ?? now
+    let recentlyMergedSince = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: recentlyMergedStart))
     let variables = [
       "authoredQuery": "is:pr is:open author:@me archived:false\(ownerQualifiers)",
       "requestedQuery": "is:pr is:open review-requested:@me archived:false\(ownerQualifiers)",
       "reviewedQuery": "is:pr reviewed-by:@me -author:@me updated:>=\(today)\(ownerQualifiers)",
       "mergedQuery": "is:pr author:@me merged:>=\(today)\(ownerQualifiers)",
+      "recentlyMergedQuery": "is:pr author:@me is:merged merged:>=\(recentlyMergedSince) sort:updated-desc\(ownerQualifiers)",
     ]
     var request = URLRequest(url: Self.endpoint)
     request.httpMethod = "POST"
@@ -104,7 +113,8 @@ public struct GitHubClient: Sendable {
       authoredPullRequests: payload.authored.nodes.compactMap { $0?.pullRequest },
       reviewRequests: payload.requested.nodes.compactMap { $0?.pullRequest },
       reviewsSubmittedToday: payload.reviewed.issueCount,
-      mergedToday: payload.merged.issueCount)
+      mergedToday: payload.merged.issueCount,
+      recentlyMergedPullRequests: (payload.recentlyMerged?.nodes ?? []).compactMap { $0?.mergedPullRequest })
   }
 
   private static let timestampFormatter: DateFormatter = {
@@ -126,13 +136,21 @@ public struct GitHubClient: Sendable {
 // The strip counts unresolved threads on the newest page only and does not page further.
 private let reviewThreadPageSize = 50
 
+// How far back a merged PR still counts as a ticket's PR. A ticket usually waits days, not months, for a deploy.
+// The search reads one page of 100, newest first, so a busy month drops only the oldest merges.
+private let recentlyMergedDays = 30
+
 private let searchQuery = """
-  query($authoredQuery: String!, $requestedQuery: String!, $reviewedQuery: String!, $mergedQuery: String!) {
+  query($authoredQuery: String!, $requestedQuery: String!, $reviewedQuery: String!, $mergedQuery: String!,
+    $recentlyMergedQuery: String!) {
     viewer { login }
     authored: search(type: ISSUE, query: $authoredQuery, first: 50) { nodes { ...AuthoredPullRequestFields } }
     requested: search(type: ISSUE, query: $requestedQuery, first: 50) { nodes { ...PullRequestFields } }
     reviewed: search(type: ISSUE, query: $reviewedQuery, first: 1) { issueCount }
     merged: search(type: ISSUE, query: $mergedQuery, first: 1) { issueCount }
+    recentlyMerged: search(type: ISSUE, query: $recentlyMergedQuery, first: 100) {
+      nodes { ... on PullRequest { title headRefName } }
+    }
   }
   fragment PullRequestFields on PullRequest {
     number title url isDraft updatedAt headRefName additions deletions reviewDecision
@@ -161,14 +179,28 @@ private struct GraphQLResponse: Decodable {
     var requested: Search
     var reviewed: Count
     var merged: Count
+    // Optional so a response without this search, like the test fixtures for other fields, still decodes.
+    var recentlyMerged: MergedSearch?
   }
   struct Viewer: Decodable { var login: String }
   // A node GitHub cannot return (for example a PR behind SAML) comes back as null next to an errors entry.
   struct Search: Decodable { var nodes: [PullRequestNode?] }
   struct Count: Decodable { var issueCount: Int }
+  struct MergedSearch: Decodable { var nodes: [MergedNode?] }
 
   var data: Payload?
   var errors: [ErrorMessage]?
+}
+
+// Search can return non-PR nodes as empty objects, so both fields are optional.
+private struct MergedNode: Decodable {
+  var title: String?
+  var headRefName: String?
+
+  var mergedPullRequest: MergedPullRequest? {
+    guard let title else { return nil }
+    return MergedPullRequest(title: title, headBranch: headRefName ?? "")
+  }
 }
 
 private struct StateCount: Decodable {

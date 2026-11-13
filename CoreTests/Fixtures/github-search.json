@@ -389,6 +389,7 @@
     },
     "merged": {
       "issueCount": 2
-    }
+    },
+    "recentlyMerged": { "nodes": [{ "title": "Handle empty heatmap responses", "headRefName": "proj-1500-heatmap" }, {}] }
   }
 }

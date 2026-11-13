@@ -79,6 +79,22 @@ struct GitHubClientTests {
     #expect(variables["requestedQuery"] == "is:pr is:open review-requested:@me archived:false")
     #expect(variables["mergedQuery"] == "is:pr author:@me merged:>=\(today)")
     #expect(variables["reviewedQuery"] == "is:pr reviewed-by:@me -author:@me updated:>=\(today)")
+    let monthAgo = localStartOfDayTimestamp(Calendar.current.date(byAdding: .day, value: -30, to: now)!)
+    #expect(variables["recentlyMergedQuery"] == "is:pr author:@me is:merged merged:>=\(monthAgo) sort:updated-desc")
+  }
+
+  @Test func decodesRecentlyMergedPullRequests() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let snapshot = try await client(transport: StubTransport { _ in (fixtureData, 200) }).fetch(now: now)
+    #expect(snapshot.recentlyMergedPullRequests == [
+      MergedPullRequest(title: "Handle empty heatmap responses", headBranch: "proj-1500-heatmap")
+    ])
+  }
+
+  @Test func cachedSnapshotWithoutMergedPullRequestsStillDecodes() throws {
+    let oldCache = #"{"viewerLogin":"me","authoredPullRequests":[],"reviewRequests":[],"reviewsSubmittedToday":0,"mergedToday":0}"#
+    let snapshot = try JSONDecoder().decode(GitHubSnapshot.self, from: Data(oldCache.utf8))
+    #expect(snapshot.recentlyMergedPullRequests == nil)
   }
 
   @Test func onlyAuthoredSearchAsksForStripFields() async throws {
