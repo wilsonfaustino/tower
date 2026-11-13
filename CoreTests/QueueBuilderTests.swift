@@ -227,11 +227,16 @@ struct QueueBuilderTests {
     #expect(reviewItems.count == 2)
     let botItem = try #require(reviewItems.first { $0.id == "bots:dependabot" })
     #expect(botItem.title == "3 Dependabot PRs")
-    #expect(botItem.meta == "2 repos · 3d")
+    #expect(botItem.tag == "bot")
+    #expect(botItem.metaTail == "2 repos · 3d")
     #expect(botItem.reference == nil)
-    #expect(botItem.badge == Badge(text: "Bot", variant: .neutral))
+    #expect(botItem.badge == nil)
     #expect(botItem.url == URL(string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20review-requested%3A%40me%20author%3Aapp%2Fdependabot"))
     #expect(botItem.symbol == .review)
+    #expect(botItem.children.map(\.id) == ["pr:api-notifier#7", "pr:api-config#9", "pr:api-config#8"])
+    #expect(botItem.children.first?.tag == "api-notifier")
+    #expect(botItem.children.first?.reference == "#7")
+    #expect(botItem.children.first?.metaTail == "dependabot · 3d")
   }
 
   @Test func singleBotReviewRequestUsesSingular() {
@@ -239,7 +244,7 @@ struct QueueBuilderTests {
       pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
     ])
     #expect(items(sections, .review).first?.title == "1 Renovate PR")
-    #expect(items(sections, .review).first?.meta == "1 repo · 2h")
+    #expect(items(sections, .review).first?.metaTail == "1 repo · 2h")
   }
 
   @Test func teamReviewRequestShowsTeamInMeta() {
@@ -256,10 +261,10 @@ struct QueueBuilderTests {
       reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
     let authoredItem = items(sections, .waiting).first
     let reviewItem = items(sections, .review).first
-    #expect(authoredItem?.metaLead == "app-api")
+    #expect(authoredItem?.tag == "app-api")
     #expect(authoredItem?.metaTail == "3h")
     #expect(authoredItem?.metaTeam == nil)
-    #expect(reviewItem?.metaLead == "app-web")
+    #expect(reviewItem?.tag == "app-web")
     #expect(reviewItem?.metaTail == "Ana · 1d")
     #expect(reviewItem?.metaTeam == "team web-core")
   }
@@ -268,7 +273,7 @@ struct QueueBuilderTests {
     let sections = queue(reviewRequests: [
       pullRequest(author: "renovate", authorIsBot: true, requestedTeamSlugs: ["obs"], reviewRequestedHoursAgo: 2)
     ])
-    #expect(items(sections, .review).first?.metaLead == nil)
+    #expect(items(sections, .review).first?.tag == "bot")
     #expect(items(sections, .review).first?.metaTail == "1 repo · 2h")
   }
 
@@ -306,7 +311,8 @@ struct QueueBuilderTests {
     let sections = queue(tickets: [ticket(key: "PROJ-1432", updatedHoursAgo: 72)])
     let tidyItem = items(sections, .tidy).first
     #expect(tidyItem?.badge == Badge(text: "No PR", variant: .neutral))
-    #expect(tidyItem?.meta == "PROJ-1432 · In Progress · 3d")
+    #expect(tidyItem?.tag == "PROJ-1432")
+    #expect(tidyItem?.metaTail == "In Progress · 3d")
     #expect(tidyItem?.symbol == .noPullRequest)
   }
 
@@ -378,6 +384,129 @@ struct QueueBuilderTests {
       tickets: [ticket(key: "PROJ-9")])
     #expect(sections.map(\.kind) == [.fix, .review, .merge, .tidy, .waiting])
     #expect(items(sections, .fix).map(\.id) == ["pr:app-web#3", "pr:app-web#2"])
+  }
+}
+
+struct TitleGroupTests {
+  private func featureFlagPullRequests(count: Int, repository: String = "app-web") -> [PullRequest] {
+    (1...count).map { index in
+      pullRequest(
+        repository: repository, number: index, title: "chore(feature-flags): remove flag \(index)",
+        updatedHoursAgo: Double(index), reviewDecision: .reviewRequired)
+    }
+  }
+
+  @Test func threePullRequestsWithSamePrefixBecomeOneGroup() throws {
+    let sections = queue(authored: featureFlagPullRequests(count: 3) + [pullRequest(number: 9, title: "Fix login")])
+    let waitingItems = items(sections, .waiting)
+    #expect(waitingItems.count == 2)
+    let groupItem = try #require(waitingItems.first { $0.id == "group:app-web:chore(feature-flags)" })
+    #expect(groupItem.title == "chore(feature-flags) · 3 PRs")
+    #expect(groupItem.tag == "app-web")
+    #expect(groupItem.metaTail == "1h")
+    #expect(groupItem.symbol == .waiting)
+    #expect(groupItem.badge == nil)
+    #expect(groupItem.sortDate == now.addingTimeInterval(-3 * hour))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#3", "pr:app-web#2", "pr:app-web#1"])
+    #expect(groupItem.url == URL(
+      string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20author%3A%40me%20in%3Atitle%20%22chore%28feature-flags%29%22"))
+  }
+
+  @Test func groupSortsWhereItsOldestPullRequestWould() {
+    let sections = queue(authored: featureFlagPullRequests(count: 3) + [pullRequest(number: 9, title: "Fix", updatedHoursAgo: 2)])
+    #expect(items(sections, .waiting).map(\.id) == ["group:app-web:chore(feature-flags)", "pr:app-web#9"])
+  }
+
+  @Test func twoPullRequestsWithSamePrefixStayPlainRows() {
+    let sections = queue(authored: featureFlagPullRequests(count: 2))
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-web#2", "pr:app-web#1"])
+  }
+
+  @Test func samePrefixInDifferentReposDoesNotGroup() {
+    let sections = queue(authored: featureFlagPullRequests(count: 2) + featureFlagPullRequests(count: 2, repository: "app-api"))
+    #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
+    #expect(items(sections, .waiting).count == 4)
+  }
+
+  @Test func titlesWithoutColonDoNotGroup() {
+    let sections = queue(authored: (1...3).map { pullRequest(number: $0, title: "Bump deps", reviewDecision: .reviewRequired) })
+    #expect(items(sections, .waiting).count == 3)
+    #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
+  }
+
+  @Test func emptyPrefixDoesNotGroup() {
+    let sections = queue(authored: (1...3).map { pullRequest(number: $0, title: " : thing \($0)") })
+    #expect(items(sections, .waiting).count == 3)
+  }
+
+  @Test func prefixIsTrimmed() {
+    let sections = queue(authored: [
+      pullRequest(number: 1, title: "chore(ci): a"), pullRequest(number: 2, title: "chore(ci) : b"),
+      pullRequest(number: 3, title: " chore(ci): c"),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["group:app-web:chore(ci)"])
+  }
+}
+
+struct StatusDotTests {
+  private func row(badge: Badge?, checks: StatusStrip.Checks?, children: [QueueItem] = []) -> QueueItem {
+    QueueItem(
+      id: "row", title: "Row", meta: "1h", url: URL(string: "https://example.com")!, symbol: .waiting, badge: badge,
+      sortDate: now, strip: StatusStrip(checks: checks, threads: nil, approvals: nil), children: children)
+  }
+
+  @Test(arguments: [
+    (BadgeVariant.failing, StatusDot.failing),
+    (.urgent, .urgent),
+    (.ready, .ready),
+  ])
+  func badgeVariantWinsOverChecks(variant: BadgeVariant, expected: StatusDot) {
+    #expect(row(badge: Badge(text: "X", variant: variant), checks: .passed).statusDot == expected)
+    #expect(row(badge: Badge(text: "X", variant: variant), checks: .failed).statusDot == expected)
+  }
+
+  @Test(arguments: [
+    (StatusStrip.Checks?.some(.passed), StatusDot.ready),
+    (.some(.failed), .failing),
+    (.some(.running), .pending),
+    (nil, .pending),
+  ])
+  func neutralOrNoBadgeFallsBackToChecks(checks: StatusStrip.Checks?, expected: StatusDot) {
+    #expect(row(badge: nil, checks: checks).statusDot == expected)
+    #expect(row(badge: Badge(text: "Draft", variant: .neutral), checks: checks).statusDot == expected)
+  }
+
+  @Test func groupTakesWorstChildDot() {
+    let children = [row(badge: nil, checks: .passed), row(badge: nil, checks: .failed), row(badge: nil, checks: .running)]
+    #expect(row(badge: nil, checks: .passed, children: children).statusDot == .failing)
+    let calmChildren = [row(badge: nil, checks: .passed), row(badge: nil, checks: .running)]
+    #expect(row(badge: nil, checks: nil, children: calmChildren).statusDot == .pending)
+    let passingChildren = [row(badge: nil, checks: .passed), row(badge: nil, checks: .passed)]
+    #expect(row(badge: nil, checks: nil, children: passingChildren).statusDot == .ready)
+  }
+
+  @Test func draftWithFailedChecksIsFailing() {
+    let sections = queue(authored: [pullRequest(isDraft: true, checkState: .failure, failedCheckCount: 1)])
+    #expect(items(sections, .waiting).first?.statusDot == .failing)
+  }
+}
+
+struct PanelTabTests {
+  @Test func tabsSplitSectionsAndLeaveOutWatch() {
+    let sections = queue(
+      authored: [
+        pullRequest(number: 1, reviewDecision: .approved), pullRequest(number: 2, checkState: .failure, failedCheckCount: 1),
+        pullRequest(number: 3),
+      ],
+      reviewRequests: [pullRequest(number: 4, author: "Ana", requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 2)],
+      tickets: [ticket(key: "PROJ-9")],
+      pipelines: [pipeline(state: .running)])
+    #expect(Core.sections(sections, in: .needsYou).map(\.kind) == [.fix, .review, .merge, .tidy])
+    #expect(Core.sections(sections, in: .waiting).map(\.kind) == [.waiting])
+  }
+
+  @Test func tabTitles() {
+    #expect(PanelTab.allCases.map(\.title) == ["Needs you", "Waiting"])
   }
 }
 
@@ -523,7 +652,7 @@ struct PipelineQueueTests {
     let sections = queue(pipelines: [pipeline(number: 1842, ref: "v2.14.0", refIsTag: true, triggerType: "webhook", createdHoursAgo: 0.1)])
     #expect(items(sections, .fix) == [
       QueueItem(
-        id: "pipeline:gh/acme/app-web:v2.14.0:webhook", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
+        id: "pipeline:gh/acme/app-web:v2.14.0:webhook", title: "v2.14.0", tag: "app-web", meta: "#1842 · tag · 6m",
         url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .failing,
         badge: Badge(text: "Pipeline failed", variant: .failing), sortDate: now.addingTimeInterval(-0.1 * hour),
         dismissal: PipelineDismissal(pipelineId: "pipeline-1842", newestWorkflowId: "workflow-1"))
@@ -531,7 +660,7 @@ struct PipelineQueueTests {
   }
 
   @Test func branchPipelineMetaSaysBranch() {
-    #expect(items(queue(pipelines: [pipeline(number: 6000, createdHoursAgo: 2)]), .fix).first?.meta == "#6000 · branch · 2h")
+    #expect(items(queue(pipelines: [pipeline(number: 6000, createdHoursAgo: 2)]), .fix).first?.metaTail == "#6000 · branch · 2h")
   }
 
   @Test func succeededPipelineGivesNoRow() {
@@ -543,7 +672,7 @@ struct PipelineQueueTests {
     #expect(sections.map(\.kind) == [.watch])
     #expect(items(sections, .watch) == [
       QueueItem(
-        id: "pipeline:gh/acme/app-web:v2.14.0:api", title: "app-web v2.14.0", meta: "#1842 · tag · 6m",
+        id: "pipeline:gh/acme/app-web:v2.14.0:api", title: "v2.14.0", tag: "app-web", meta: "#1842 · tag · 6m",
         url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/1842")!, symbol: .running,
         badge: Badge(text: "Running", variant: .neutral), sortDate: now.addingTimeInterval(-0.1 * hour))
     ])
@@ -578,7 +707,7 @@ struct PipelineQueueTests {
       pipeline(number: 1, createdHoursAgo: 3),
       pipeline(number: 2, createdHoursAgo: 1),
     ])
-    #expect(items(sections, .fix).map(\.meta) == ["#2 · branch · 1h"])
+    #expect(items(sections, .fix).map(\.metaTail) == ["#2 · branch · 1h"])
   }
 
   @Test func mergeOnMainDoesNotHideManualReleaseOnMain() {
@@ -628,14 +757,14 @@ struct PipelineQueueTests {
     let dismissed = pipeline(newestWorkflowId: "workflow-1")
     let rerun = pipeline(newestWorkflowId: "workflow-2")
     let sections = queue(pipelines: [rerun], dismissedPipelines: [dismissed.dismissal])
-    #expect(items(sections, .fix).map(\.meta) == ["#1842 · branch · 6m"])
+    #expect(items(sections, .fix).map(\.metaTail) == ["#1842 · branch · 6m"])
   }
 
   @Test func newPipelineOnSameBranchShowsAfterDismiss() {
     let dismissed = pipeline(number: 1, createdHoursAgo: 2)
     let newer = pipeline(number: 2, createdHoursAgo: 1)
     let sections = queue(pipelines: [newer, dismissed], dismissedPipelines: [dismissed.dismissal])
-    #expect(items(sections, .fix).map(\.meta) == ["#2 · branch · 1h"])
+    #expect(items(sections, .fix).map(\.metaTail) == ["#2 · branch · 1h"])
   }
 
   @Test func dismissingNewestFailureDoesNotShowOlderFailureOnSameKey() {

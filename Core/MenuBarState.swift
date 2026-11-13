@@ -5,7 +5,7 @@ public enum MenuBarState: Equatable, Sendable {
 
   public init(sections: [QueueSection]) {
     let fixCount = sections.first { $0.kind == .fix }?.items.count ?? 0
-    let urgentCount = sections.flatMap(\.items).filter { $0.badge?.variant == .urgent }.count
+    let urgentCount = sections.flatMap(\.items).flatMap { [$0] + $0.children }.filter { $0.badge?.variant == .urgent }.count
     if fixCount > 0 {
       self = .failing(count: fixCount)
     } else if urgentCount > 0 {

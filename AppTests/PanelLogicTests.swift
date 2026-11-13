@@ -82,6 +82,101 @@ struct SelectionMovementTests {
   }
 }
 
+private func group(_ id: String, children: [QueueItem]) -> QueueItem {
+  var groupItem = item(id)
+  groupItem.children = children
+  return groupItem
+}
+
+private let botGroup = group("bot", children: [item("bot-1"), item("bot-2")])
+private let tabSections = [
+  QueueSection(kind: .review, items: [item("r1")]),
+  QueueSection(kind: .tidy, items: [botGroup, item("t1")]),
+  QueueSection(kind: .watch, items: [item("w1"), item("w2"), item("w3")]),
+  QueueSection(kind: .waiting, items: [item("p1")]),
+]
+
+struct TabItemCountTests {
+  @Test func aGroupCountsAsItsChildren() {
+    #expect(tabItemCount(in: tabSections, tab: .needsYou) == 4)
+  }
+
+  @Test func watchRowsAreNotInATab() {
+    #expect(tabItemCount(in: tabSections, tab: .waiting) == 1)
+  }
+
+  @Test func noSectionsCountZero() {
+    #expect(tabItemCount(in: [], tab: .needsYou) == 0)
+  }
+}
+
+struct SelectableRowsTests {
+  @Test func collapsedGroupsHideTheirChildrenAndWatchRowsFollowTheTab() {
+    let rows = selectableRows(in: tabSections, tab: .needsYou, expandedItemIds: [])
+    #expect(rows.map(\.id) == ["r1", "bot", "t1", "w1", "w2"])
+  }
+
+  @Test func expandedChildrenFollowTheirGroup() {
+    let rows = selectableRows(in: tabSections, tab: .needsYou, expandedItemIds: ["bot"])
+    #expect(rows.map(\.id) == ["r1", "bot", "bot-1", "bot-2", "t1", "w1", "w2"])
+  }
+
+  @Test func waitingTabAlsoEndsWithThePinnedWatchRows() {
+    let rows = selectableRows(in: tabSections, tab: .waiting, expandedItemIds: [])
+    #expect(rows.map(\.id) == ["p1", "w1", "w2"])
+  }
+
+  @Test func pinnedWatchRowsStopAtTheLimit() {
+    #expect(pinnedWatchRows(in: tabSections).map(\.id) == ["w1", "w2"])
+    #expect(pinnedWatchRows(in: []).isEmpty)
+  }
+}
+
+struct DisclosureOutcomeTests {
+  @Test func rightExpandsACollapsedGroup() {
+    let outcome = disclosureOutcome(for: .right, selectedItemId: "bot", in: tabSections, expandedItemIds: [])
+    #expect(outcome == .expand("bot"))
+  }
+
+  @Test func leftCollapsesAnExpandedGroup() {
+    let outcome = disclosureOutcome(for: .left, selectedItemId: "bot", in: tabSections, expandedItemIds: ["bot"])
+    #expect(outcome == .collapse("bot"))
+  }
+
+  @Test func repeatedDirectionOnAGroupIsIgnored() {
+    #expect(disclosureOutcome(for: .right, selectedItemId: "bot", in: tabSections, expandedItemIds: ["bot"]) == .ignore)
+    #expect(disclosureOutcome(for: .left, selectedItemId: "bot", in: tabSections, expandedItemIds: []) == .ignore)
+  }
+
+  @Test func leftOnAChildSelectsItsGroup() {
+    let outcome = disclosureOutcome(for: .left, selectedItemId: "bot-2", in: tabSections, expandedItemIds: ["bot"])
+    #expect(outcome == .selectGroup("bot"))
+  }
+
+  @Test func rightOnAChildIsIgnored() {
+    #expect(disclosureOutcome(for: .right, selectedItemId: "bot-2", in: tabSections, expandedItemIds: ["bot"]) == .ignore)
+  }
+
+  @Test(arguments: [DisclosureDirection.left, .right])
+  func plainRowsAndNoSelectionAreIgnored(direction: DisclosureDirection) {
+    #expect(disclosureOutcome(for: direction, selectedItemId: "r1", in: tabSections, expandedItemIds: []) == .ignore)
+    #expect(disclosureOutcome(for: direction, selectedItemId: nil, in: tabSections, expandedItemIds: []) == .ignore)
+  }
+}
+
+struct RowAccessibilityLabelTests {
+  @Test func namesEveryPartAndTheStatusDot() {
+    let pullRequest = QueueItem(
+      id: "pr", title: "Fix login", tag: "app", meta: "ana · 2h", metaTeam: "web", url: URL(string: "https://e.com")!,
+      symbol: .review, badge: Badge(text: "Review", variant: .urgent), sortDate: now, reference: "#12")
+    #expect(rowAccessibilityLabel(for: pullRequest) == "Fix login, #12, app, ana · 2h, web, Review, status needs you")
+  }
+
+  @Test func skipsMissingParts() {
+    #expect(rowAccessibilityLabel(for: item("a")) == "a, status pending")
+  }
+}
+
 struct PanelInputTests {
   // (input, selected item has details, popover is open, expected action)
   static let rules: [(PanelInput, Bool, Bool, PanelAction)] = [
@@ -199,5 +294,58 @@ struct PanelKeyOutcomeTests {
     pasteboard.setString("old", forType: .string)
     writeLink(try #require(URL(string: "https://github.com/acme/app/pull/7")), to: pasteboard)
     #expect(pasteboard.string(forType: .string) == "https://github.com/acme/app/pull/7")
+  }
+}
+
+@Suite struct ReviewFixTests {
+  private func row(id: String, badge: Badge? = nil, checks: StatusStrip.Checks? = nil, children: [QueueItem] = []) -> QueueItem {
+    QueueItem(
+      id: id, title: id, meta: "1h", url: URL(string: "https://example.com/\(id)")!, symbol: .waiting, badge: badge,
+      sortDate: .distantPast, strip: StatusStrip(checks: checks, threads: nil, approvals: nil), children: children)
+  }
+
+  @Test func failingDraftNamesTheDot() {
+    let draft = row(id: "d", badge: Badge(text: "Draft", variant: .neutral), checks: .failed)
+    #expect(rowStatusText(for: draft)?.text == "Draft · failing")
+    #expect(!rowAccessibilityLabel(for: draft).contains("status failing"))
+  }
+
+  @Test func groupWithUrgentChildSaysNeedsYou() {
+    let group = row(id: "g", children: [row(id: "c", badge: Badge(text: "Changes requested", variant: .urgent))])
+    #expect(rowStatusText(for: group)?.text == "needs you")
+  }
+
+  @Test func matchingBadgeKeepsItsText() {
+    let approved = row(id: "a", badge: Badge(text: "Approved", variant: .ready))
+    #expect(rowStatusText(for: approved)?.text == "Approved")
+    #expect(rowStatusText(for: row(id: "p", checks: .running)) == nil)
+  }
+
+  @Test func onHoldPipelineIsPinnedFirst() {
+    let running = (1...2).map { row(id: "run\($0)", badge: Badge(text: "Running", variant: .neutral)) }
+    let onHold = row(id: "hold", badge: Badge(text: "Needs approval", variant: .urgent))
+    let sections = [QueueSection(kind: .watch, items: running + [onHold])]
+    #expect(pinnedWatchRows(in: sections).map(\.id) == ["hold", "run1"])
+  }
+
+  @Test func sectionCountIncludesGroupChildren() {
+    let group = row(id: "g", children: [row(id: "c1"), row(id: "c2"), row(id: "c3")])
+    #expect(rowCount(of: QueueSection(kind: .waiting, items: [group, row(id: "solo")])) == 4)
+  }
+}
+
+@Suite struct PanelShortcutTests {
+  @Test func digitShortcutsPickTabsInOrder() {
+    #expect(panelTab(forShortcut: "1") == .needsYou)
+    #expect(panelTab(forShortcut: "2") == .waiting)
+    #expect(panelTab(forShortcut: "3") == nil)
+    #expect(panelTab(forShortcut: "0") == nil)
+    #expect(panelTab(forShortcut: "a") == nil)
+  }
+
+  @Test func toggledExpansionAddsThenRemoves() {
+    let expanded = toggledExpansion(of: "g", in: ["other"])
+    #expect(expanded == ["other", "g"])
+    #expect(toggledExpansion(of: "g", in: expanded) == ["other"])
   }
 }
