@@ -104,8 +104,13 @@ struct QueueRowView: View {
     .onTapGesture(perform: open)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(rowAccessibilityLabel(for: item))
-    .accessibilityValue(isGroup ? (isExpanded ? "expanded" : "collapsed") : "")
+    .accessibilityValue(disclosureValue)
     .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+  }
+
+  private var disclosureValue: String {
+    guard isGroup else { return "" }
+    return isExpanded ? "expanded" : "collapsed"
   }
 
   private var metaParts: [(text: String, isTeam: Bool)] {
@@ -218,11 +223,11 @@ struct TagChipView: View {
 struct MaxWidthLayout: Layout {
   let maxWidth: CGFloat
 
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
     subviews.first?.sizeThatFits(cappedProposal(proposal)) ?? .zero
   }
 
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+  func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
     subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
   }
 

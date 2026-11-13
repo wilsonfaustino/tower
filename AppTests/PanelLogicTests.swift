@@ -333,3 +333,19 @@ struct PanelKeyOutcomeTests {
     #expect(rowCount(of: QueueSection(kind: .waiting, items: [group, row(id: "solo")])) == 4)
   }
 }
+
+@Suite struct PanelShortcutTests {
+  @Test func digitShortcutsPickTabsInOrder() {
+    #expect(panelTab(forShortcut: "1") == .needsYou)
+    #expect(panelTab(forShortcut: "2") == .waiting)
+    #expect(panelTab(forShortcut: "3") == nil)
+    #expect(panelTab(forShortcut: "0") == nil)
+    #expect(panelTab(forShortcut: "a") == nil)
+  }
+
+  @Test func toggledExpansionAddsThenRemoves() {
+    let expanded = toggledExpansion(of: "g", in: ["other"])
+    #expect(expanded == ["other", "g"])
+    #expect(toggledExpansion(of: "g", in: expanded) == ["other"])
+  }
+}

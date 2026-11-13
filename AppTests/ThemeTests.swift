@@ -57,6 +57,15 @@ private let highContrastDark = NSColor(srgbRed: 1, green: 1, blue: 0, alpha: 1)
     #expect(Theme.statusText(variant) != Theme.textSecondary)
   }
 
+  @Test func pendingDotIsSecondaryText() {
+    #expect(Theme.dotColor(.pending) == Theme.textSecondary)
+  }
+
+  @Test(arguments: [StatusDot.failing, .urgent, .ready])
+  func statusDotsHaveTheirOwnColors(dot: StatusDot) {
+    #expect(Theme.dotColor(dot) != Theme.textSecondary)
+  }
+
   @Test(arguments: [BadgeVariant.failing, .ready])
   func increaseContrastValuesHaveMoreContrastThanTheStandardValues(variant: BadgeVariant) throws {
     let colors = try #require(Theme.statusColors(variant))
