@@ -75,17 +75,20 @@ private struct UnusedTransport: HTTPTransport {
       defaults: UserDefaults(suiteName: "tower-menu-\(UUID().uuidString)")!)
     let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
     defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
-    let refreshItem = controller.contextMenu.items[0]
+    let menu = controller.contextMenu
+    let refreshItem = menu.items[0]
 
     let refreshTask = Task { await store.refresh() }
+    defer { refreshTask.cancel() }
     for _ in 0..<200 where !store.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
-    controller.menuNeedsUpdate(controller.contextMenu)
+    try #require(store.isRefreshing)
+    menu.delegate?.menuNeedsUpdate?(menu)
     #expect(refreshItem.title == "Refreshing…")
     #expect(!refreshItem.isEnabled)
 
     refreshTask.cancel()
     await refreshTask.value
-    controller.menuNeedsUpdate(controller.contextMenu)
+    menu.delegate?.menuNeedsUpdate?(menu)
     #expect(refreshItem.title == "Refresh")
     #expect(refreshItem.isEnabled)
   }
