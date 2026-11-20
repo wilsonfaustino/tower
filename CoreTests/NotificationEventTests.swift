@@ -337,3 +337,27 @@ struct PipelineEventTests {
     #expect(events.isEmpty)
   }
 }
+
+struct NotificationBaselineTests {
+  private let unknownPipeline = pipeline(state: .succeeded, hasPullRequest: true, newestWorkflowId: nil)
+
+  @Test func unknownPipelineKeepsItsPreviousEntry() {
+    let onHoldPipeline = pipeline(state: .onHold, hasPullRequest: true)
+    #expect(notificationBaseline(previous: [onHoldPipeline], current: [unknownPipeline]) == [onHoldPipeline])
+  }
+
+  @Test func unknownPipelineWithoutAPreviousEntryStaysUnknown() {
+    #expect(notificationBaseline(previous: [], current: [unknownPipeline]) == [unknownPipeline])
+  }
+
+  @Test func knownPipelineReplacesItsPreviousEntry() {
+    let runningPipeline = pipeline(state: .running, hasPullRequest: true)
+    let onHoldPipeline = pipeline(state: .onHold, hasPullRequest: true)
+    #expect(notificationBaseline(previous: [runningPipeline], current: [onHoldPipeline]) == [onHoldPipeline])
+  }
+
+  @Test func pipelineThatLeftTheFetchLeavesTheBaseline() {
+    let oldPipeline = pipeline(number: 1, state: .onHold)
+    #expect(notificationBaseline(previous: [oldPipeline], current: [unknownPipeline]) == [unknownPipeline])
+  }
+}

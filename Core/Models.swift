@@ -160,7 +160,7 @@ public struct Pipeline: Codable, Sendable, Equatable {
     self.failedWorkflowIds = failedWorkflowIds
   }
 
-  // A PR pipeline whose workflow request failed keeps the placeholder state. A read success always has a workflow id.
+  // A PR pipeline whose workflow request failed keeps the placeholder state. A read that gives succeeded always has a workflow id.
   public var workflowStateIsUnknown: Bool { hasPullRequest && state == .succeeded && newestWorkflowId == nil }
 }
 

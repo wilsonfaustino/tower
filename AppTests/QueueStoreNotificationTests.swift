@@ -147,6 +147,26 @@ private final class SettingsBox: @unchecked Sendable {
     response.workflowStatusCode = 200
     await store.refresh()
     #expect(notifier.postedEvents.isEmpty)
+    response.workflowStatus = "running"
+    await store.refresh()
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
+  }
+
+  // The failed read keeps the known running state, so the hold after it is still a change.
+  @Test func holdAfterAFailedReadOfARunningPipelinePosts() async throws {
+    let response = CircleCIResponse()
+    response.hasPullRequest = true
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: try circleciTransport(response), notifier: notifier)
+    await store.refresh()
+    response.workflowStatusCode = 502
+    await store.refresh()
+    response.workflowStatusCode = 200
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
   }
 
   @Test func cachedDataIsNotTheBaseline() async throws {
