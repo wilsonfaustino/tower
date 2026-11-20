@@ -378,6 +378,19 @@ struct CircleCIClientTests {
     }
   }
 
+  @Test func networkFailureForPullRequestPipelineStillFails() async throws {
+    let page = try pageData([
+      ["id": "with-pr", "number": 2, "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")]
+    ])
+    let transport = StubTransport { request in
+      guard request.url!.path().hasSuffix("/pipeline/mine") else { throw URLError(.timedOut) }
+      return (page, 200)
+    }
+    await #expect(throws: SourceFailure.network) {
+      try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    }
+  }
+
   @Test func newerPullRequestPipelineReadsWorkflowsOnlyForItself() async throws {
     let page = try pageData([
       ["id": "newer", "number": 2, "created_at": "2027-01-15T11:00:00.000Z",

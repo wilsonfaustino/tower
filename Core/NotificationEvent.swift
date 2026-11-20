@@ -83,7 +83,8 @@ public func notificationEvents(
       return nil
     }
     let previousPipeline = previousById[pipeline.id]
-    // A state Tower never read is not a known "before", as at launch.
+    // A state Tower never read is not a known "before", as at launch. Accepted cost: a hold that starts while the
+    // reads fail, or that replaces an earlier hold, posts nothing when the reads come back.
     guard previousPipeline?.workflowStateIsUnknown != true else { return nil }
     let previousState = previousPipeline?.state ?? .running
     // A rerun that fails again between two refreshes stays failed, so a newly failed workflow counts as a change.

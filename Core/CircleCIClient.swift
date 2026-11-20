@@ -81,7 +81,8 @@ public struct CircleCIClient: Sendable {
     do {
       workflows = try await get(workflowURL, token: token)
     } catch .unexpected where pipeline.hasPullRequest {
-      // The panel never shows this pipeline, so a bad answer keeps the placeholder state and fails nothing else.
+      // The panel never shows this pipeline, so an unexpected answer (bad status or body) keeps the placeholder state
+      // and fails nothing else. Authentication and network failures still fail the source.
       return pipeline
     }
     if workflows.items.isEmpty {
