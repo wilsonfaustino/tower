@@ -494,11 +494,11 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     "requestedQuery": "is:pr is:open review-requested:@me archived:false",
   ]
 
-  private func githubSearchVariables(in transport: StubTransport) throws -> [[String: String]] {
+  private func githubSearchVariables(in transport: StubTransport) throws -> [[String: Any]] {
     try transport.requests.filter { $0.url?.host() == "api.github.com" }.map { githubRequest in
       let body = try #require(githubRequest.httpBody)
       let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-      return try #require(payload["variables"] as? [String: String])
+      return try #require(payload["variables"] as? [String: Any])
     }
   }
 
@@ -506,7 +506,14 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     let transport = try routingTransport()
     let store = makeStore(transport: transport, githubOrganizations: organizations)
     await store.refresh()
-    return try #require(try githubSearchVariables(in: transport).first)
+    var merged: [String: String] = [:]
+    for requestVariables in try githubSearchVariables(in: transport) {
+      for (name, value) in requestVariables {
+        guard let text = value as? String else { continue }
+        merged[name] = text
+      }
+    }
+    return merged
   }
 
   private let queryNames = ["authoredQuery", "requestedQuery", "reviewedQuery", "mergedQuery"]
@@ -539,9 +546,18 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     currentOrganizations = ["side-project"]
     await store.refresh()
     let requestVariables = try githubSearchVariables(in: transport)
-    #expect(requestVariables.count == 2)
-    #expect(requestVariables[0]["authoredQuery"]!.hasSuffix(" org:acme"))
-    #expect(requestVariables[1]["authoredQuery"]!.hasSuffix(" org:side-project"))
+    try #require(requestVariables.count == 4)
+    // The summary and the authored search of one refresh go out together, in either order.
+    let firstRefresh = requestVariables[0..<2]
+    let secondRefresh = requestVariables[2..<4]
+    let firstRequested = try #require(firstRefresh.compactMap { $0["requestedQuery"] as? String }.first)
+    let firstAuthored = try #require(firstRefresh.compactMap { $0["authoredQuery"] as? String }.first)
+    let secondRequested = try #require(secondRefresh.compactMap { $0["requestedQuery"] as? String }.first)
+    let secondAuthored = try #require(secondRefresh.compactMap { $0["authoredQuery"] as? String }.first)
+    #expect(firstRequested.hasSuffix(" org:acme"))
+    #expect(firstAuthored.hasSuffix(" org:acme"))
+    #expect(secondRequested.hasSuffix(" org:side-project"))
+    #expect(secondAuthored.hasSuffix(" org:side-project"))
   }
 
   @Test func blankPaddedAndInvalidLinesYieldOnlyTrimmedValidLogins() async throws {

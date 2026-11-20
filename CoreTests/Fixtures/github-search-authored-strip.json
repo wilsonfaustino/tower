@@ -155,7 +155,11 @@
             ]
           }
         }
-      ]
+      ],
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": null
+      }
     },
     "requested": {
       "nodes": []
