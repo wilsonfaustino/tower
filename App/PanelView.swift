@@ -17,6 +17,7 @@ struct PanelView: View {
   // The divider and padding above the pinned rows, which show only while the list scrolls.
   @State private var pinnedEdgeHeight: CGFloat = 0
   @State private var tabPickerHeight: CGFloat = 0
+  @State private var updateNoticeHeight: CGFloat = 0
   @FocusState private var isListFocused: Bool
   // The selected row that shows Dismiss. Only the selected row can slide, so one row at most shows it.
   @State private var slidItemId: String?
@@ -32,6 +33,7 @@ struct PanelView: View {
       header
       if let availableVersion = updateChecker.availableVersion {
         updateNotice(version: availableVersion)
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { updateNoticeHeight = $0 }
       }
       if showsTabs {
         tabPicker.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tabPickerHeight = $0 }
@@ -148,8 +150,9 @@ struct PanelView: View {
   // The tabs, pinned rows and legend share the max height, so the whole panel keeps its cap.
   // It leaves out the edge above the pinned rows, so the edge that scrolling adds cannot keep the list scrolling.
   private var scrollAreaMaxHeight: CGFloat {
-    // The picker height keeps its last value after a switch to Consolidated, so count it only while it shows.
-    max(Theme.Metrics.panelMaxHeight - (showsTabs ? tabPickerHeight : 0) - pinnedHeight, 1)
+    // The picker and notice heights keep their last value after they hide, so count them only while they show.
+    let noticeHeight = updateChecker.availableVersion == nil ? 0 : updateNoticeHeight
+    return max(Theme.Metrics.panelMaxHeight - (showsTabs ? tabPickerHeight : 0) - noticeHeight - pinnedHeight, 1)
   }
 
   private var isListScrolling: Bool { contentHeight > scrollAreaMaxHeight }

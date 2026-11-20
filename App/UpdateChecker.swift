@@ -14,7 +14,7 @@ enum UpdateCheckResult: Equatable {
   static let checkInterval: Duration = .seconds(24 * 60 * 60)
 
   private(set) var availableVersion: String?
-  let appUpdater = AppUpdater()
+  let appUpdater: AppUpdater
   @ObservationIgnored private let currentVersion: String?
   @ObservationIgnored private let fetchNewerVersion: @Sendable (String) async throws -> String?
   @ObservationIgnored private var checkingTask: Task<Void, Never>?
@@ -28,8 +28,10 @@ enum UpdateCheckResult: Equatable {
     currentVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
     fetchNewerVersion: @escaping @Sendable (String) async throws -> String? = {
       try await ReleaseCheck.fetchNewerVersion(currentVersion: $0)
-    }
+    },
+    appUpdater: AppUpdater = AppUpdater()
   ) {
+    self.appUpdater = appUpdater
     self.currentVersion = currentVersion
     self.fetchNewerVersion = fetchNewerVersion
   }

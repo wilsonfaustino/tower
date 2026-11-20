@@ -218,11 +218,19 @@ private struct UnusedTransport: HTTPTransport {
       NSStatusBar.system.removeStatusItem(controller.statusItem)
     }
     let firstChoice = Task { await controller.checkForUpdates() }
-    while fetchCount.value < 1 { await Task.yield() }
+    await yieldUntilTrue { fetchCount.value == 1 }
     #expect(controller.isCheckingForUpdates)
-    // Returns at once: one check shows one result.
-    await controller.checkForUpdates()
+    // The second choice must return while the fetch is still held. Without the guard it would join the
+    // fetch and wait, so the gate opens after the bounded wait either way and the test cannot hang.
+    let secondDone = LockedFlag()
+    let secondChoice = Task {
+      await controller.checkForUpdates()
+      secondDone.value = true
+    }
+    await yieldUntilTrue { secondDone.value }
+    #expect(secondDone.value)
     openGate.finish()
+    await secondChoice.value
     await firstChoice.value
     #expect(!controller.isCheckingForUpdates)
     #expect(fetchCount.value == 1)

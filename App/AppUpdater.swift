@@ -12,13 +12,18 @@ final class AppUpdater {
 
   private(set) var state = State.unknown
   @ObservationIgnored private var brewPath: String?
+  @ObservationIgnored private let findBrew: () -> String?
+
+  init(findBrew: @escaping () -> String? = { BrewUpgrade.findBrew() }) {
+    self.findBrew = findBrew
+  }
 
   // Runs once per launch. .preparing is set before the first await, so a second control on screen cannot start a second check.
   func prepareIfNeeded() async {
     guard state == .unknown else { return }
     state = .preparing
     // Demo mode never runs brew, so the Update button cannot install a real version.
-    guard !DemoLaunch.isActive, let foundBrewPath = BrewUpgrade.findBrew() else {
+    guard !DemoLaunch.isActive, let foundBrewPath = findBrew() else {
       state = .unavailable
       return
     }

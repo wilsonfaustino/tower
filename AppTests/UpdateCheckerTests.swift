@@ -10,9 +10,16 @@ private struct FetchFailure: Error {}
 @MainActor func makeOfflineUpdateChecker(
   fetchNewerVersion: @escaping @Sendable (String) async throws -> String? = { _ in throw URLError(.notConnectedToInternet) }
 ) -> UpdateChecker {
-  let checker = UpdateChecker(currentVersion: "0.4.0", fetchNewerVersion: fetchNewerVersion)
+  // No brew path, so an update notice on screen never runs the host's brew.
+  let checker = UpdateChecker(
+    currentVersion: "0.4.0", fetchNewerVersion: fetchNewerVersion, appUpdater: AppUpdater(findBrew: { nil }))
   checker.demoScenario = nil
   return checker
+}
+
+// Bounded, so a regression fails an expectation instead of hanging the test run.
+@MainActor func yieldUntilTrue(maxYields: Int = 1000, _ condition: () -> Bool) async {
+  for _ in 0..<maxYields where !condition() { await Task.yield() }
 }
 
 @MainActor struct UpdateCheckerTests {
@@ -92,14 +99,15 @@ private struct FetchFailure: Error {}
       return "0.5.0"
     }
     let firstCheck = Task { await checker.checkNow() }
-    while fetchCount.value < 1 { await Task.yield() }
+    await yieldUntilTrue { fetchCount.value == 1 }
+    #expect(fetchCount.value == 1)
     // checkNow joins the pending check before its first suspension, in the same main actor turn that sets the flag.
     let secondStarted = LockedFlag()
     let secondCheck = Task {
       secondStarted.value = true
       return await checker.checkNow()
     }
-    while !secondStarted.value { await Task.yield() }
+    await yieldUntilTrue { secondStarted.value }
     openGate.finish()
     #expect(await [firstCheck.value, secondCheck.value] == [.newer("0.5.0"), .newer("0.5.0")])
     #expect(fetchCount.value == 1)
