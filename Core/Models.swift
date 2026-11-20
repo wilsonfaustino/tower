@@ -205,7 +205,9 @@ public enum RowSymbol: String, CaseIterable, Sendable {
   case ticket = "ph-ticket"
   case running = "ph-airplane-takeoff"
   case approvalHold = "ph-hand-palm"
-  case waiting = "ph-airplane-in-flight"
+  case pullRequest = "ph-git-pull-request"
+  // Drawn in the Phosphor Bold style like GitHub's draft icon, not part of the Phosphor set.
+  case draftPullRequest = "ph-git-pull-request-draft"
 
   // Company-managed Jira projects name the type "Sub-task", team-managed projects "Subtask".
   public init(jiraIssueTypeName: String?) {
@@ -229,7 +231,7 @@ public enum RowSymbol: String, CaseIterable, Sendable {
     case .epic: "Epic"
     case .task: "Task"
     case .subtask: "Sub-task"
-    case .failing, .review, .merge, .ticket, .running, .approvalHold, .waiting: nil
+    case .failing, .review, .merge, .ticket, .running, .approvalHold, .pullRequest, .draftPullRequest: nil
     }
   }
 }

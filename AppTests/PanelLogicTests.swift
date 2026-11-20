@@ -434,9 +434,12 @@ struct PanelKeyOutcomeTests {
 }
 
 @Suite struct ReviewFixTests {
-  private func row(id: String, badge: Badge? = nil, checks: StatusStrip.Checks? = nil, children: [QueueItem] = []) -> QueueItem {
+  private func row(
+    id: String, symbol: RowSymbol = .pullRequest, badge: Badge? = nil, checks: StatusStrip.Checks? = nil,
+    children: [QueueItem] = []
+  ) -> QueueItem {
     QueueItem(
-      id: id, title: id, meta: "1h", url: URL(string: "https://example.com/\(id)")!, symbol: .waiting, badge: badge,
+      id: id, title: id, meta: "1h", url: URL(string: "https://example.com/\(id)")!, symbol: symbol, badge: badge,
       sortDate: .distantPast, strip: StatusStrip(checks: checks, threads: nil, approvals: nil), children: children)
   }
 
@@ -458,12 +461,30 @@ struct PanelKeyOutcomeTests {
   }
 
   @Test func symbolColorFollowsChecks() {
-    #expect(rowSymbolVariant(for: row(id: "p", badge: Badge(text: "Draft", variant: .neutral), checks: .passed)) == .ready)
+    #expect(rowSymbolVariant(for: row(id: "p", checks: .passed)) == .ready)
     #expect(rowSymbolVariant(for: row(id: "f", checks: .failed)) == .failing)
-    #expect(
-      rowSymbolVariant(for: row(id: "r", badge: Badge(text: "Changes requested", variant: .urgent), checks: .running))
-        == .urgent)
+    #expect(rowSymbolVariant(for: row(id: "r", checks: .running)) == .urgent)
     #expect(rowSymbolVariant(for: row(id: "n")) == .neutral)
+    #expect(rowSymbolVariant(for: row(id: "a", symbol: .merge, badge: Badge(text: "Approved", variant: .ready))) == .ready)
+    #expect(rowSymbolVariant(for: row(id: "c", badge: Badge(text: "Changes requested", variant: .urgent), checks: .passed)) == .ready)
+  }
+
+  @Test func runningChecksAreYellowEvenOnAnApprovedRow() {
+    let approved = row(id: "a", symbol: .merge, badge: Badge(text: "Approved", variant: .ready), checks: .running)
+    #expect(rowSymbolVariant(for: approved) == .urgent)
+  }
+
+  @Test(arguments: [StatusStrip.Checks.passed, .failed, .running, nil])
+  func draftSymbolStaysGray(checks: StatusStrip.Checks?) {
+    let draft = row(id: "d", symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), checks: checks)
+    #expect(rowSymbolVariant(for: draft) == .neutral)
+  }
+
+  @Test func titleGroupSymbolIsGray() {
+    let group = QueueItem(
+      id: "g", title: "chore · 3 PRs", meta: "1h", url: URL(string: "https://example.com/g")!, symbol: .pullRequest,
+      badge: nil, sortDate: .distantPast, children: [row(id: "c1", checks: .passed)])
+    #expect(rowSymbolVariant(for: group) == .neutral)
   }
 
   @Test func onHoldPipelineIsPinnedFirst() {

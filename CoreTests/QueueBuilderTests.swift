@@ -120,6 +120,7 @@ struct QueueBuilderTests {
     let sections = queue(authored: [pullRequest(isDraft: true, checkState: .failure, failedCheckCount: 1)])
     #expect(sections.map(\.kind) == [.waiting])
     #expect(items(sections, .waiting).first?.badge == Badge(text: "Draft", variant: .neutral))
+    #expect(items(sections, .waiting).first?.symbol == .draftPullRequest)
   }
 
   @Test func openPullRequestWithoutApprovalGoesToWaiting() {
@@ -130,13 +131,14 @@ struct QueueBuilderTests {
     #expect(sections.map(\.kind) == [.waiting])
     #expect(waitingItems.first?.meta == "app-api · 3h")
     #expect(waitingItems.first?.reference == "#45")
-    #expect(waitingItems.first?.symbol == .waiting)
+    #expect(waitingItems.first?.symbol == .pullRequest)
     #expect(waitingItems.first?.badge == nil)
   }
 
   @Test func changesRequestedPullRequestShowsBadgeInWaiting() {
     let sections = queue(authored: [pullRequest(reviewDecision: .changesRequested)])
     #expect(items(sections, .waiting).first?.badge == Badge(text: "Changes requested", variant: .urgent))
+    #expect(items(sections, .waiting).first?.symbol == .pullRequest)
   }
 
   @Test func approvedGreenPullRequestGoesToMerge() {
@@ -423,12 +425,20 @@ struct TitleGroupTests {
     #expect(groupItem.title == "chore(feature-flags) · 3 PRs")
     #expect(groupItem.tag == "app-web")
     #expect(groupItem.metaTail == "1h")
-    #expect(groupItem.symbol == .waiting)
+    #expect(groupItem.symbol == .pullRequest)
     #expect(groupItem.badge == nil)
     #expect(groupItem.sortDate == now.addingTimeInterval(-3 * hour))
     #expect(groupItem.children.map(\.id) == ["pr:app-web#3", "pr:app-web#2", "pr:app-web#1"])
     #expect(groupItem.url == URL(
       string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20author%3A%40me%20in%3Atitle%20%22chore%28feature-flags%29%22"))
+  }
+
+  @Test func groupChildrenKeepTheirOwnSymbols() throws {
+    let draft = pullRequest(number: 4, title: "chore(feature-flags): remove flag 4", isDraft: true, updatedHoursAgo: 4)
+    let sections = queue(authored: featureFlagPullRequests(count: 2) + [draft])
+    let groupItem = try #require(items(sections, .waiting).first { $0.id == "group:app-web:chore(feature-flags)" })
+    #expect(groupItem.symbol == .pullRequest)
+    #expect(groupItem.children.map(\.symbol) == [.draftPullRequest, .pullRequest, .pullRequest])
   }
 
   @Test func groupSortsWhereItsOldestPullRequestWould() {
@@ -470,7 +480,7 @@ struct TitleGroupTests {
 struct StatusDotTests {
   private func row(badge: Badge?, checks: StatusStrip.Checks?, children: [QueueItem] = []) -> QueueItem {
     QueueItem(
-      id: "row", title: "Row", meta: "1h", url: URL(string: "https://example.com")!, symbol: .waiting, badge: badge,
+      id: "row", title: "Row", meta: "1h", url: URL(string: "https://example.com")!, symbol: .pullRequest, badge: badge,
       sortDate: now, strip: StatusStrip(checks: checks, threads: nil, approvals: nil), children: children)
   }
 
