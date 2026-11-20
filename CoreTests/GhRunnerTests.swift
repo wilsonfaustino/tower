@@ -1,0 +1,99 @@
+@testable import Core
+import Foundation
+import Testing
+
+// A stand-in for gh that never ends. exec keeps one process, so terminate closes the pipes.
+private func makeHangingGh() throws -> URL {
+  let scriptURL = FileManager.default.temporaryDirectory.appending(path: "hanging-gh-\(UUID().uuidString)")
+  try Data("#!/bin/sh\nexec /bin/sleep 60\n".utf8).write(to: scriptURL)
+  try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+  return scriptURL
+}
+
+@Test func runnerReturnsOutputAndExitStatus() async throws {
+  let output = try await GhRunner.run(path: "/bin/sh", arguments: ["-c", "echo out; echo err >&2; exit 3"], readsStandardError: true)
+  #expect(output.exitStatus == 3)
+  #expect(String(decoding: output.standardOutput, as: UTF8.self) == "out\n")
+  #expect(String(decoding: output.standardError, as: UTF8.self) == "err\n")
+}
+
+@Test func runnerDrainsOutputLargerThanThePipeBuffer() async throws {
+  // 200 KB on each pipe is more than the 64 KB pipe buffer.
+  let script = "head -c 204800 /dev/zero; head -c 204800 /dev/zero >&2"
+  let output = try await GhRunner.run(path: "/bin/sh", arguments: ["-c", script], readsStandardError: true, timeout: .seconds(10))
+  #expect(output.standardOutput.count == 204_800)
+  #expect(output.standardError.count == 204_800)
+}
+
+@Test func runnerStopsAProcessAtTheTimeLimit() async {
+  let clock = ContinuousClock()
+  let start = clock.now
+  await #expect(throws: GhRunner.Failure.timedOut) {
+    try await GhRunner.run(path: "/bin/sleep", arguments: ["60"], readsStandardError: true, timeout: .seconds(1))
+  }
+  #expect(clock.now - start < .seconds(5))
+}
+
+@Test func runnerReportsALaunchFailure() async {
+  await #expect(throws: GhRunner.Failure.launchFailed) {
+    try await GhRunner.run(path: "/nonexistent/gh", arguments: [], readsStandardError: false)
+  }
+}
+
+@Test func runnerAddsExtraEnvironmentToTheInheritedOne() async throws {
+  let inheritedHome = try #require(ProcessInfo.processInfo.environment["HOME"])
+  let output = try await GhRunner.run(
+    path: "/bin/sh", arguments: ["-c", "echo \"$TOWER_TEST_VALUE:$HOME\""],
+    readsStandardError: false, extraEnvironment: ["TOWER_TEST_VALUE": "set"]
+  )
+  #expect(String(decoding: output.standardOutput, as: UTF8.self) == "set:\(inheritedHome)\n")
+}
+
+@Test func runnerExtraEnvironmentOverridesAnInheritedKey() async throws {
+  let output = try await GhRunner.run(
+    path: "/bin/sh", arguments: ["-c", "echo \"$HOME\""],
+    readsStandardError: false, extraEnvironment: ["HOME": "/tower-test-home"]
+  )
+  #expect(String(decoding: output.standardOutput, as: UTF8.self) == "/tower-test-home\n")
+}
+
+@Test func runnerGivesTheProcessAnEmptyStdin() async throws {
+  // read fails on EOF at once; with an open stdin it would wait until the time limit.
+  let output = try await GhRunner.run(
+    path: "/bin/sh", arguments: ["-c", "read answer; echo \"exit $?\""],
+    readsStandardError: false, timeout: .seconds(5)
+  )
+  #expect(String(decoding: output.standardOutput, as: UTF8.self) == "exit 1\n")
+}
+
+@Test func runnerSendsInterruptAtTheTimeLimitWhenAsked() async throws {
+  let markerURL = FileManager.default.temporaryDirectory.appending(path: "interrupt-marker-\(UUID().uuidString)")
+  defer { try? FileManager.default.removeItem(at: markerURL) }
+  // Like brew update: clean up on SIGINT, then exit. The sleep runs in the background so the trap fires at once.
+  // A background job ignores SIGINT in a non-interactive shell, so the trap stops it with SIGTERM.
+  let script = "trap 'kill $!; touch \"$0\"; exit 130' INT; /bin/sleep 60 & wait"
+  await #expect(throws: GhRunner.Failure.timedOut) {
+    try await GhRunner.run(
+      path: "/bin/sh", arguments: ["-c", script, markerURL.path],
+      readsStandardError: false, timeout: .seconds(1), interruptsAtTimeLimit: true
+    )
+  }
+  #expect(FileManager.default.fileExists(atPath: markerURL.path))
+}
+
+@Test func runnerWaitsForTheCleanupAfterTheInterrupt() async throws {
+  let markerURL = FileManager.default.temporaryDirectory.appending(path: "cleanup-marker-\(UUID().uuidString)")
+  defer { try? FileManager.default.removeItem(at: markerURL) }
+  let script = "trap 'kill $!; /bin/sleep 1; touch \"$0\"; exit 130' INT; /bin/sleep 60 & wait"
+  let clock = ContinuousClock()
+  let start = clock.now
+  await #expect(throws: GhRunner.Failure.timedOut) {
+    try await GhRunner.run(
+      path: "/bin/sh", arguments: ["-c", script, markerURL.path],
+      readsStandardError: false, timeout: .seconds(1), interruptsAtTimeLimit: true
+    )
+  }
+  #expect(clock.now - start >= .seconds(1.9))
+  #expect(clock.now - start < .seconds(5))
+  #expect(FileManager.default.fileExists(atPath: markerURL.path))
+}
