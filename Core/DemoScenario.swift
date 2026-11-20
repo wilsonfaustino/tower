@@ -11,6 +11,7 @@ public struct DemoScenario: Sendable {
     case offline
     case authFailure = "auth-failure"
     case notify
+    case update
 
     // An unknown or empty value gives typical.
     public init(launchValue: String) {
@@ -30,12 +31,14 @@ public struct DemoScenario: Sendable {
   // The data the first refresh changes to. Only notify has it, so a refresh posts one notification of each kind.
   public let changedGitHubSnapshot: GitHubSnapshot?
   public let changedPipelines: [Pipeline]?
+  // A fake newer release. Only update has it, so the panel and Settings show the update notice without a network call.
+  public let availableVersion: String?
 
   public init(name: Name, now: Date) {
     self.name = name
     let factory = DemoFactory(now: now)
     switch name {
-    case .typical, .authFailure, .notify:
+    case .typical, .authFailure, .notify, .update:
       githubSnapshot = factory.snapshot(authored: factory.typicalAuthored, reviews: factory.typicalReviews)
       jiraTickets = factory.typicalTickets
       pipelines = factory.typicalPipelines
@@ -62,7 +65,7 @@ public struct DemoScenario: Sendable {
       githubStatus = .failed(.authentication)
       jiraStatus = .ok
       circleciStatus = .ok
-    case .typical, .longList, .clearSkies, .notify:
+    case .typical, .longList, .clearSkies, .notify, .update:
       githubStatus = .ok
       jiraStatus = .ok
       circleciStatus = .ok
@@ -75,6 +78,7 @@ public struct DemoScenario: Sendable {
       changedGitHubSnapshot = nil
       changedPipelines = nil
     }
+    availableVersion = name == .update ? "1.0.0" : nil
   }
 
   // The value after -demo. nil without -demo, and empty when -demo is the last argument.

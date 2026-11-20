@@ -24,7 +24,7 @@ open -n build/Build/Products/Debug/Tower.app --args -demo typical
 
 Tower is a menu bar app. Quit the running copy first, or `open` reuses it and drops the arguments.
 
-Scenarios: `typical` (every section), `long-list` (enough rows to scroll), `clear-skies`, `offline`, `auth-failure`, `notify` (typical data; the first refresh changes it and posts one real macOS notification of each kind).
+Scenarios: `typical` (every section), `long-list` (enough rows to scroll), `clear-skies`, `offline`, `auth-failure`, `notify` (typical data; the first refresh changes it and posts one real macOS notification of each kind), `update` (typical data and a fake newer version 1.0.0; demo mode never runs brew, so the update notice shows only "Copy brew command").
 
 In demo mode, Settings shows `demo-token` in the token fields, does not save tokens, and turns off "Test connection".
 

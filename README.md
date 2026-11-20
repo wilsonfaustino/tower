@@ -38,6 +38,8 @@ The menu bar icon changes shape, not color: a beacon and a count for urgent item
 
 Tower refreshes every 5 minutes, and every 2 minutes when all sources are offline. It keeps the last good result of each source on disk, so it shows stale data instead of an empty panel when a source fails.
 
+At launch and then once a day, Tower asks GitHub for its latest release. The request has no token. When a newer version exists, the panel and Settings > About show it with an Update button. Update runs `brew update` and `brew upgrade --cask`, then relaunches Tower. When Homebrew did not install Tower, the button is "Copy brew command". The menu bar icon's context menu has Check for Updates… (Cmd-U).
+
 ## Requirements
 
 - macOS 26 or later
@@ -57,7 +59,7 @@ Run the `Tower` scheme. The cab icon appears in the menu bar. Tower has no Dock 
 
 `project.yml` is the source of the Xcode project. Do not edit `Tower.xcodeproj` by hand; it is generated and gitignored.
 
-To see the panel with fake data, launch a Debug build with `-demo <scenario>`. Demo data makes no network calls and does not write the cache. Scenarios: `typical` (every section), `long-list` (enough rows to scroll), `clear-skies`, `offline`, `auth-failure`.
+To see the panel with fake data, launch a Debug build with `-demo <scenario>`. Demo data makes no network calls and does not write the cache. Scenarios: `typical` (every section), `long-list` (enough rows to scroll), `clear-skies`, `offline`, `auth-failure`, `notify`, `update` (typical data and a fake newer version, for the update notice; Update shows only "Copy brew command").
 
 ```bash
 open path/to/Debug/Tower.app --args -demo long-list

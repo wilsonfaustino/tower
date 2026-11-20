@@ -8,18 +8,22 @@ import SwiftUI
   let statusItem: NSStatusItem
   let contextMenu: NSMenu
   private let store: QueueStore
+  private let updateChecker: UpdateChecker
   private let refresh: () -> Void
   private let openSettings: () -> Void
   private let quit: () -> Void
   let panel = PanelWindow()
   private var outsideClickMonitor: Any?
+  private(set) var isCheckingForUpdates = false
   private lazy var refreshItem = menuItem(
     "Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r")
 
   init(
-    store: QueueStore, refresh: @escaping () -> Void, openSettings: @escaping () -> Void, quit: @escaping () -> Void
+    store: QueueStore, updateChecker: UpdateChecker, refresh: @escaping () -> Void,
+    openSettings: @escaping () -> Void, quit: @escaping () -> Void
   ) {
     self.store = store
+    self.updateChecker = updateChecker
     self.refresh = refresh
     self.openSettings = openSettings
     self.quit = quit
@@ -60,6 +64,34 @@ import SwiftUI
     openSettings()
   }
 
+  // A newer version opens the panel, where the notice and Update button sit.
+  @objc func chooseCheckForUpdates() {
+    Task { await checkForUpdates() }
+  }
+
+  // A second choice while a check runs does nothing, so one check shows one alert.
+  func checkForUpdates() async {
+    guard !isCheckingForUpdates else { return }
+    isCheckingForUpdates = true
+    defer { isCheckingForUpdates = false }
+    switch await updateChecker.checkNow() {
+    case .newer:
+      if !panel.isVisible { showPanel() }
+    case .upToDate(let currentVersion):
+      showAlert(message: "Tower is up to date.", information: "Version \(currentVersion) is the newest version.")
+    case .failed:
+      showAlert(message: "Could not check for updates.", information: "Try again later.")
+    }
+  }
+
+  private func showAlert(message: String, information: String) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.informativeText = information
+    NSApp.activate()
+    alert.runModal()
+  }
+
   @objc func chooseQuit() {
     quit()
   }
@@ -81,6 +113,8 @@ import SwiftUI
       refreshItem,
       .separator(),
       menuItem("Settings…", symbol: .settings, action: #selector(chooseSettings), keyEquivalent: ","),
+      menuItem(
+        "Check for Updates…", symbol: .checkForUpdates, action: #selector(chooseCheckForUpdates), keyEquivalent: "u"),
       .separator(),
       menuItem("Quit Tower", symbol: .quit, action: #selector(chooseQuit), keyEquivalent: "q"),
     ]
@@ -130,7 +164,7 @@ import SwiftUI
 
   func showPanel() {
     let hostingController = NSHostingController(
-      rootView: PanelView(store: store, close: { [weak self] in self?.closePanel() }, openSettings: openSettings)
+      rootView: PanelView(store: store, updateChecker: updateChecker, close: { [weak self] in self?.closePanel() }, openSettings: openSettings)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel)))
     hostingController.sizingOptions = .preferredContentSize

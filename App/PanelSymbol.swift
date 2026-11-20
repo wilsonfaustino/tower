@@ -20,6 +20,7 @@ enum PanelSymbol: String, CaseIterable {
 enum MenuSymbol: String, CaseIterable {
   case refresh = "ph-arrow-clockwise"
   case settings = "ph-gear"
+  case checkForUpdates = "ph-arrow-circle-down"
   case quit = "ph-power"
 }
 

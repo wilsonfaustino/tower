@@ -25,25 +25,27 @@ private struct UnusedTransport: HTTPTransport {
 @MainActor private func withController(_ body: (StatusItemController, ActionRecorder) -> Void) {
   let recorder = ActionRecorder()
   let controller = StatusItemController(
-    store: QueueStore(), refresh: { recorder.refreshCount += 1 }, openSettings: { recorder.settingsCount += 1 },
+    store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: { recorder.refreshCount += 1 }, openSettings: { recorder.settingsCount += 1 },
     quit: { recorder.quitCount += 1 })
   body(controller, recorder)
   NSStatusBar.system.removeStatusItem(controller.statusItem)
 }
 
 @MainActor struct StatusItemContextMenuTests {
-  @Test func menuHasRefreshThenSettingsThenQuit() {
+  @Test func menuHasRefreshThenSettingsAndUpdatesThenQuit() {
     withController { controller, _ in
       let items = controller.contextMenu.items
-      #expect(items.count == 5)
+      #expect(items.count == 6)
       #expect(items[0].title == "Refresh")
       #expect(items[0].keyEquivalent == "r")
       #expect(items[1].isSeparatorItem)
       #expect(items[2].title == "Settings…")
       #expect(items[2].keyEquivalent == ",")
-      #expect(items[3].isSeparatorItem)
-      #expect(items[4].title == "Quit Tower")
-      #expect(items[4].keyEquivalent == "q")
+      #expect(items[3].title == "Check for Updates…")
+      #expect(items[3].keyEquivalent == "u")
+      #expect(items[4].isSeparatorItem)
+      #expect(items[5].title == "Quit Tower")
+      #expect(items[5].keyEquivalent == "q")
     }
   }
 
@@ -73,7 +75,7 @@ private struct UnusedTransport: HTTPTransport {
       cacheDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tower-menu-\(UUID().uuidString)"),
       loadJiraSettings: { nil }, loadCircleCISettings: { nil }, loadGitHubOrganizations: { [] },
       defaults: UserDefaults(suiteName: "tower-menu-\(UUID().uuidString)")!)
-    let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
+    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
     defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
     let menu = controller.contextMenu
     let refreshItem = menu.items[0]
@@ -113,7 +115,7 @@ private struct UnusedTransport: HTTPTransport {
 
   @Test func quitItemCallsQuitOnce() {
     withController { controller, recorder in
-      controller.contextMenu.performActionForItem(at: 4)
+      controller.contextMenu.performActionForItem(at: 5)
       #expect(recorder.quitCount == 1)
       #expect(recorder.refreshCount == 0)
       #expect(recorder.settingsCount == 0)
@@ -177,7 +179,7 @@ private struct UnusedTransport: HTTPTransport {
 
   @Test func buttonFollowsStoreChanges() async {
     let store = QueueStore()
-    let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
+    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
     store.menuBarState = .failing(count: 3)
     // The observation re-arms on the next main actor turn.
     for _ in 0..<10 where controller.statusItem.button?.title != "3" { await Task.yield() }
@@ -187,8 +189,58 @@ private struct UnusedTransport: HTTPTransport {
   }
 }
 
+@MainActor struct CheckForUpdatesTests {
+  @Test func newerVersionOpensThePanelWithTheNotice() async {
+    let updateChecker = makeOfflineUpdateChecker { _ in "0.5.0" }
+    let controller = StatusItemController(
+      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+    defer {
+      controller.closePanel()
+      NSStatusBar.system.removeStatusItem(controller.statusItem)
+    }
+    await controller.checkForUpdates()
+    #expect(controller.isPanelVisible)
+    #expect(updateChecker.availableVersion == "0.5.0")
+  }
+
+  @Test func secondChoiceWhileCheckingIsIgnored() async {
+    let fetchCount = LockedCounter()
+    let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
+    let updateChecker = makeOfflineUpdateChecker { _ in
+      // Only the first fetch waits: two readers of one AsyncStream crash the test process.
+      if fetchCount.incrementAndGet() == 1 {
+        for await _ in releaseGate {}
+      }
+      return "0.5.0"
+    }
+    let controller = StatusItemController(
+      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+    defer {
+      controller.closePanel()
+      NSStatusBar.system.removeStatusItem(controller.statusItem)
+    }
+    let firstChoice = Task { await controller.checkForUpdates() }
+    await yieldUntilTrue { fetchCount.value == 1 }
+    #expect(controller.isCheckingForUpdates)
+    // The second choice must return while the fetch is still held. Without the guard it would join the
+    // fetch and wait, so the gate opens after the bounded wait either way and the test cannot hang.
+    let secondDone = LockedFlag()
+    let secondChoice = Task {
+      await controller.checkForUpdates()
+      secondDone.value = true
+    }
+    await yieldUntilTrue { secondDone.value }
+    #expect(secondDone.value)
+    openGate.finish()
+    await secondChoice.value
+    await firstChoice.value
+    #expect(!controller.isCheckingForUpdates)
+    #expect(fetchCount.value == 1)
+  }
+}
+
 @MainActor private func withPopover(_ body: (StatusItemController, NSWindow) async -> Void) async {
-  let controller = StatusItemController(store: QueueStore(), refresh: {}, openSettings: {}, quit: {})
+  let controller = StatusItemController(store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
   controller.showPanel()
   let popover = NSWindow(
     contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.titled], backing: .buffered, defer: true)

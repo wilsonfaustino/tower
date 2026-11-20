@@ -1,0 +1,73 @@
+import Core
+import Foundation
+import Testing
+
+@Test func newerReleaseIsReported() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "0.1.2", currentVersion: "0.1.1") == "0.1.2")
+  #expect(ReleaseCheck.newerVersion(latestTag: "1.0.0", currentVersion: "0.9.9") == "1.0.0")
+}
+
+@Test func sameReleaseIsNotAnUpdate() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "0.1.1", currentVersion: "0.1.1") == nil)
+}
+
+@Test func olderReleaseIsNotAnUpdate() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "0.1.0", currentVersion: "0.1.1") == nil)
+  #expect(ReleaseCheck.newerVersion(latestTag: "0.9.9", currentVersion: "1.0.0") == nil)
+}
+
+@Test func leadingVIsStripped() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.1.2", currentVersion: "0.1.1") == "0.1.2")
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.1.1", currentVersion: "0.1.1") == nil)
+}
+
+@Test func missingComponentsCountAsZero() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.2", currentVersion: "0.2.0") == nil)
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.2.0", currentVersion: "0.2") == nil)
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.2.1", currentVersion: "0.2") == "0.2.1")
+  #expect(ReleaseCheck.newerVersion(latestTag: "v1", currentVersion: "0.9.9") == "1")
+}
+
+@Test func twoDigitComponentsCompareAsNumbers() {
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.1.10", currentVersion: "0.1.9") == "0.1.10")
+  #expect(ReleaseCheck.newerVersion(latestTag: "v0.1.9", currentVersion: "0.1.10") == nil)
+}
+
+@Test(arguments: ["", "v", "latest", "1..2", "1.a", "0.2.0-beta", "v+1.0", "-1.0", " 1.0", "1.0."])
+func unparsableVersionIsNotAnUpdate(garbage: String) {
+  #expect(ReleaseCheck.newerVersion(latestTag: garbage, currentVersion: "0.1.1") == nil)
+  #expect(ReleaseCheck.newerVersion(latestTag: "v9.9.9", currentVersion: garbage) == nil)
+}
+
+@Test func decodesTagFromReleaseFixture() throws {
+  let data = try fixture("github-release-latest.json")
+  let latestTag = try #require(ReleaseCheck.latestTag(from: data))
+  #expect(latestTag == "v0.4.0")
+  #expect(ReleaseCheck.newerVersion(latestTag: latestTag, currentVersion: "0.3.0") == "0.4.0")
+}
+
+@Test func releaseWithoutTagNameHasNoTag() {
+  #expect(ReleaseCheck.latestTag(from: Data(#"{"name": "Tower 0.4.0"}"#.utf8)) == nil)
+  #expect(ReleaseCheck.latestTag(from: Data("not json".utf8)) == nil)
+}
+
+@Test func releaseRequestSendsNoAuthorizationHeader() {
+  let request = ReleaseCheck.makeRequest()
+  #expect(request.url?.absoluteString == "https://api.github.com/repos/wilsonfaustino/tower/releases/latest")
+  #expect(request.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
+  #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+}
+
+@Test func responseWithNewerTagGivesTheVersion() throws {
+  let data = try fixture("github-release-latest.json")
+  #expect(try ReleaseCheck.newerVersion(responseData: data, currentVersion: "0.3.0") == "0.4.0")
+  #expect(try ReleaseCheck.newerVersion(responseData: data, currentVersion: "0.4.0") == nil)
+}
+
+@Test func responseThatDoesNotParseThrows() {
+  let buildMetadataTag = Data(#"{"tag_name": "v0.5.0+build.1"}"#.utf8)
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: buildMetadataTag, currentVersion: "0.4.0") }
+  let goodTag = Data(#"{"tag_name": "v0.5.0"}"#.utf8)
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: goodTag, currentVersion: "0.4.0-beta") }
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: Data("not json".utf8), currentVersion: "0.4.0") }
+}
