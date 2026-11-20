@@ -90,6 +90,19 @@ private struct FetchFailure: Error {}
     #expect(fetchCount.value == 0)
   }
 
+  @Test func startChecksAtOnceAndOnlyOnce() async {
+    let fetchCount = LockedCounter()
+    let checker = makeChecker { _ in
+      fetchCount.increment()
+      return "0.5.0"
+    }
+    checker.start()
+    checker.start()
+    await yieldUntilTrue { checker.availableVersion != nil }
+    #expect(checker.availableVersion == "0.5.0")
+    #expect(fetchCount.value == 1)
+  }
+
   @Test func overlappingChecksShareOneFetch() async {
     let fetchCount = LockedCounter()
     let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
