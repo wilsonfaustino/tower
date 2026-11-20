@@ -105,7 +105,7 @@ private struct DemoFactory {
 
   func pullRequest(
     _ repository: String, _ number: Int, _ title: String, author: String = DemoScenario.viewerLogin,
-    isBot: Bool = false, isDraft: Bool = false, hoursAgo: Double, branch: String = "feature",
+    isBot: Bool = false, isDraft: Bool = false, hoursAgo: Double, branch: String = "feature", base: String = "main",
     decision: ReviewDecision? = .reviewRequired, checks: CheckState? = .success, failedChecks: Int = 0,
     reviewers: [String] = ["teammate"], teams: [String] = [], reviewCount: Int = 0, threads: Int = 0,
     approvals: Int = 0, requiredApprovals: Int = 1
@@ -117,7 +117,7 @@ private struct DemoFactory {
       checkState: checks, failedCheckCount: failedChecks, additions: 120 + number % 300, deletions: 12 + number % 90,
       requestedReviewerLogins: reviewers, requestedTeamSlugs: teams, reviewCount: reviewCount,
       reviewRequestedAt: ago(hours: hoursAgo), unresolvedThreadCount: threads, approvalCount: approvals,
-      requiredApprovalCount: requiredApprovals)
+      requiredApprovalCount: requiredApprovals, baseBranch: base)
   }
 
   var typicalAuthored: [PullRequest] {
@@ -126,16 +126,17 @@ private struct DemoFactory {
       pullRequest("demo-org/api", 412, "Fix flaky date parser in sync job", hoursAgo: 3, checks: .failure, failedChecks: 2, threads: 2, approvals: 1, requiredApprovals: 2),
       // Merge
       pullRequest("demo-org/tower", 63, "Release workflow and Homebrew cask", hoursAgo: 2, decision: .approved, approvals: 2, requiredApprovals: 2),
-      // Waiting: passed, running and failed checks, changes requested, drafts, and a title group
+      // Waiting: passed, running and failed checks, changes requested, drafts, and an infra repo group with a stack
       pullRequest("demo-org/web", 220, "Add keyboard navigation to the queue", hoursAgo: 5, branch: "demo-41-keyboard", threads: 1),
       pullRequest("demo-org/web", 221, "Cache avatars on disk", hoursAgo: 4, checks: .pending),
       pullRequest("demo-org/api", 415, "Rename the billing webhook fields", hoursAgo: 26, decision: .changesRequested, threads: 3),
       pullRequest("demo-org/tower", 66, "Menu bar beacon count", isDraft: true, hoursAgo: 6, reviewers: []),
       pullRequest("demo-org/tower", 67, "Try a denser row layout", isDraft: true, hoursAgo: 8, checks: .failure, failedChecks: 1, reviewers: []),
-      pullRequest("demo-org/infra", 90, "chore: bump terraform to 1.9", hoursAgo: 30),
-      pullRequest("demo-org/infra", 91, "chore: pin the runner image", hoursAgo: 31, checks: .pending),
+      pullRequest("demo-org/infra", 90, "chore: bump terraform to 1.9", hoursAgo: 30, branch: "terraform-1.9"),
+      pullRequest("demo-org/infra", 91, "chore: pin the runner image", hoursAgo: 31, branch: "pin-runner", base: "terraform-1.9", checks: .pending),
       pullRequest("demo-org/infra", 92, "chore: drop the old NAT gateway", hoursAgo: 32, checks: .failure, failedChecks: 1),
       pullRequest("demo-org/infra", 93, "chore: try spot runners", isDraft: true, hoursAgo: 33, reviewers: []),
+      pullRequest("demo-org/infra", 94, "chore: rotate the deploy keys", hoursAgo: 34, decision: .changesRequested, threads: 1),
       // Tidy: no reviewer for DEMO-38
       pullRequest("demo-org/api", 418, "DEMO-38 Cache CircleCI pipelines", hoursAgo: 5, branch: "demo-38-cache", reviewers: []),
     ]

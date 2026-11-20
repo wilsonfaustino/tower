@@ -33,6 +33,14 @@ struct DemoScenarioTests {
     #expect(checks.contains(.running))
   }
 
+  @Test(arguments: [DemoScenario.Name.typical, .longList])
+  func showsARepoGroupWithAStackInWaiting(name: DemoScenario.Name) throws {
+    let waitingItems = demoSections(name).first { $0.kind == .waiting }?.items ?? []
+    let groupItem = try #require(waitingItems.first { $0.id == "repo:demo-org/infra" })
+    #expect(groupItem.children.map(\.reference) == ["#94", "#93", "#90", "#91"])
+    #expect(groupItem.badge?.text == "1 changes requested")
+  }
+
   @Test func typicalShowsMoreThanOneIssueTypeOnTidyRows() {
     let tidyItems = demoSections(.typical).first { $0.kind == .tidy }?.items ?? []
     #expect(Set(tidyItems.map(\.symbol)).count > 1)
