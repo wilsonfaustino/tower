@@ -16,6 +16,13 @@ enum PanelSymbol: String, CaseIterable {
   case trash = "ph-trash"
 }
 
+// Symbols for the status item context menu, from the same asset catalog.
+enum MenuSymbol: String, CaseIterable {
+  case refresh = "ph-arrow-clockwise"
+  case settings = "ph-gear"
+  case quit = "ph-power"
+}
+
 // Symbols for the Settings window, from the same asset catalog.
 enum SettingsSymbol: String, CaseIterable {
   case general = "ph-gear"

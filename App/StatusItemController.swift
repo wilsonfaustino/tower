@@ -8,13 +8,17 @@ import SwiftUI
   let statusItem: NSStatusItem
   let contextMenu: NSMenu
   private let store: QueueStore
+  private let refresh: () -> Void
   private let openSettings: () -> Void
   private let quit: () -> Void
   let panel = PanelWindow()
   private var outsideClickMonitor: Any?
 
-  init(store: QueueStore, openSettings: @escaping () -> Void, quit: @escaping () -> Void) {
+  init(
+    store: QueueStore, refresh: @escaping () -> Void, openSettings: @escaping () -> Void, quit: @escaping () -> Void
+  ) {
     self.store = store
+    self.refresh = refresh
     self.openSettings = openSettings
     self.quit = quit
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -45,6 +49,10 @@ import SwiftUI
     button.setAccessibilityLabel(state.accessibilityLabel)
   }
 
+  @objc func chooseRefresh() {
+    refresh()
+  }
+
   @objc func chooseSettings() {
     closePanel()
     openSettings()
@@ -55,11 +63,21 @@ import SwiftUI
   }
 
   private func configureContextMenu() {
-    let settingsItem = NSMenuItem(title: "Settings…", action: #selector(chooseSettings), keyEquivalent: ",")
-    settingsItem.target = self
-    let quitItem = NSMenuItem(title: "Quit Tower", action: #selector(chooseQuit), keyEquivalent: "q")
-    quitItem.target = self
-    contextMenu.items = [settingsItem, .separator(), quitItem]
+    contextMenu.items = [
+      menuItem("Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r"),
+      .separator(),
+      menuItem("Settings…", symbol: .settings, action: #selector(chooseSettings), keyEquivalent: ","),
+      .separator(),
+      menuItem("Quit Tower", symbol: .quit, action: #selector(chooseQuit), keyEquivalent: "q"),
+    ]
+  }
+
+  private func menuItem(_ title: String, symbol: MenuSymbol, action: Selector, keyEquivalent: String) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+    item.target = self
+    item.image = NSImage(named: symbol.rawValue)
+    item.image?.isTemplate = true
+    return item
   }
 
   private func configureButton() {

@@ -30,7 +30,8 @@ import SwiftUI
     // Hosted unit tests launch the app. Skip the real icon and polling so tests do not hit the network.
     guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
     statusItemController = StatusItemController(
-      store: store, openSettings: { [weak self] in self?.showSettings() }, quit: { NSApp.terminate(nil) })
+      store: store, refresh: { [store] in Task { await store.refresh() } },
+      openSettings: { [weak self] in self?.showSettings() }, quit: { NSApp.terminate(nil) })
     // macOS shows the prompt only once. Later calls return the saved answer.
     if !NotificationSettingsKeys.enabledKinds().isEmpty { Self.notifier?.requestAuthorization() }
     store.start()

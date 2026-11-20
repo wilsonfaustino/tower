@@ -15,6 +15,11 @@ struct RowSymbolTests {
     #expect(NSImage(named: symbol.rawValue) != nil)
   }
 
+  @Test(arguments: MenuSymbol.allCases)
+  func menuSymbolExistsInTheAssetCatalog(symbol: MenuSymbol) {
+    #expect(NSImage(named: symbol.rawValue) != nil)
+  }
+
   @Test(arguments: SettingsSymbol.allCases)
   func settingsSymbolExistsInTheAssetCatalog(symbol: SettingsSymbol) {
     #expect(NSImage(named: symbol.rawValue) != nil)
