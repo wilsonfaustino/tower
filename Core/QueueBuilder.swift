@@ -35,7 +35,7 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   for pullRequest in input.authoredPullRequests {
     if pullRequest.isDraft {
       itemsByKind[.waiting, default: []].append(
-        authoredItem(pullRequest, symbol: .waiting, badge: Badge(text: "Draft", variant: .neutral), now: now))
+        authoredItem(pullRequest, symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), now: now))
     } else if pullRequest.isFailing {
       let checkWord = pullRequest.failedCheckCount == 1 ? "check" : "checks"
       itemsByKind[.fix, default: []].append(
@@ -45,7 +45,7 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
         authoredItem(pullRequest, symbol: .merge, badge: Badge(text: "Approved", variant: .ready), now: now))
     } else {
       let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .urgent) : nil
-      itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .waiting, badge: badge, now: now))
+      itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .pullRequest, badge: badge, now: now))
     }
   }
 
@@ -222,7 +222,7 @@ private func titleGroupItem(_ groupKey: TitleGroupKey, members: [QueueItem], now
     id: "group:\(groupKey.repository):\(groupKey.prefix)", title: "\(groupKey.prefix) · \(children.count) PRs",
     tag: groupKey.repository, meta: shortAge(from: children.last!.sortDate, now: now),
     url: gitHubPullsSearchURL("is:pr is:open author:@me in:title \"\(groupKey.prefix)\""),
-    symbol: .waiting, badge: nil, sortDate: children.first!.sortDate, children: children)
+    symbol: .pullRequest, badge: nil, sortDate: children.first!.sortDate, children: children)
 }
 
 private func tidyItem(
