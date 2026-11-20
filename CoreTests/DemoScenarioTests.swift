@@ -59,6 +59,13 @@ struct DemoScenarioTests {
     #expect(!demoSections(.authFailure).isEmpty)
   }
 
+  @Test func onlyUpdateHasANewerVersion() {
+    #expect(DemoScenario(name: .update, now: demoNow).availableVersion == "1.0.0")
+    #expect(demoSections(.update).map(\.kind) == SectionKind.allCases)
+    let otherNames = DemoScenario.Name.allCases.filter { $0 != .update }
+    #expect(otherNames.allSatisfy { DemoScenario(name: $0, now: demoNow).availableVersion == nil })
+  }
+
   @Test func launchValueReadsTheTokenAfterTheFlag() {
     #expect(DemoScenario.launchValue(arguments: ["Tower", "-demo", "long-list"]) == "long-list")
     #expect(DemoScenario.launchValue(arguments: ["Tower", "-demo"]) == "")

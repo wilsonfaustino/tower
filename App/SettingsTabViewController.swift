@@ -35,7 +35,10 @@ enum SettingsTab: Hashable, CaseIterable {
   private let didSelectTab: (SettingsTab) -> Void
   private var contentSizes: [SettingsTab: CGSize] = [:]
 
-  init(store: QueueStore, initialTab: SettingsTab, didSelectTab: @escaping (SettingsTab) -> Void) {
+  init(
+    store: QueueStore, updateChecker: UpdateChecker, initialTab: SettingsTab,
+    didSelectTab: @escaping (SettingsTab) -> Void
+  ) {
     self.didSelectTab = didSelectTab
     super.init(nibName: nil, bundle: nil)
     tabStyle = .toolbar
@@ -45,7 +48,7 @@ enum SettingsTab: Hashable, CaseIterable {
     addTab(.github, content: SettingsGitHubTab(store: store))
     addTab(.jira, content: SettingsJiraTab(store: store))
     addTab(.circleci, content: SettingsCircleCITab(store: store))
-    addTab(.about, content: SettingsAboutTab())
+    addTab(.about, content: SettingsAboutTab(updateChecker: updateChecker))
     selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: initialTab) ?? 0
   }
 

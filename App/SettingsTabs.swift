@@ -273,6 +273,7 @@ struct SettingsCircleCITab: View {
 }
 
 struct SettingsAboutTab: View {
+  let updateChecker: UpdateChecker
   private static let authorURL = URL(string: "https://github.com/wilsonfaustino")!
   private static let repositoryURL = URL(string: "https://github.com/wilsonfaustino/tower")!
   private static let donationURL = URL(string: "https://buymeacoffee.com/wilsonfaustino")!
@@ -288,6 +289,17 @@ struct SettingsAboutTab: View {
       SettingsRow(label: "Tower") {
         Text(versionText)
           .foregroundStyle(Theme.textSecondary)
+        if let availableVersion = updateChecker.availableVersion {
+          VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.s) {
+              Text("Version \(availableVersion) is available.")
+              UpdateControls(appUpdater: updateChecker.appUpdater)
+            }
+            // fixedSize collapses the row's Spacer, so Copy sits after the status text like Update sits after the version text.
+            UpdateStatusRow(appUpdater: updateChecker.appUpdater)
+              .fixedSize()
+          }
+        }
       }
       SettingsDivider()
       SettingsRow(label: "Made by") {

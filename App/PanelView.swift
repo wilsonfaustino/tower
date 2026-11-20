@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PanelView: View {
   let store: QueueStore
+  let updateChecker: UpdateChecker
   let close: () -> Void
   let openSettings: () -> Void
   @State private var selectedItemId: String?
@@ -29,6 +30,9 @@ struct PanelView: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      if let availableVersion = updateChecker.availableVersion {
+        updateNotice(version: availableVersion)
+      }
       if showsTabs {
         tabPicker.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tabPickerHeight = $0 }
       }
@@ -182,6 +186,21 @@ struct PanelView: View {
     }
     .padding(.horizontal, Theme.Spacing.l)
     .padding(.vertical, Theme.Spacing.m)
+  }
+
+  private func updateNotice(version: String) -> some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+      HStack(spacing: Theme.Spacing.s) {
+        Text("Version \(version) is available.")
+          .font(Theme.Fonts.rowMeta)
+          .foregroundStyle(Theme.textSecondary)
+        Spacer()
+        UpdateControls(appUpdater: updateChecker.appUpdater)
+      }
+      UpdateStatusRow(appUpdater: updateChecker.appUpdater)
+    }
+    .padding(.horizontal, Theme.Spacing.l)
+    .padding(.bottom, Theme.Spacing.m)
   }
 
   private var tabPicker: some View {
