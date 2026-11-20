@@ -77,7 +77,13 @@ public struct CircleCIClient: Sendable {
     guard let workflowURL = Self.apiURL("pipeline/\(pipeline.id)/workflow") else {
       throw .unexpected("CircleCI response did not decode")
     }
-    let workflows: WorkflowList = try await get(workflowURL, token: token)
+    let workflows: WorkflowList
+    do {
+      workflows = try await get(workflowURL, token: token)
+    } catch .unexpected where pipeline.hasPullRequest {
+      // The panel never shows this pipeline, so a bad answer keeps the placeholder state and fails nothing else.
+      return pipeline
+    }
     if workflows.items.isEmpty {
       // No workflows means setup still runs, or the config filters removed every workflow.
       pipeline.state = Self.setupPipelineStates.contains(candidate.pipelineState) ? .running : .canceled
