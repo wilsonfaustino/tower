@@ -162,12 +162,17 @@ struct PanelView: View {
       Button {
         Task { await store.refresh() }
       } label: {
-        Image(PanelSymbol.refresh.rawValue)
+        if store.isRefreshing {
+          ProgressView().controlSize(.small)
+        } else {
+          Image(PanelSymbol.refresh.rawValue)
+        }
       }
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
       .help("Refresh")
       .accessibilityLabel("Refresh")
+      .accessibilityValue(store.isRefreshing ? "Refreshing…" : "")
       Button(action: showSettings) {
         Image(PanelSymbol.settings.rawValue)
       }

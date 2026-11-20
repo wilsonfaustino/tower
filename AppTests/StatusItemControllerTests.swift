@@ -5,44 +5,118 @@ import Testing
 @testable import Tower
 
 @MainActor final class ActionRecorder {
+  var refreshCount = 0
   var settingsCount = 0
   var quitCount = 0
+}
+
+// Waits until the refresh is cancelled, so the store stays refreshing while the test looks at the menu.
+private struct PendingTokenProvider: GitHubTokenProvider {
+  func token() async throws(SourceFailure) -> String {
+    try? await Task.sleep(for: .seconds(60))
+    throw .network
+  }
+}
+
+private struct UnusedTransport: HTTPTransport {
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) { throw URLError(.cancelled) }
 }
 
 @MainActor private func withController(_ body: (StatusItemController, ActionRecorder) -> Void) {
   let recorder = ActionRecorder()
   let controller = StatusItemController(
-    store: QueueStore(), openSettings: { recorder.settingsCount += 1 }, quit: { recorder.quitCount += 1 })
+    store: QueueStore(), refresh: { recorder.refreshCount += 1 }, openSettings: { recorder.settingsCount += 1 },
+    quit: { recorder.quitCount += 1 })
   body(controller, recorder)
   NSStatusBar.system.removeStatusItem(controller.statusItem)
 }
 
 @MainActor struct StatusItemContextMenuTests {
-  @Test func menuHasSettingsThenQuit() {
+  @Test func menuHasRefreshThenSettingsThenQuit() {
     withController { controller, _ in
       let items = controller.contextMenu.items
-      #expect(items.count == 3)
-      #expect(items[0].title == "Settings…")
-      #expect(items[0].keyEquivalent == ",")
+      #expect(items.count == 5)
+      #expect(items[0].title == "Refresh")
+      #expect(items[0].keyEquivalent == "r")
       #expect(items[1].isSeparatorItem)
-      #expect(items[2].title == "Quit Tower")
-      #expect(items[2].keyEquivalent == "q")
+      #expect(items[2].title == "Settings…")
+      #expect(items[2].keyEquivalent == ",")
+      #expect(items[3].isSeparatorItem)
+      #expect(items[4].title == "Quit Tower")
+      #expect(items[4].keyEquivalent == "q")
     }
   }
 
-  @Test func quitItemCallsQuitOnce() {
+  @Test func everyMenuItemHasATemplateIcon() {
+    withController { controller, _ in
+      for item in controller.contextMenu.items where !item.isSeparatorItem {
+        #expect(item.image != nil, "\(item.title) has no icon")
+        #expect(item.image?.isTemplate == true, "\(item.title) icon is not a template")
+      }
+    }
+  }
+
+  @Test func refreshItemShowsLoadingWhileRefreshing() {
+    withController { controller, _ in
+      controller.updateRefreshItem(isRefreshing: true)
+      #expect(controller.contextMenu.items[0].title == "Refreshing…")
+      #expect(!controller.contextMenu.items[0].isEnabled)
+      controller.updateRefreshItem(isRefreshing: false)
+      #expect(controller.contextMenu.items[0].title == "Refresh")
+      #expect(controller.contextMenu.items[0].isEnabled)
+    }
+  }
+
+  @Test func openingTheMenuReadsTheStoreRefreshState() async throws {
+    let store = QueueStore(
+      tokenProvider: PendingTokenProvider(), transport: UnusedTransport(),
+      cacheDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tower-menu-\(UUID().uuidString)"),
+      loadJiraSettings: { nil }, loadCircleCISettings: { nil }, loadGitHubOrganizations: { [] },
+      defaults: UserDefaults(suiteName: "tower-menu-\(UUID().uuidString)")!)
+    let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
+    defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+    let menu = controller.contextMenu
+    let refreshItem = menu.items[0]
+
+    let refreshTask = Task { await store.refresh() }
+    defer { refreshTask.cancel() }
+    for _ in 0..<200 where !store.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
+    try #require(store.isRefreshing)
+    menu.delegate?.menuNeedsUpdate?(menu)
+    #expect(refreshItem.title == "Refreshing…")
+    #expect(!refreshItem.isEnabled)
+
+    refreshTask.cancel()
+    await refreshTask.value
+    menu.delegate?.menuNeedsUpdate?(menu)
+    #expect(refreshItem.title == "Refresh")
+    #expect(refreshItem.isEnabled)
+  }
+
+  @Test func refreshItemCallsRefreshOnce() {
     withController { controller, recorder in
-      controller.contextMenu.performActionForItem(at: 2)
-      #expect(recorder.quitCount == 1)
+      controller.contextMenu.performActionForItem(at: 0)
+      #expect(recorder.refreshCount == 1)
       #expect(recorder.settingsCount == 0)
+      #expect(recorder.quitCount == 0)
     }
   }
 
   @Test func settingsItemCallsOpenSettingsOnce() {
     withController { controller, recorder in
-      controller.contextMenu.performActionForItem(at: 0)
+      controller.contextMenu.performActionForItem(at: 2)
       #expect(recorder.settingsCount == 1)
+      #expect(recorder.refreshCount == 0)
       #expect(recorder.quitCount == 0)
+    }
+  }
+
+  @Test func quitItemCallsQuitOnce() {
+    withController { controller, recorder in
+      controller.contextMenu.performActionForItem(at: 4)
+      #expect(recorder.quitCount == 1)
+      #expect(recorder.refreshCount == 0)
+      #expect(recorder.settingsCount == 0)
     }
   }
 }
@@ -103,7 +177,7 @@ import Testing
 
   @Test func buttonFollowsStoreChanges() async {
     let store = QueueStore()
-    let controller = StatusItemController(store: store, openSettings: {}, quit: {})
+    let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
     store.menuBarState = .failing(count: 3)
     // The observation re-arms on the next main actor turn.
     for _ in 0..<10 where controller.statusItem.button?.title != "3" { await Task.yield() }
@@ -114,7 +188,7 @@ import Testing
 }
 
 @MainActor private func withPopover(_ body: (StatusItemController, NSWindow) async -> Void) async {
-  let controller = StatusItemController(store: QueueStore(), openSettings: {}, quit: {})
+  let controller = StatusItemController(store: QueueStore(), refresh: {}, openSettings: {}, quit: {})
   controller.showPanel()
   let popover = NSWindow(
     contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.titled], backing: .buffered, defer: true)
