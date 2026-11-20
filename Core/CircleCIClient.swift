@@ -66,10 +66,9 @@ public struct CircleCIClient: Sendable {
     }
   }
 
-  // A pipeline with a PR leaves the queue, so it keeps the placeholder state without a workflow request.
+  // A pipeline with a PR leaves the queue, but its state still tells when it waits for approval.
   private func withWorkflowState(_ candidate: Candidate, token: String) async throws(SourceFailure) -> Pipeline {
     var pipeline = candidate.pipeline
-    if pipeline.hasPullRequest { return pipeline }
     // The pipeline state reads "created" for running, finished and failed pipelines alike.
     if candidate.pipelineState == "errored" {
       pipeline.state = .failed

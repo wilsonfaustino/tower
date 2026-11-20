@@ -73,13 +73,15 @@ public func notificationEvents(
 }
 
 // Events between two successful CircleCI fetches. A pipeline that is new in the current list counts as running before.
-// Pipelines with a PR are skipped, as in the queue: GitHub checks cover them, and the client does not read their state.
+// A pipeline with a PR gives only CI needs approval: GitHub checks already post CI failed and CI passed for it.
 public func notificationEvents(
   previous: [Pipeline], current: [Pipeline], dismissedPipelines: Set<PipelineDismissal>
 ) -> [NotificationEvent] {
   let previousById = Dictionary(previous.map { ($0.id, $0) }) { first, _ in first }
   return current.compactMap { pipeline in
-    guard !pipeline.hasPullRequest, !dismissedPipelines.contains(pipeline.dismissal) else { return nil }
+    guard !pipeline.hasPullRequest || pipeline.state == .onHold, !dismissedPipelines.contains(pipeline.dismissal) else {
+      return nil
+    }
     let previousPipeline = previousById[pipeline.id]
     let previousState = previousPipeline?.state ?? .running
     // A rerun that fails again between two refreshes stays failed, so a newly failed workflow counts as a change.

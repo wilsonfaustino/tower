@@ -136,7 +136,7 @@ public struct Pipeline: Codable, Sendable, Equatable {
   public var createdAt: Date
   public var state: PipelineState
   public var url: URL
-  // Nil when the client did not read the workflows: a PR pipeline, an errored pipeline or no workflows.
+  // Nil when the client did not read the workflows: an errored pipeline or no workflows.
   public var newestWorkflowId: String?
   // The newest run of each workflow name that failed. A rerun of another workflow leaves it the same.
   public var failedWorkflowIds: [String]?
