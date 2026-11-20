@@ -114,7 +114,7 @@ struct CircleCIClientTests {
         id: "017c68cd-10e2-44b1-82f2-aacb59609b9c", projectSlug: "gh/acme/app-web", number: 6053, ref: "fix-e2e-cleanup",
         refIsTag: false, triggerType: "webhook", hasPullRequest: true, createdAt: fractionalDate("2027-01-15T11:02:34.621Z"),
         state: .succeeded, url: URL(string: "https://app.circleci.com/pipelines/github/acme/app-web/6053")!,
-        newestWorkflowId: nil),
+        newestWorkflowId: "ab5d9618-5c36-4df1-8648-dbec8ff09e11", failedWorkflowIds: []),
       Pipeline(
         id: "80f96bcb-62b4-4eee-9b92-24d709a8b5c3", projectSlug: "gh/acme/app-web", number: 6000, ref: "main",
         refIsTag: false, triggerType: "webhook", hasPullRequest: false, createdAt: fractionalDate("2027-01-15T09:43:16.805Z"),
@@ -320,10 +320,20 @@ struct CircleCIClientTests {
     #expect(try await releaseState(workflowData: try workflowList(statuses: []), pipelineState: pipelineState) == expectedState)
   }
 
-  @Test func skipsWorkflowRequestForPipelineWithPullRequest() async throws {
-    let transport = fixtureTransport()
-    _ = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
-    #expect(!transport.requests.contains { $0.url!.path().contains("017c68cd-10e2-44b1-82f2-aacb59609b9c") })
+  // A PR pipeline stays out of the queue, but an on-hold state still posts "CI needs approval".
+  @Test func readsWorkflowStateForPipelineWithPullRequest() async throws {
+    var page = try #require(try JSONSerialization.jsonObject(with: fixture("circleci-pipelines-mine.json")) as? [String: Any])
+    page["items"] = [try #require((page["items"] as? [[String: Any]])?[0])]
+    let pageData = try JSONSerialization.data(withJSONObject: page)
+    let workflowData = try fixture("circleci-workflows-on-hold.json")
+    let transport = StubTransport { request in
+      (request.url!.path().hasSuffix("/pipeline/mine") ? pageData : workflowData, 200)
+    }
+    let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(pipelines.map(\.hasPullRequest) == [true])
+    #expect(pipelines.map(\.state) == [.onHold])
+    #expect(pipelines.map(\.workflowStateIsUnknown) == [false])
+    #expect(transport.requests.contains { $0.url!.path() == "/api/v2/pipeline/017c68cd-10e2-44b1-82f2-aacb59609b9c/workflow" })
   }
 
   @Test func readsWorkflowsOnlyForNewestPipelinePerKey() async throws {
@@ -338,16 +348,60 @@ struct CircleCIClientTests {
     #expect(transport.requests.filter { $0.url!.path().hasSuffix("/workflow") }.map { $0.url!.path() } == ["/api/v2/pipeline/newer/workflow"])
   }
 
-  @Test func newerPullRequestPipelineSkipsWorkflowsForTheKey() async throws {
+  // The panel never shows a PR pipeline, so a bad answer for it must not hide a failed pipeline in Fix.
+  @Test func unexpectedWorkflowFailureForPullRequestPipelineKeepsTheOtherPipelines() async throws {
+    let page = try pageData([
+      ["id": "with-pr", "number": 2, "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")],
+      ["id": "on-main", "number": 1, "vcs": vcs(branch: "main")],
+    ])
+    let failedWorkflowData = try workflowList(statuses: ["failed"])
+    let transport = StubTransport { request in
+      let path = request.url!.path()
+      if path.hasSuffix("/pipeline/mine") { return (page, 200) }
+      return path.contains("with-pr") ? (Data(), 502) : (failedWorkflowData, 200)
+    }
+    let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    #expect(pipelines.map(\.number) == [2, 1])
+    #expect(pipelines.map(\.state) == [.succeeded, .failed])
+    #expect(pipelines.map(\.workflowStateIsUnknown) == [true, false])
+  }
+
+  @Test func authenticationFailureForPullRequestPipelineStillFails() async throws {
+    let page = try pageData([
+      ["id": "with-pr", "number": 2, "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")]
+    ])
+    let transport = StubTransport { request in
+      request.url!.path().hasSuffix("/pipeline/mine") ? (page, 200) : (Data(), 401)
+    }
+    await #expect(throws: SourceFailure.authentication) {
+      try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    }
+  }
+
+  @Test func networkFailureForPullRequestPipelineStillFails() async throws {
+    let page = try pageData([
+      ["id": "with-pr", "number": 2, "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")]
+    ])
+    let transport = StubTransport { request in
+      guard request.url!.path().hasSuffix("/pipeline/mine") else { throw URLError(.timedOut) }
+      return (page, 200)
+    }
+    await #expect(throws: SourceFailure.network) {
+      try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
+    }
+  }
+
+  @Test func newerPullRequestPipelineReadsWorkflowsOnlyForItself() async throws {
     let page = try pageData([
       ["id": "newer", "number": 2, "created_at": "2027-01-15T11:00:00.000Z",
        "vcs": vcs(branch: "feature/x", reviewUrl: "https://github.com/acme/app-web/pull/7")],
       ["id": "older", "number": 1, "created_at": "2027-01-15T10:00:00.000Z", "vcs": vcs(branch: "feature/x")],
     ])
-    let transport = StubTransport { _ in (page, 200) }
+    let workflowData = try workflowList(statuses: ["success"])
+    let transport = StubTransport { request in (request.url!.path().hasSuffix("/pipeline/mine") ? page : workflowData, 200) }
     let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
     #expect(pipelines.map(\.number) == [2])
-    #expect(transport.requests.count == 1)
+    #expect(transport.requests.filter { $0.url!.path().hasSuffix("/workflow") }.map { $0.url!.path() } == ["/api/v2/pipeline/newer/workflow"])
   }
 
   @Test func capsWorkflowRequestsInFlight() async throws {

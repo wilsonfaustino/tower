@@ -311,10 +311,23 @@ struct PipelineEventTests {
     #expect(events.map(\.kind) == [.ciFailed])
   }
 
-  // The client gives a PR pipeline a placeholder "succeeded" state, so it must not give CI passed.
-  @Test func pipelineWithAPullRequestGivesNoEvent() {
-    let events = pipelineEvents(previous: [], current: [pipeline(state: .succeeded, hasPullRequest: true)])
+  // GitHub checks already post CI failed and CI passed for a PR, so only the on-hold state counts.
+  @Test(arguments: [PipelineState.failed, .succeeded, .canceled])
+  func pipelineWithAPullRequestGivesNoFinishedEvent(state: PipelineState) {
+    let events = pipelineEvents(
+      previous: [pipeline(state: .running, hasPullRequest: true)], current: [pipeline(state: state, hasPullRequest: true)])
     #expect(events.isEmpty)
+  }
+
+  @Test func newPipelineWithAPullRequestAlreadyOnHoldGivesCINeedsApproval() {
+    let events = pipelineEvents(previous: [], current: [pipeline(state: .onHold, hasPullRequest: true)])
+    #expect(events.map(\.kind) == [.ciNeedsApproval])
+  }
+
+  @Test func onHoldPipelineWithAPullRequestGivesCINeedsApproval() {
+    let events = pipelineEvents(
+      previous: [pipeline(state: .running, hasPullRequest: true)], current: [pipeline(state: .onHold, hasPullRequest: true)])
+    #expect(events.map(\.kind) == [.ciNeedsApproval])
   }
 
   @Test func dismissedPipelineGivesNoEvent() {
@@ -322,5 +335,29 @@ struct PipelineEventTests {
     let events = pipelineEvents(
       previous: [pipeline(state: .running)], current: [failedPipeline], dismissed: [failedPipeline.dismissal])
     #expect(events.isEmpty)
+  }
+}
+
+struct NotificationBaselineTests {
+  private let unknownPipeline = pipeline(state: .succeeded, hasPullRequest: true, newestWorkflowId: nil)
+
+  @Test func unknownPipelineKeepsItsPreviousEntry() {
+    let onHoldPipeline = pipeline(state: .onHold, hasPullRequest: true)
+    #expect(notificationBaseline(previous: [onHoldPipeline], current: [unknownPipeline]) == [onHoldPipeline])
+  }
+
+  @Test func unknownPipelineWithoutAPreviousEntryStaysUnknown() {
+    #expect(notificationBaseline(previous: [], current: [unknownPipeline]) == [unknownPipeline])
+  }
+
+  @Test func knownPipelineReplacesItsPreviousEntry() {
+    let runningPipeline = pipeline(state: .running, hasPullRequest: true)
+    let onHoldPipeline = pipeline(state: .onHold, hasPullRequest: true)
+    #expect(notificationBaseline(previous: [runningPipeline], current: [onHoldPipeline]) == [onHoldPipeline])
+  }
+
+  @Test func pipelineThatLeftTheFetchLeavesTheBaseline() {
+    let oldPipeline = pipeline(number: 1, state: .onHold)
+    #expect(notificationBaseline(previous: [oldPipeline], current: [unknownPipeline]) == [unknownPipeline])
   }
 }

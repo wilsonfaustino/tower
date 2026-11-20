@@ -66,10 +66,9 @@ public struct CircleCIClient: Sendable {
     }
   }
 
-  // A pipeline with a PR leaves the queue, so it keeps the placeholder state without a workflow request.
+  // A pipeline with a PR leaves the queue, but its state still tells when it waits for approval.
   private func withWorkflowState(_ candidate: Candidate, token: String) async throws(SourceFailure) -> Pipeline {
     var pipeline = candidate.pipeline
-    if pipeline.hasPullRequest { return pipeline }
     // The pipeline state reads "created" for running, finished and failed pipelines alike.
     if candidate.pipelineState == "errored" {
       pipeline.state = .failed
@@ -78,7 +77,14 @@ public struct CircleCIClient: Sendable {
     guard let workflowURL = Self.apiURL("pipeline/\(pipeline.id)/workflow") else {
       throw .unexpected("CircleCI response did not decode")
     }
-    let workflows: WorkflowList = try await get(workflowURL, token: token)
+    let workflows: WorkflowList
+    do {
+      workflows = try await get(workflowURL, token: token)
+    } catch .unexpected where pipeline.hasPullRequest {
+      // The panel never shows this pipeline, so an unexpected answer (bad status or body) keeps the placeholder state
+      // and fails nothing else. Authentication and network failures still fail the source.
+      return pipeline
+    }
     if workflows.items.isEmpty {
       // No workflows means setup still runs, or the config filters removed every workflow.
       pipeline.state = Self.setupPipelineStates.contains(candidate.pipelineState) ? .running : .canceled

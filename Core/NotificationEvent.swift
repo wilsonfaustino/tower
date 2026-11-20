@@ -73,14 +73,19 @@ public func notificationEvents(
 }
 
 // Events between two successful CircleCI fetches. A pipeline that is new in the current list counts as running before.
-// Pipelines with a PR are skipped, as in the queue: GitHub checks cover them, and the client does not read their state.
+// A pipeline with a PR gives only CI needs approval: GitHub checks already post CI failed and CI passed for it.
 public func notificationEvents(
   previous: [Pipeline], current: [Pipeline], dismissedPipelines: Set<PipelineDismissal>
 ) -> [NotificationEvent] {
   let previousById = Dictionary(previous.map { ($0.id, $0) }) { first, _ in first }
   return current.compactMap { pipeline in
-    guard !pipeline.hasPullRequest, !dismissedPipelines.contains(pipeline.dismissal) else { return nil }
+    guard !pipeline.hasPullRequest || pipeline.state == .onHold, !dismissedPipelines.contains(pipeline.dismissal) else {
+      return nil
+    }
     let previousPipeline = previousById[pipeline.id]
+    // A state Tower never read is not a known "before", as at launch. Accepted cost: when the reads come back, a hold
+    // posts nothing if Tower had no known state for the pipeline, or if the last known state was an earlier hold.
+    guard previousPipeline?.workflowStateIsUnknown != true else { return nil }
     let previousState = previousPipeline?.state ?? .running
     // A rerun that fails again between two refreshes stays failed, so a newly failed workflow counts as a change.
     let newlyFailedWorkflowIds = Set(pipeline.failedWorkflowIds ?? [])
@@ -103,6 +108,16 @@ public func notificationEvents(
     return NotificationEvent(
       kind: kind, id: "\(kind.rawValue):pipeline:\(pipeline.id):\(state)",
       body: "\(pipeline.ref)\n\(repository) #\(pipeline.number)", url: pipeline.url)
+  }
+}
+
+// The baseline for the next pipeline diff. A pipeline whose workflow read failed keeps its last known entry,
+// so the next good read of the same state is not a change.
+public func notificationBaseline(previous: [Pipeline], current: [Pipeline]) -> [Pipeline] {
+  let previousById = Dictionary(previous.map { ($0.id, $0) }) { first, _ in first }
+  return current.map { pipeline in
+    guard pipeline.workflowStateIsUnknown, let previousPipeline = previousById[pipeline.id] else { return pipeline }
+    return previousPipeline
   }
 }
 

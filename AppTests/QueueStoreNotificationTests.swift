@@ -18,6 +18,8 @@ private struct StubTokenProvider: GitHubTokenProvider {
 private final class CircleCIResponse: @unchecked Sendable {
   var workflowStatus = "running"
   var statusCode = 200
+  var workflowStatusCode = 200
+  var hasPullRequest = false
 }
 
 private let pipelineCreatedAt = Date().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
@@ -47,15 +49,17 @@ private func githubTransport(_ response: GitHubResponse) -> StubTransport {
   }
 }
 
-// One branch pipeline without a PR. Its state comes from the one workflow the stub returns.
+// One branch pipeline, with or without a PR. Its state comes from the one workflow the stub returns.
 private func circleciTransport(_ response: CircleCIResponse) throws -> StubTransport {
   let githubData = try fixture("github-search.json")
   return StubTransport { request in
     guard request.url?.host() == "circleci.com" else { return (githubData, 200) }
-    let body =
-      request.url!.path().hasSuffix("/workflow")
-      ? #"{"items":[{"id":"workflow-1","name":"build","status":"\#(response.workflowStatus)","created_at":"\#(pipelineCreatedAt)"}]}"#
-      : #"{"items":[{"id":"pipeline-1","number":7,"state":"created","created_at":"\#(pipelineCreatedAt)","project_slug":"gh/acme/app-web","trigger":{"type":"webhook"},"vcs":{"branch":"main"}}]}"#
+    if request.url!.path().hasSuffix("/workflow") {
+      let body = #"{"items":[{"id":"workflow-1","name":"build","status":"\#(response.workflowStatus)","created_at":"\#(pipelineCreatedAt)"}]}"#
+      return (Data(body.utf8), response.workflowStatusCode)
+    }
+    let reviewURL = response.hasPullRequest ? #","review_url":"https://github.com/acme/app-web/pull/7""# : ""
+    let body = #"{"items":[{"id":"pipeline-1","number":7,"state":"created","created_at":"\#(pipelineCreatedAt)","project_slug":"gh/acme/app-web","trigger":{"type":"webhook"},"vcs":{"branch":"main"\#(reviewURL)}}]}"#
     return (Data(body.utf8), response.statusCode)
   }
 }
@@ -102,6 +106,67 @@ private final class SettingsBox: @unchecked Sendable {
     #expect(notifier.postedEvents.first?.body == "main\napp-web #7")
     await store.refresh()
     #expect(notifier.postedEvents.count == 1)
+  }
+
+  @Test func pullRequestPipelineOnHoldPostsCINeedsApproval() async throws {
+    let response = CircleCIResponse()
+    response.hasPullRequest = true
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: try circleciTransport(response), notifier: notifier)
+    await store.refresh()
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
+  }
+
+  // A failed workflow read keeps the last known state, so the same hold does not post twice.
+  @Test func failedWorkflowReadBetweenTwoHoldsPostsOnce() async throws {
+    let response = CircleCIResponse()
+    response.hasPullRequest = true
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: try circleciTransport(response), notifier: notifier)
+    await store.refresh()
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    response.workflowStatusCode = 502
+    await store.refresh()
+    response.workflowStatusCode = 200
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
+  }
+
+  // As at launch, a hold that was there before the first read Tower trusts is not news.
+  @Test func holdFirstReadAfterAFailedReadPostsNothing() async throws {
+    let response = CircleCIResponse()
+    response.hasPullRequest = true
+    response.workflowStatus = "on_hold"
+    response.workflowStatusCode = 502
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: try circleciTransport(response), notifier: notifier)
+    await store.refresh()
+    response.workflowStatusCode = 200
+    await store.refresh()
+    #expect(notifier.postedEvents.isEmpty)
+    response.workflowStatus = "running"
+    await store.refresh()
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
+  }
+
+  // The failed read keeps the known running state, so the hold after it is still a change.
+  @Test func holdAfterAFailedReadOfARunningPipelinePosts() async throws {
+    let response = CircleCIResponse()
+    response.hasPullRequest = true
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: try circleciTransport(response), notifier: notifier)
+    await store.refresh()
+    response.workflowStatusCode = 502
+    await store.refresh()
+    response.workflowStatusCode = 200
+    response.workflowStatus = "on_hold"
+    await store.refresh()
+    #expect(notifier.postedEvents.map(\.kind) == [.ciNeedsApproval])
   }
 
   @Test func cachedDataIsNotTheBaseline() async throws {

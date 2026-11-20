@@ -136,7 +136,7 @@ public struct Pipeline: Codable, Sendable, Equatable {
   public var createdAt: Date
   public var state: PipelineState
   public var url: URL
-  // Nil when the client did not read the workflows: a PR pipeline, an errored pipeline or no workflows.
+  // Nil when the client has no workflow: an errored pipeline, no workflows, or a failed request for a PR pipeline.
   public var newestWorkflowId: String?
   // The newest run of each workflow name that failed. A rerun of another workflow leaves it the same.
   public var failedWorkflowIds: [String]?
@@ -159,6 +159,9 @@ public struct Pipeline: Codable, Sendable, Equatable {
     self.newestWorkflowId = newestWorkflowId
     self.failedWorkflowIds = failedWorkflowIds
   }
+
+  // A PR pipeline whose workflow request failed keeps the placeholder state. A read that gives succeeded always has a workflow id.
+  public var workflowStateIsUnknown: Bool { hasPullRequest && state == .succeeded && newestWorkflowId == nil }
 }
 
 public enum SectionKind: Int, CaseIterable, Comparable, Sendable {
