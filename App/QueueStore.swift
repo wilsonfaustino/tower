@@ -268,10 +268,13 @@ struct UndoableDismissal: Equatable {
         DismissalKeys.save(keptDismissals, key: DismissalKeys.dismissedPipelines, defaults: defaults)
       }
       // The token picks the account whose pipelines "mine" returns, so a new token is a new baseline too.
-      if let baseline = circleciNotificationBaseline, baseline.settings == circleciSettings {
-        post(notificationEvents(previous: baseline.pipelines, current: fetchedPipelines, dismissedPipelines: dismissedPipelines))
+      let previousBaseline = circleciNotificationBaseline.flatMap { $0.settings == circleciSettings ? $0.pipelines : nil }
+      if let previousBaseline {
+        post(notificationEvents(previous: previousBaseline, current: fetchedPipelines, dismissedPipelines: dismissedPipelines))
       }
-      circleciNotificationBaseline = (fetchedPipelines, circleciSettings)
+      circleciNotificationBaseline = (
+        notificationBaseline(previous: previousBaseline ?? [], current: fetchedPipelines), circleciSettings
+      )
     case .failure(let failure):
       circleciStatus = .failed(failure)
       if failure == .notConfigured {

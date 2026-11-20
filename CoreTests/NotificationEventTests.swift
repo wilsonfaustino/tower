@@ -319,6 +319,11 @@ struct PipelineEventTests {
     #expect(events.isEmpty)
   }
 
+  @Test func newPipelineWithAPullRequestAlreadyOnHoldGivesCINeedsApproval() {
+    let events = pipelineEvents(previous: [], current: [pipeline(state: .onHold, hasPullRequest: true)])
+    #expect(events.map(\.kind) == [.ciNeedsApproval])
+  }
+
   @Test func onHoldPipelineWithAPullRequestGivesCINeedsApproval() {
     let events = pipelineEvents(
       previous: [pipeline(state: .running, hasPullRequest: true)], current: [pipeline(state: .onHold, hasPullRequest: true)])

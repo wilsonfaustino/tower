@@ -332,6 +332,7 @@ struct CircleCIClientTests {
     let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
     #expect(pipelines.map(\.hasPullRequest) == [true])
     #expect(pipelines.map(\.state) == [.onHold])
+    #expect(pipelines.map(\.workflowStateIsUnknown) == [false])
     #expect(transport.requests.contains { $0.url!.path() == "/api/v2/pipeline/017c68cd-10e2-44b1-82f2-aacb59609b9c/workflow" })
   }
 
@@ -362,6 +363,7 @@ struct CircleCIClientTests {
     let pipelines = try await CircleCIClient(settings: settings, transport: transport).fetch(now: now)
     #expect(pipelines.map(\.number) == [2, 1])
     #expect(pipelines.map(\.state) == [.succeeded, .failed])
+    #expect(pipelines.map(\.workflowStateIsUnknown) == [true, false])
   }
 
   @Test func authenticationFailureForPullRequestPipelineStillFails() async throws {
