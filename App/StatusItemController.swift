@@ -13,6 +13,8 @@ import SwiftUI
   private let quit: () -> Void
   let panel = PanelWindow()
   private var outsideClickMonitor: Any?
+  private lazy var refreshItem = menuItem(
+    "Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r")
 
   init(
     store: QueueStore, refresh: @escaping () -> Void, openSettings: @escaping () -> Void, quit: @escaping () -> Void
@@ -67,7 +69,6 @@ import SwiftUI
   }
 
   func updateRefreshItem(isRefreshing: Bool) {
-    guard let refreshItem = contextMenu.items.first else { return }
     refreshItem.title = isRefreshing ? "Refreshing…" : "Refresh"
     refreshItem.isEnabled = !isRefreshing
   }
@@ -77,7 +78,7 @@ import SwiftUI
     contextMenu.autoenablesItems = false
     contextMenu.delegate = self
     contextMenu.items = [
-      menuItem("Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r"),
+      refreshItem,
       .separator(),
       menuItem("Settings…", symbol: .settings, action: #selector(chooseSettings), keyEquivalent: ","),
       .separator(),

@@ -172,6 +172,7 @@ struct PanelView: View {
       .disabled(store.isRefreshing)
       .help("Refresh")
       .accessibilityLabel("Refresh")
+      .accessibilityValue(store.isRefreshing ? "Refreshing…" : "")
       Button(action: showSettings) {
         Image(PanelSymbol.settings.rawValue)
       }

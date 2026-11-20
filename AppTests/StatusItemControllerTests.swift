@@ -10,6 +10,18 @@ import Testing
   var quitCount = 0
 }
 
+// Waits until the refresh is cancelled, so the store stays refreshing while the test looks at the menu.
+private struct PendingTokenProvider: GitHubTokenProvider {
+  func token() async throws(SourceFailure) -> String {
+    try? await Task.sleep(for: .seconds(60))
+    throw .network
+  }
+}
+
+private struct UnusedTransport: HTTPTransport {
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) { throw URLError(.cancelled) }
+}
+
 @MainActor private func withController(_ body: (StatusItemController, ActionRecorder) -> Void) {
   let recorder = ActionRecorder()
   let controller = StatusItemController(
@@ -55,13 +67,27 @@ import Testing
     }
   }
 
-  @Test func openingTheMenuReadsTheStoreRefreshState() {
-    withController { controller, _ in
-      controller.updateRefreshItem(isRefreshing: true)
-      controller.menuNeedsUpdate(controller.contextMenu)
-      #expect(controller.contextMenu.items[0].title == "Refresh")
-      #expect(controller.contextMenu.items[0].isEnabled)
-    }
+  @Test func openingTheMenuReadsTheStoreRefreshState() async throws {
+    let store = QueueStore(
+      tokenProvider: PendingTokenProvider(), transport: UnusedTransport(),
+      cacheDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tower-menu-\(UUID().uuidString)"),
+      loadJiraSettings: { nil }, loadCircleCISettings: { nil }, loadGitHubOrganizations: { [] },
+      defaults: UserDefaults(suiteName: "tower-menu-\(UUID().uuidString)")!)
+    let controller = StatusItemController(store: store, refresh: {}, openSettings: {}, quit: {})
+    defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+    let refreshItem = controller.contextMenu.items[0]
+
+    let refreshTask = Task { await store.refresh() }
+    for _ in 0..<200 where !store.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
+    controller.menuNeedsUpdate(controller.contextMenu)
+    #expect(refreshItem.title == "Refreshing…")
+    #expect(!refreshItem.isEnabled)
+
+    refreshTask.cancel()
+    await refreshTask.value
+    controller.menuNeedsUpdate(controller.contextMenu)
+    #expect(refreshItem.title == "Refresh")
+    #expect(refreshItem.isEnabled)
   }
 
   @Test func refreshItemCallsRefreshOnce() {
