@@ -426,12 +426,19 @@ struct TitleGroupTests {
     #expect(groupItem.tag == "app-web")
     #expect(groupItem.metaTail == "1h")
     #expect(groupItem.symbol == .pullRequest)
-    #expect(groupItem.children.allSatisfy { $0.symbol == .pullRequest })
     #expect(groupItem.badge == nil)
     #expect(groupItem.sortDate == now.addingTimeInterval(-3 * hour))
     #expect(groupItem.children.map(\.id) == ["pr:app-web#3", "pr:app-web#2", "pr:app-web#1"])
     #expect(groupItem.url == URL(
       string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20author%3A%40me%20in%3Atitle%20%22chore%28feature-flags%29%22"))
+  }
+
+  @Test func groupChildrenKeepTheirOwnSymbols() throws {
+    let draft = pullRequest(number: 4, title: "chore(feature-flags): remove flag 4", isDraft: true, updatedHoursAgo: 4)
+    let sections = queue(authored: featureFlagPullRequests(count: 2) + [draft])
+    let groupItem = try #require(items(sections, .waiting).first { $0.id == "group:app-web:chore(feature-flags)" })
+    #expect(groupItem.symbol == .pullRequest)
+    #expect(groupItem.children.map(\.symbol) == [.draftPullRequest, .pullRequest, .pullRequest])
   }
 
   @Test func groupSortsWhereItsOldestPullRequestWould() {

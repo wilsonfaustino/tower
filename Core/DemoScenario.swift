@@ -135,6 +135,7 @@ private struct DemoFactory {
       pullRequest("demo-org/infra", 90, "chore: bump terraform to 1.9", hoursAgo: 30),
       pullRequest("demo-org/infra", 91, "chore: pin the runner image", hoursAgo: 31, checks: .pending),
       pullRequest("demo-org/infra", 92, "chore: drop the old NAT gateway", hoursAgo: 32, checks: .failure, failedChecks: 1),
+      pullRequest("demo-org/infra", 93, "chore: try spot runners", isDraft: true, hoursAgo: 33, reviewers: []),
       // Tidy: no reviewer for DEMO-38
       pullRequest("demo-org/api", 418, "DEMO-38 Cache CircleCI pipelines", hoursAgo: 5, branch: "demo-38-cache", reviewers: []),
     ]

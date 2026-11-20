@@ -465,6 +465,7 @@ struct PanelKeyOutcomeTests {
     #expect(rowSymbolVariant(for: row(id: "f", checks: .failed)) == .failing)
     #expect(rowSymbolVariant(for: row(id: "r", checks: .running)) == .urgent)
     #expect(rowSymbolVariant(for: row(id: "n")) == .neutral)
+    #expect(rowSymbolVariant(for: row(id: "a", symbol: .merge, badge: Badge(text: "Approved", variant: .ready))) == .ready)
     #expect(rowSymbolVariant(for: row(id: "c", badge: Badge(text: "Changes requested", variant: .urgent), checks: .passed)) == .ready)
   }
 
