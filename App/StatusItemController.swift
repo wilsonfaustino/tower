@@ -14,6 +14,7 @@ import SwiftUI
   private let quit: () -> Void
   let panel = PanelWindow()
   private var outsideClickMonitor: Any?
+  private(set) var isCheckingForUpdates = false
   private lazy var refreshItem = menuItem(
     "Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r")
 
@@ -68,7 +69,11 @@ import SwiftUI
     Task { await checkForUpdates() }
   }
 
+  // A second choice while a check runs does nothing, so one check shows one alert.
   func checkForUpdates() async {
+    guard !isCheckingForUpdates else { return }
+    isCheckingForUpdates = true
+    defer { isCheckingForUpdates = false }
     switch await updateChecker.checkNow() {
     case .newer:
       if !panel.isVisible { showPanel() }

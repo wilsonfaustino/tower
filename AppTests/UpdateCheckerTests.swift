@@ -91,19 +91,24 @@ private struct FetchFailure: Error {}
       for await _ in releaseGate {}
       return "0.5.0"
     }
-    async let firstResult = checker.checkNow()
-    async let secondResult = checker.checkNow()
-    // Lets both checks start before the fetch returns.
-    for _ in 0..<20 { await Task.yield() }
+    let firstCheck = Task { await checker.checkNow() }
+    while fetchCount.value < 1 { await Task.yield() }
+    // checkNow joins the pending check before its first suspension, in the same main actor turn that sets the flag.
+    let secondStarted = LockedFlag()
+    let secondCheck = Task {
+      secondStarted.value = true
+      return await checker.checkNow()
+    }
+    while !secondStarted.value { await Task.yield() }
     openGate.finish()
-    #expect(await [firstResult, secondResult] == [.newer("0.5.0"), .newer("0.5.0")])
+    #expect(await [firstCheck.value, secondCheck.value] == [.newer("0.5.0"), .newer("0.5.0")])
     #expect(fetchCount.value == 1)
     _ = await checker.checkNow()
     #expect(fetchCount.value == 2)
   }
 }
 
-private final class LockedFlag: @unchecked Sendable {
+final class LockedFlag: @unchecked Sendable {
   private let lock = NSLock()
   private var storedValue = false
   var value: Bool {
@@ -112,7 +117,7 @@ private final class LockedFlag: @unchecked Sendable {
   }
 }
 
-private final class LockedCounter: @unchecked Sendable {
+final class LockedCounter: @unchecked Sendable {
   private let lock = NSLock()
   private var count = 0
   var value: Int { lock.withLock { count } }

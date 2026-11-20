@@ -194,11 +194,38 @@ private struct UnusedTransport: HTTPTransport {
     let updateChecker = makeOfflineUpdateChecker { _ in "0.5.0" }
     let controller = StatusItemController(
       store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+    defer {
+      controller.closePanel()
+      NSStatusBar.system.removeStatusItem(controller.statusItem)
+    }
     await controller.checkForUpdates()
     #expect(controller.isPanelVisible)
     #expect(updateChecker.availableVersion == "0.5.0")
-    controller.closePanel()
-    NSStatusBar.system.removeStatusItem(controller.statusItem)
+  }
+
+  @Test func secondChoiceWhileCheckingIsIgnored() async {
+    let fetchCount = LockedCounter()
+    let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
+    let updateChecker = makeOfflineUpdateChecker { _ in
+      fetchCount.increment()
+      for await _ in releaseGate {}
+      return "0.5.0"
+    }
+    let controller = StatusItemController(
+      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+    defer {
+      controller.closePanel()
+      NSStatusBar.system.removeStatusItem(controller.statusItem)
+    }
+    let firstChoice = Task { await controller.checkForUpdates() }
+    while fetchCount.value < 1 { await Task.yield() }
+    #expect(controller.isCheckingForUpdates)
+    // Returns at once: one check shows one result.
+    await controller.checkForUpdates()
+    openGate.finish()
+    await firstChoice.value
+    #expect(!controller.isCheckingForUpdates)
+    #expect(fetchCount.value == 1)
   }
 }
 
