@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 // Owns the menu bar icon. Left-click toggles the panel, right-click or Control-click shows the context menu.
-@MainActor final class StatusItemController: NSObject, NSWindowDelegate {
+@MainActor final class StatusItemController: NSObject, NSWindowDelegate, NSMenuDelegate {
   let statusItem: NSStatusItem
   let contextMenu: NSMenu
   private let store: QueueStore
@@ -62,7 +62,20 @@ import SwiftUI
     quit()
   }
 
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    updateRefreshItem(isRefreshing: store.isRefreshing)
+  }
+
+  func updateRefreshItem(isRefreshing: Bool) {
+    guard let refreshItem = contextMenu.items.first else { return }
+    refreshItem.title = isRefreshing ? "Refreshing…" : "Refresh"
+    refreshItem.isEnabled = !isRefreshing
+  }
+
   private func configureContextMenu() {
+    // The Refresh item sets its own enabled state.
+    contextMenu.autoenablesItems = false
+    contextMenu.delegate = self
     contextMenu.items = [
       menuItem("Refresh", symbol: .refresh, action: #selector(chooseRefresh), keyEquivalent: "r"),
       .separator(),

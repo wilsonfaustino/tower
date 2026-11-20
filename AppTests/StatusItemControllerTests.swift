@@ -44,6 +44,26 @@ import Testing
     }
   }
 
+  @Test func refreshItemShowsLoadingWhileRefreshing() {
+    withController { controller, _ in
+      controller.updateRefreshItem(isRefreshing: true)
+      #expect(controller.contextMenu.items[0].title == "Refreshing…")
+      #expect(!controller.contextMenu.items[0].isEnabled)
+      controller.updateRefreshItem(isRefreshing: false)
+      #expect(controller.contextMenu.items[0].title == "Refresh")
+      #expect(controller.contextMenu.items[0].isEnabled)
+    }
+  }
+
+  @Test func openingTheMenuReadsTheStoreRefreshState() {
+    withController { controller, _ in
+      controller.updateRefreshItem(isRefreshing: true)
+      controller.menuNeedsUpdate(controller.contextMenu)
+      #expect(controller.contextMenu.items[0].title == "Refresh")
+      #expect(controller.contextMenu.items[0].isEnabled)
+    }
+  }
+
   @Test func refreshItemCallsRefreshOnce() {
     withController { controller, recorder in
       controller.contextMenu.performActionForItem(at: 0)
