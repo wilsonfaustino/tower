@@ -107,6 +107,9 @@ struct GitHubClientTests {
     #expect(failing.isDraft == false)
     #expect(failing.updatedAt == isoDate("2027-01-15T11:35:00Z"))
     #expect(failing.headBranch == "proj-1201-maplibre")
+    #expect(failing.baseBranch == "proj-1200-map")
+    #expect(failing.isCrossRepository == false)
+    #expect(snapshot.authoredPullRequests[1].baseBranch == nil)
     #expect(failing.reviewDecision == .reviewRequired)
     #expect(failing.checkState == .failure)
     #expect(failing.failedCheckCount == 3)
@@ -328,6 +331,22 @@ struct GitHubClientTests {
     let oldCache = #"{"viewerLogin":"me","authoredPullRequests":[],"reviewRequests":[],"reviewsSubmittedToday":0,"mergedToday":0}"#
     let snapshot = try JSONDecoder().decode(GitHubSnapshot.self, from: Data(oldCache.utf8))
     #expect(snapshot.recentlyMergedPullRequests == nil)
+  }
+
+  @Test func cachedPullRequestWithoutBaseBranchStillDecodes() throws {
+    let current = PullRequest(
+      repository: "app-web", number: 1, title: "T", url: URL(string: "https://github.com/acme/app-web/pull/1")!,
+      author: "me", authorIsBot: false, isDraft: false, updatedAt: now, headBranch: "two", reviewDecision: nil,
+      checkState: nil, failedCheckCount: 0, additions: 0, deletions: 0, requestedReviewerLogins: [],
+      requestedTeamSlugs: [], reviewCount: 0, reviewRequestedAt: nil, baseBranch: "one", isCrossRepository: false)
+    let encoded = try JSONEncoder().encode(current)
+    var cachedPullRequest = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    cachedPullRequest["baseBranch"] = nil
+    cachedPullRequest["isCrossRepository"] = nil
+    let oldCache = try JSONSerialization.data(withJSONObject: cachedPullRequest)
+    let pullRequest = try JSONDecoder().decode(PullRequest.self, from: oldCache)
+    #expect(pullRequest.baseBranch == nil)
+    #expect(pullRequest.isCrossRepository == nil)
   }
 
   @Test func onlyAuthoredSearchAsksForStripFields() async throws {

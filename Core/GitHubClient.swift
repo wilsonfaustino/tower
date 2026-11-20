@@ -253,6 +253,7 @@ private let pullRequestFieldsFragment = """
 private let authoredPullRequestFieldsFragment = """
   fragment AuthoredPullRequestFields on PullRequest {
     ...PullRequestFields
+    baseRefName isCrossRepository
     baseRef { rules(first: 10) { nodes { parameters { ... on PullRequestParameters { requiredApprovingReviewCount } } } } }
     latestOpinionatedReviews(first: 20, writersOnly: true) { nodes { state } }
     reviewThreads(last: \(reviewThreadPageSize)) { totalCount nodes { isResolved } }
@@ -380,6 +381,8 @@ private struct PullRequestNode: Decodable {
   var baseRef: BaseRef?
   var latestOpinionatedReviews: Reviews?
   var reviewThreads: Threads?
+  var baseRefName: String?
+  var isCrossRepository: Bool?
 
   func pullRequest(viewerLogin: String) -> PullRequest? {
     guard let number, let title, let url, let updatedAt, let repository else { return nil }
@@ -412,7 +415,7 @@ private struct PullRequestNode: Decodable {
       approvalCount: latestOpinionatedReviews?.nodes.filter { $0.state == "APPROVED" }.count ?? 0,
       requiredApprovalCount: requiredApprovalCounts.max() ?? 1,
       viewerLatestReviewState: viewerLatestReview.flatMap { ReviewState(rawValue: $0.state) }, headCommitId: headRefOid,
-      viewerReviewRequestedAt: viewerRequestEvent?.createdAt)
+      viewerReviewRequestedAt: viewerRequestEvent?.createdAt, baseBranch: baseRefName, isCrossRepository: isCrossRepository)
   }
 }
 
