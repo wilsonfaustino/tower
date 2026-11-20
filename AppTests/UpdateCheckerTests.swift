@@ -12,7 +12,7 @@ private struct FetchFailure: Error {}
 ) -> UpdateChecker {
   // No brew path, so an update notice on screen never runs the host's brew.
   let checker = UpdateChecker(
-    currentVersion: "0.4.0", fetchNewerVersion: fetchNewerVersion, appUpdater: AppUpdater(findBrew: { nil }))
+    currentVersion: "0.4.0", fetchNewerVersion: fetchNewerVersion, appUpdater: AppUpdater(findBrews: { [] }))
   checker.demoScenario = nil
   return checker
 }
@@ -93,9 +93,12 @@ private struct FetchFailure: Error {}
   @Test func overlappingChecksShareOneFetch() async {
     let fetchCount = LockedCounter()
     let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
+    // Only the first fetch waits at the gate. A second fetch (a coalescing regression) returns at once,
+    // because two readers of one AsyncStream crash the test process.
     let checker = makeChecker { _ in
-      fetchCount.increment()
-      for await _ in releaseGate {}
+      if fetchCount.incrementAndGet() == 1 {
+        for await _ in releaseGate {}
+      }
       return "0.5.0"
     }
     let firstCheck = Task { await checker.checkNow() }
@@ -108,6 +111,7 @@ private struct FetchFailure: Error {}
       return await checker.checkNow()
     }
     await yieldUntilTrue { secondStarted.value }
+    #expect(secondStarted.value)
     openGate.finish()
     #expect(await [firstCheck.value, secondCheck.value] == [.newer("0.5.0"), .newer("0.5.0")])
     #expect(fetchCount.value == 1)
@@ -130,4 +134,10 @@ final class LockedCounter: @unchecked Sendable {
   private var count = 0
   var value: Int { lock.withLock { count } }
   func increment() { lock.withLock { count += 1 } }
+  func incrementAndGet() -> Int {
+    lock.withLock {
+      count += 1
+      return count
+    }
+  }
 }

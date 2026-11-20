@@ -207,8 +207,10 @@ private struct UnusedTransport: HTTPTransport {
     let fetchCount = LockedCounter()
     let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
     let updateChecker = makeOfflineUpdateChecker { _ in
-      fetchCount.increment()
-      for await _ in releaseGate {}
+      // Only the first fetch waits: two readers of one AsyncStream crash the test process.
+      if fetchCount.incrementAndGet() == 1 {
+        for await _ in releaseGate {}
+      }
       return "0.5.0"
     }
     let controller = StatusItemController(

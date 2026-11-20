@@ -35,10 +35,10 @@ private func makeAppBundle(version: String?) throws -> URL {
   return bundleURL
 }
 
-@Test func findBrewPrefersAppleSiliconPath() {
-  #expect(BrewUpgrade.findBrew { _ in true } == "/opt/homebrew/bin/brew")
-  #expect(BrewUpgrade.findBrew { $0 == "/usr/local/bin/brew" } == "/usr/local/bin/brew")
-  #expect(BrewUpgrade.findBrew { _ in false } == nil)
+@Test func findBrewsListsAppleSiliconPathFirst() {
+  #expect(BrewUpgrade.findBrews { _ in true } == ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"])
+  #expect(BrewUpgrade.findBrews { $0 == "/usr/local/bin/brew" } == ["/usr/local/bin/brew"])
+  #expect(BrewUpgrade.findBrews { _ in false }.isEmpty)
 }
 
 @Test func upgradeSendsCaskArgumentsAndNoPromptEnvironment() async throws {

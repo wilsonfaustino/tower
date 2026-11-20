@@ -29,8 +29,9 @@ public enum BrewUpgrade {
     ]
   }
 
-  public static func findBrew(isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> String? {
-    brewPaths.first(where: isExecutable)
+  // A Mac can have both the Apple silicon and the Intel Homebrew, and either one can own the cask.
+  public static func findBrews(isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> [String] {
+    brewPaths.filter(isExecutable)
   }
 
   // nil means brew did not finish (time limit or launch failure), so the caller can ask again later.
