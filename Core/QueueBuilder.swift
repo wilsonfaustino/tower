@@ -31,11 +31,14 @@ private let urgentReviewAge: TimeInterval = 24 * 3600
 
 public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   var itemsByKind: [SectionKind: [QueueItem]] = [:]
+  var waitingRows: [WaitingRow] = []
 
   for pullRequest in input.authoredPullRequests {
     if pullRequest.isDraft {
-      itemsByKind[.waiting, default: []].append(
-        authoredItem(pullRequest, symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), now: now))
+      waitingRows.append(
+        WaitingRow(
+          pullRequest: pullRequest,
+          item: authoredItem(pullRequest, symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), now: now)))
     } else if pullRequest.isFailing {
       let checkWord = pullRequest.failedCheckCount == 1 ? "check" : "checks"
       itemsByKind[.fix, default: []].append(
@@ -45,7 +48,8 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
         authoredItem(pullRequest, symbol: .merge, badge: Badge(text: "Approved", variant: .ready), now: now))
     } else {
       let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .urgent) : nil
-      itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .pullRequest, badge: badge, now: now))
+      waitingRows.append(
+        WaitingRow(pullRequest: pullRequest, item: authoredItem(pullRequest, symbol: .pullRequest, badge: badge, now: now)))
     }
   }
 
@@ -60,8 +64,8 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
     itemsByKind[.review, default: []].append(
       botReviewItem(botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin, now: now))
   }
-  if let waitingItems = itemsByKind[.waiting] {
-    itemsByKind[.waiting] = groupedByTitlePrefix(waitingItems, now: now)
+  if !waitingRows.isEmpty {
+    itemsByKind[.waiting] = groupedByRepository(waitingRows, authoredPullRequests: input.authoredPullRequests, now: now)
   }
 
   for ticket in input.jiraTickets {
@@ -188,41 +192,93 @@ private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewer
     symbol: .review, badge: nil, sortDate: oldestRequest, children: children)
 }
 
-// This many waiting PRs in one repo with the same title prefix (the text before the first ":") become one group row.
-private let minimumTitleGroupSize = 3
+// This many units of work in one repo's Waiting PRs become one repo group row. A unit is one PR or one stack.
+private let minimumRepoGroupUnitCount = 3
 
-private struct TitleGroupKey: Hashable {
-  var repository: String
-  var prefix: String
+private struct WaitingRow {
+  var pullRequest: PullRequest
+  var item: QueueItem
 }
 
-private func titleGroupKey(_ item: QueueItem) -> TitleGroupKey? {
-  guard let repository = item.tag, let colonIndex = item.title.firstIndex(of: ":") else { return nil }
-  let prefix = item.title[..<colonIndex].trimmingCharacters(in: .whitespaces)
-  return prefix.isEmpty ? nil : TitleGroupKey(repository: repository, prefix: prefix)
+extension PullRequest {
+  // "<owner>/<repo>" from the PR URL (https://github.com/<owner>/<repo>/pull/<number>), so same-named repos in two
+  // organizations stay apart. The PR model stores only the repo name.
+  var repositoryPath: String {
+    let pathParts = url.pathComponents.filter { $0 != "/" }
+    return pathParts.count >= 2 ? "\(pathParts[0])/\(pathParts[1])" : repository
+  }
+
+  // Unlike itemId, it includes the owner.
+  fileprivate var stackKey: String { "\(repositoryPath)#\(number)" }
 }
 
-// Keeps the input order. A group takes the place of its first member.
-private func groupedByTitlePrefix(_ waitingItems: [QueueItem], now: Date) -> [QueueItem] {
-  let itemsByGroupKey = Dictionary(grouping: waitingItems, by: titleGroupKey)
-  var emittedGroupKeys: Set<TitleGroupKey> = []
-  return waitingItems.compactMap { item in
-    guard let groupKey = titleGroupKey(item), let members = itemsByGroupKey[groupKey],
-      members.count >= minimumTitleGroupSize
-    else { return item }
-    guard emittedGroupKeys.insert(groupKey).inserted else { return nil }
-    return titleGroupItem(groupKey, members: members, now: now)
+private struct BranchKey: Hashable {
+  var repositoryPath: String
+  var branch: String
+}
+
+private struct StackPosition {
+  var bottomStackKey: String
+  // 0 for the bottom PR of a stack, 1 for the PR on top of it, and so on.
+  var depth: Int
+}
+
+// A PR stacks on the open authored PR whose head branch is its base branch in the same repo. All authored PRs take
+// part, so a stack member in Fix or Merge still joins the Waiting members above and below it into one unit.
+// The head branch of a fork PR is in the fork, so a fork PR is never the base of another PR.
+private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosition] {
+  var parentByHeadBranch: [BranchKey: PullRequest] = [:]
+  for pullRequest in pullRequests where pullRequest.isCrossRepository != true {
+    parentByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: pullRequest.headBranch)] = pullRequest
+  }
+  var positions: [String: StackPosition] = [:]
+  for pullRequest in pullRequests {
+    var bottom = pullRequest
+    var visitedStackKeys: Set<String> = [pullRequest.stackKey]
+    while let baseBranch = bottom.baseBranch,
+      let parent = parentByHeadBranch[BranchKey(repositoryPath: bottom.repositoryPath, branch: baseBranch)],
+      visitedStackKeys.insert(parent.stackKey).inserted
+    {
+      bottom = parent
+    }
+    positions[pullRequest.stackKey] = StackPosition(bottomStackKey: bottom.stackKey, depth: visitedStackKeys.count - 1)
+  }
+  return positions
+}
+
+// The section sorts the rows afterwards, so the output order does not matter.
+private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullRequests: [PullRequest], now: Date) -> [QueueItem] {
+  let positions = stackPositions(authoredPullRequests)
+  let rowsByRepository = Dictionary(grouping: waitingRows, by: \.pullRequest.repositoryPath)
+  return rowsByRepository.flatMap { repositoryPath, repositoryRows -> [QueueItem] in
+    let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.bottomStackKey }.values)
+    guard units.count >= minimumRepoGroupUnitCount else { return repositoryRows.map(\.item) }
+    let orderedRows = units
+      .map { unit in
+        unit.sorted {
+          let (leftDepth, rightDepth) = (positions[$0.pullRequest.stackKey]!.depth, positions[$1.pullRequest.stackKey]!.depth)
+          return leftDepth != rightDepth ? leftDepth < rightDepth : $0.item.sortDate < $1.item.sortDate
+        }
+      }
+      .sorted { oldestDate($0) < oldestDate($1) }
+      .flatMap(\.self)
+    return [repoGroupItem(repositoryPath: repositoryPath, rows: orderedRows, now: now)]
   }
 }
 
-// The group sorts where its oldest PR would, and its age is the newest PR's age.
-private func titleGroupItem(_ groupKey: TitleGroupKey, members: [QueueItem], now: Date) -> QueueItem {
-  let children = members.sorted { $0.sortDate < $1.sortDate }
+private func oldestDate(_ rows: [WaitingRow]) -> Date { rows.map(\.item.sortDate).min()! }
+
+// The group sorts where its oldest PR would, and its age is the oldest PR's age, as on the bot group.
+private func repoGroupItem(repositoryPath: String, rows: [WaitingRow], now: Date) -> QueueItem {
+  let oldestRowDate = oldestDate(rows)
+  // A draft shows "Draft", not "Changes requested", so it does not count.
+  let changesRequestedCount = rows.filter { !$0.pullRequest.isDraft && $0.pullRequest.reviewDecision == .changesRequested }.count
   return QueueItem(
-    id: "group:\(groupKey.repository):\(groupKey.prefix)", title: "\(groupKey.prefix) · \(children.count) PRs",
-    tag: groupKey.repository, meta: shortAge(from: children.last!.sortDate, now: now),
-    url: gitHubPullsSearchURL("is:pr is:open author:@me in:title \"\(groupKey.prefix)\""),
-    symbol: .pullRequest, badge: nil, sortDate: children.first!.sortDate, children: children)
+    id: "repo:\(repositoryPath)", title: rows[0].pullRequest.repository,
+    meta: "\(rows.count) PRs · \(shortAge(from: oldestRowDate, now: now))",
+    url: gitHubPullsSearchURL("is:pr is:open author:@me repo:\(repositoryPath)"), symbol: .pullRequest,
+    badge: changesRequestedCount > 0 ? Badge(text: "\(changesRequestedCount) changes requested", variant: .urgent) : nil,
+    sortDate: oldestRowDate, children: rows.map(\.item))
 }
 
 private func tidyItem(

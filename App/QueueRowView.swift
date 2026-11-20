@@ -181,9 +181,9 @@ struct QueueRowView: View {
   }
 }
 
-// Checks color the symbol of an authored PR, except a draft, which stays gray; rows without checks take their badge color.
+// Checks color the symbol of an authored PR, except a draft or a group, which stay gray; rows without checks take their badge color.
 func rowSymbolVariant(for item: QueueItem) -> BadgeVariant {
-  if item.symbol == .draftPullRequest { return .neutral }
+  if item.symbol == .draftPullRequest || !item.children.isEmpty { return .neutral }
   switch item.strip?.checks {
   case .passed: return .ready
   case .failed: return .failing
