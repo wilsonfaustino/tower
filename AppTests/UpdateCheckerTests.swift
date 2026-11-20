@@ -6,6 +6,15 @@ import Testing
 
 private struct FetchFailure: Error {}
 
+// Tests that build a controller get a checker that never reaches GitHub.
+@MainActor func makeOfflineUpdateChecker(
+  fetchNewerVersion: @escaping @Sendable (String) async throws -> String? = { _ in throw URLError(.notConnectedToInternet) }
+) -> UpdateChecker {
+  let checker = UpdateChecker(currentVersion: "0.4.0", fetchNewerVersion: fetchNewerVersion)
+  checker.demoScenario = nil
+  return checker
+}
+
 @MainActor struct UpdateCheckerTests {
   private func makeChecker(
     currentVersion: String? = "0.4.0", fetchNewerVersion: @escaping @Sendable (String) async throws -> String?
@@ -68,8 +77,29 @@ private struct FetchFailure: Error {}
     #expect(checker.availableVersion == "1.0.0")
     #expect(await checker.checkNow() == .newer("1.0.0"))
     checker.demoScenario = DemoScenario(name: .typical, now: .now)
+    #expect(await checker.checkNow() == .upToDate("0.4.0"))
+    checker.demoScenario = DemoScenario(name: .offline, now: .now)
     #expect(await checker.checkNow() == .failed)
     #expect(fetchCount.value == 0)
+  }
+
+  @Test func overlappingChecksShareOneFetch() async {
+    let fetchCount = LockedCounter()
+    let (releaseGate, openGate) = AsyncStream<Void>.makeStream()
+    let checker = makeChecker { _ in
+      fetchCount.increment()
+      for await _ in releaseGate {}
+      return "0.5.0"
+    }
+    async let firstResult = checker.checkNow()
+    async let secondResult = checker.checkNow()
+    // Lets both checks start before the fetch returns.
+    for _ in 0..<20 { await Task.yield() }
+    openGate.finish()
+    #expect(await [firstResult, secondResult] == [.newer("0.5.0"), .newer("0.5.0")])
+    #expect(fetchCount.value == 1)
+    _ = await checker.checkNow()
+    #expect(fetchCount.value == 2)
   }
 }
 

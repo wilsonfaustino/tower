@@ -15,6 +15,7 @@ public enum BrewUpgrade {
   // HOMEBREW_NO_ASK: brew 7 asks [y/n] by default, and nobody can answer it here.
   // HOMEBREW_NO_UPGRADE_QUIT_CASKS: brew 7 quits running cask apps by default; the app quits itself after brew exits.
   // HOMEBREW_NO_AUTO_UPDATE: the explicit `update --force` step replaces auto update.
+  // HOMEBREW_NO_INSTALL_CLEANUP: a due periodic cleanup would also remove old versions of unrelated formulae.
   // PATH: apps opened from Finder do not get the shell PATH.
   // Variables, not flags: an older brew rejects an unknown flag but ignores an unknown variable.
   static func environment(brewPath: String) -> [String: String] {
@@ -23,6 +24,7 @@ public enum BrewUpgrade {
       "HOMEBREW_NO_ASK": "1",
       "HOMEBREW_NO_UPGRADE_QUIT_CASKS": "1",
       "HOMEBREW_NO_AUTO_UPDATE": "1",
+      "HOMEBREW_NO_INSTALL_CLEANUP": "1",
       "PATH": "\(brewDirectory):/usr/bin:/bin:/usr/sbin:/sbin",
     ]
   }

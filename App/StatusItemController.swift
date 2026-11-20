@@ -65,15 +65,17 @@ import SwiftUI
 
   // A newer version opens the panel, where the notice and Update button sit.
   @objc func chooseCheckForUpdates() {
-    Task {
-      switch await updateChecker.checkNow() {
-      case .newer:
-        if !panel.isVisible { showPanel() }
-      case .upToDate(let currentVersion):
-        showAlert(message: "Tower is up to date.", information: "Version \(currentVersion) is the newest version.")
-      case .failed:
-        showAlert(message: "Could not check for updates.", information: "Check your connection and try again.")
-      }
+    Task { await checkForUpdates() }
+  }
+
+  func checkForUpdates() async {
+    switch await updateChecker.checkNow() {
+    case .newer:
+      if !panel.isVisible { showPanel() }
+    case .upToDate(let currentVersion):
+      showAlert(message: "Tower is up to date.", information: "Version \(currentVersion) is the newest version.")
+    case .failed:
+      showAlert(message: "Could not check for updates.", information: "Try again later.")
     }
   }
 

@@ -14,7 +14,7 @@ private struct FakeBrew {
     directory = FileManager.default.temporaryDirectory.appending(path: "fake-brew-\(UUID().uuidString)")
     logURL = directory.appending(path: "log")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let logLine = #"echo "$*|$HOMEBREW_NO_ASK|$HOMEBREW_NO_UPGRADE_QUIT_CASKS|$HOMEBREW_NO_AUTO_UPDATE|$PATH" >> "\#(logURL.path)""#
+    let logLine = #"echo "$*|$HOMEBREW_NO_ASK|$HOMEBREW_NO_UPGRADE_QUIT_CASKS|$HOMEBREW_NO_AUTO_UPDATE|$HOMEBREW_NO_INSTALL_CLEANUP|$PATH" >> "\#(logURL.path)""#
     let script = body ?? "\(logLine)\nexit \(exitStatus)\n"
     try Data("#!/bin/sh\n\(script)".utf8).write(to: URL(fileURLWithPath: path))
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
@@ -45,14 +45,14 @@ private func makeAppBundle(version: String?) throws -> URL {
   let fakeBrew = try FakeBrew(exitStatus: 0)
   defer { fakeBrew.remove() }
   #expect(await BrewUpgrade.upgrade(brewPath: fakeBrew.path, caskFullName: caskFullName) == .succeeded)
-  #expect(try fakeBrew.log() == "upgrade --cask \(caskFullName)|1|1|1|\(fakeBrew.directory.path):/usr/bin:/bin:/usr/sbin:/sbin\n")
+  #expect(try fakeBrew.log() == "upgrade --cask \(caskFullName)|1|1|1|1|\(fakeBrew.directory.path):/usr/bin:/bin:/usr/sbin:/sbin\n")
 }
 
 @Test func updateHomebrewRunsUpdateForce() async throws {
   let fakeBrew = try FakeBrew(exitStatus: 0)
   defer { fakeBrew.remove() }
   #expect(await BrewUpgrade.updateHomebrew(brewPath: fakeBrew.path) == .succeeded)
-  #expect(try fakeBrew.log().hasPrefix("update --force|1|1|1|"))
+  #expect(try fakeBrew.log().hasPrefix("update --force|1|1|1|1|"))
 }
 
 @Test func upgradeIsFailedOnNonZeroExit() async throws {

@@ -57,3 +57,17 @@ func unparsableVersionIsNotAnUpdate(garbage: String) {
   #expect(request.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
   #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
 }
+
+@Test func responseWithNewerTagGivesTheVersion() throws {
+  let data = try fixture("github-release-latest.json")
+  #expect(try ReleaseCheck.newerVersion(responseData: data, currentVersion: "0.3.0") == "0.4.0")
+  #expect(try ReleaseCheck.newerVersion(responseData: data, currentVersion: "0.4.0") == nil)
+}
+
+@Test func responseThatDoesNotParseThrows() {
+  let buildMetadataTag = Data(#"{"tag_name": "v0.5.0+build.1"}"#.utf8)
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: buildMetadataTag, currentVersion: "0.4.0") }
+  let goodTag = Data(#"{"tag_name": "v0.5.0"}"#.utf8)
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: goodTag, currentVersion: "0.4.0-beta") }
+  #expect(throws: URLError.self) { try ReleaseCheck.newerVersion(responseData: Data("not json".utf8), currentVersion: "0.4.0") }
+}

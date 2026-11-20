@@ -15,7 +15,17 @@ public enum ReleaseCheck {
     guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
       throw URLError(.badServerResponse)
     }
-    guard let latestTag = latestTag(from: data) else { throw URLError(.cannotParseResponse) }
+    return try newerVersion(responseData: data, currentVersion: currentVersion)
+  }
+
+  // A tag or running version that does not parse throws, so the caller keeps its last result
+  // instead of reporting the app as up to date.
+  public static func newerVersion(responseData: Data, currentVersion: String) throws -> String? {
+    guard
+      let latestTag = latestTag(from: responseData),
+      versionComponents(latestTag) != nil,
+      versionComponents(currentVersion) != nil
+    else { throw URLError(.cannotParseResponse) }
     return newerVersion(latestTag: latestTag, currentVersion: currentVersion)
   }
 
