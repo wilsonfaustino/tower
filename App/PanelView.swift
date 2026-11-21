@@ -10,6 +10,8 @@ struct PanelView: View {
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
   @State private var selectedTab = PanelTab.needsYou
+  // The legend status the owner clicked. It filters the list only while `statusFilter` says so.
+  @State private var chosenStatusFilter: StatusDot?
   @AppStorage(PanelSettingsKeys.layout) private var layout = PanelLayout.split
   @State private var expandedItemIds: Set<String> = []
   @State private var contentHeight: CGFloat = 0
@@ -70,7 +72,10 @@ struct PanelView: View {
       }
     }
     .frame(width: Theme.Metrics.panelWidth)
-    .onChange(of: selectedTab) { clearSelection() }
+    .onChange(of: selectedTab) {
+      clearSelection()
+      chosenStatusFilter = nil
+    }
     .onChange(of: selectedItemId) { _, newValue in
       if slidItemId != newValue { slidItemId = nil }
     }
@@ -79,7 +84,19 @@ struct PanelView: View {
     .onChange(of: isSlidRowListed) { _, isListed in
       if !isListed { slidItemId = nil }
     }
-    .onChange(of: layout) { clearSelection() }
+    .onChange(of: layout) {
+      clearSelection()
+      chosenStatusFilter = nil
+    }
+    // A refresh, dismiss or undo can take the chosen status out of the legend. Forgetting it then means
+    // the status does not filter again by itself when it comes back.
+    .onChange(of: legendStatusList) { _, statuses in
+      chosenStatusFilter = effectiveStatusFilter(chosenStatusFilter, legendStatuses: statuses)
+    }
+    // The filter, a refresh or a dismissal can hide the selected row. Its popover closes with it.
+    .onChange(of: isSelectedRowListed) { _, isListed in
+      if !isListed { clearSelection() }
+    }
     .focusable()
     .focusEffectDisabled()
     .focused($isListFocused)
@@ -219,7 +236,6 @@ struct PanelView: View {
   }
 
   @ViewBuilder private var queueContent: some View {
-    let listedSections = displayedSections(store.sections, layout: layout, tab: selectedTab)
     if listedSections.isEmpty {
       if layout == .split && selectedTab == .waiting {
         StateMessageView(symbol: .nothingWaiting, title: "Nothing waiting", message: "Nothing waiting on others.")
@@ -230,7 +246,7 @@ struct PanelView: View {
       }
     } else {
       ForEach(listedSections) { section in
-        sectionView(section)
+        sectionView(section, headerCount: sectionHeaderCount(of: section, in: unfilteredListedSections))
       }
     }
   }
@@ -242,20 +258,22 @@ struct PanelView: View {
       if layout == .split, let watchSection = store.sections.first(where: { $0.kind == .watch }) {
         sectionView(watchSection, visibleItemLimit: pinnedWatchRowLimit)
       }
-      if !selectableItems.isEmpty {
-        StatusLegendView()
+      if !legendStatusList.isEmpty {
+        StatusLegendView(statuses: legendStatusList, activeStatus: statusFilter, choose: chooseStatusFilter)
       }
     }
     .padding(.horizontal, Theme.Spacing.s)
     .padding(.bottom, Theme.Spacing.s)
   }
 
-  private func sectionView(_ section: QueueSection, visibleItemLimit: Int = .max) -> some View {
+  private func sectionView(
+    _ section: QueueSection, visibleItemLimit: Int = .max, headerCount: Int? = nil
+  ) -> some View {
     QueueSectionView(
       section: section, selectedItemId: selectedItemId, expandedItemIds: expandedItemIds, slidItemId: slidItemId,
-      visibleItemLimit: visibleItemLimit, popoverItemId: $popoverItemId, open: activate, openInBrowser: open,
-      showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
-      handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
+      visibleItemLimit: visibleItemLimit, headerCount: headerCount, popoverItemId: $popoverItemId, open: activate,
+      openInBrowser: open, showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss,
+      hover: trackHover, handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
   }
 
   private var panelState: PanelContent {
@@ -322,7 +340,27 @@ struct PanelView: View {
 
   private var selectableItems: [QueueItem] {
     guard showsQueue else { return [] }
-    return selectableRows(in: store.sections, layout: layout, tab: selectedTab, expandedItemIds: expandedItemIds)
+    return selectableRows(
+      in: store.sections, layout: layout, tab: selectedTab, expandedItemIds: expandedItemIds,
+      statusFilter: statusFilter)
+  }
+
+  private var unfilteredListedSections: [QueueSection] {
+    displayedSections(store.sections, layout: layout, tab: selectedTab)
+  }
+
+  private var legendStatusList: [StatusDot] { legendStatuses(in: unfilteredListedSections) }
+
+  private var statusFilter: StatusDot? {
+    effectiveStatusFilter(chosenStatusFilter, legendStatuses: legendStatusList)
+  }
+
+  private var listedSections: [QueueSection] { filteredSections(unfilteredListedSections, status: statusFilter) }
+
+  // A second click on the active status shows every row again.
+  private func chooseStatusFilter(_ status: StatusDot) {
+    chosenStatusFilter = chosenStatusFilter == status ? nil : status
+    isListFocused = true
   }
 
   private func clearSelection() {
@@ -342,8 +380,7 @@ struct PanelView: View {
   private func handleDisclosure(_ direction: DisclosureDirection) -> KeyPress.Result {
     let outcome = disclosureOutcome(
       for: direction, selectedItemId: selectedItemId,
-      in: displayedSections(store.sections, layout: layout, tab: selectedTab),
-      expandedItemIds: expandedItemIds)
+      in: listedSections, expandedItemIds: expandedItemIds)
     switch outcome {
     case .expand(let groupId): expandedItemIds.insert(groupId)
     case .collapse(let groupId): expandedItemIds.remove(groupId)
@@ -391,6 +428,8 @@ struct PanelView: View {
     slidDismissal = item.dismissal
     popoverItemId = nil
   }
+
+  private var isSelectedRowListed: Bool { isSelectionListed(selectedItemId, in: selectableItems) }
 
   private var isSlidRowListed: Bool {
     guard let slidItemId else { return false }

@@ -516,3 +516,114 @@ struct PanelKeyOutcomeTests {
     #expect(toggledExpansion(of: "g", in: expanded) == ["other"])
   }
 }
+
+private func dotted(_ id: String, _ variant: BadgeVariant) -> QueueItem {
+  var dottedItem = item(id)
+  dottedItem.badge = Badge(text: id, variant: variant)
+  return dottedItem
+}
+
+private let failingRow = dotted("f1", .failing)
+private let urgentRow = dotted("u1", .urgent)
+private let readyRow = dotted("ok1", .ready)
+private let pendingRow = item("p1")
+private let urgentGroup = group("bot", children: [dotted("bot-1", .urgent), item("bot-2")])
+private let filterSections = [
+  QueueSection(kind: .fix, items: [failingRow]),
+  QueueSection(kind: .review, items: [urgentGroup, pendingRow]),
+  QueueSection(kind: .watch, items: [dotted("w1", .urgent), item("w2")]),
+  QueueSection(kind: .waiting, items: [readyRow]),
+]
+
+struct StatusFilterTests {
+  @Test func legendStatusesFollowTheFixedOrder() {
+    let sections = [QueueSection(kind: .review, items: [pendingRow, readyRow, urgentRow, failingRow])]
+    #expect(legendStatuses(in: sections) == [.failing, .urgent, .ready, .pending])
+  }
+
+  @Test func aGroupAddsOnlyItsHeaderDot() {
+    let sections = [QueueSection(kind: .review, items: [urgentGroup])]
+    #expect(legendStatuses(in: sections) == [.urgent])
+  }
+
+  @Test func noRowsGiveNoStatuses() {
+    #expect(legendStatuses(in: []).isEmpty)
+  }
+
+  @Test func oneStatusGivesNoFilter() {
+    #expect(effectiveStatusFilter(.pending, legendStatuses: [.pending]) == nil)
+  }
+
+  @Test func aChosenStatusFiltersWhileItIsInTheLegend() {
+    #expect(effectiveStatusFilter(.urgent, legendStatuses: [.urgent, .pending]) == .urgent)
+    #expect(effectiveStatusFilter(nil, legendStatuses: [.urgent, .pending]) == nil)
+  }
+
+  @Test func aStatusThatLeftTheLegendGivesNoFilter() {
+    #expect(effectiveStatusFilter(.failing, legendStatuses: [.urgent, .pending]) == nil)
+  }
+
+  // The panel keeps the effective filter after each legend change, so a status that leaves and comes back
+  // does not filter again until the owner chooses it.
+  @Test func aStatusThatComesBackStaysUnchosen() {
+    var chosenStatus: StatusDot? = .failing
+    chosenStatus = effectiveStatusFilter(chosenStatus, legendStatuses: [.urgent, .pending])
+    chosenStatus = effectiveStatusFilter(chosenStatus, legendStatuses: [.failing, .pending])
+    #expect(chosenStatus == nil)
+  }
+
+  @Test func noFilterKeepsTheSections() {
+    #expect(filteredSections(filterSections, status: nil) == filterSections)
+  }
+
+  @Test func theFilterKeepsMatchingRowsAndDropsEmptySections() {
+    let sections = filteredSections(filterSections, status: .pending)
+    #expect(sections.map(\.kind) == [.review, .watch])
+    #expect(sections.flatMap(\.items).map(\.id) == ["p1", "w2"])
+  }
+
+  @Test func aMatchingGroupKeepsAllItsChildren() {
+    let sections = filteredSections(filterSections, status: .urgent)
+    #expect(sections.flatMap(\.items).map(\.id) == ["bot", "w1"])
+    #expect(sections.first?.items.first?.children.map(\.id) == ["bot-1", "bot-2"])
+  }
+
+  @Test func aGroupDoesNotMatchByItsChildren() {
+    #expect(filteredSections(filterSections, status: .pending).flatMap(\.items).allSatisfy { $0.id != "bot" })
+  }
+
+  @Test func aFilteredSectionHeaderKeepsTheFullCount() {
+    let filteredReview = filteredSections(filterSections, status: .pending)[0]
+    #expect(sectionHeaderCount(of: filteredReview, in: filterSections) == 3)
+  }
+
+  @Test func splitFiltersTheListButNotThePinnedWatchRows() {
+    let rows = selectableRows(
+      in: filterSections, layout: .split, tab: .needsYou, expandedItemIds: ["bot"], statusFilter: .pending)
+    #expect(rows.map(\.id) == ["p1", "w1", "w2"])
+  }
+
+  @Test func aSplitTabWithOnlyPinnedWatchRowsHasNoLegend() {
+    let sections = [QueueSection(kind: .watch, items: [dotted("w1", .urgent), item("w2")])]
+    #expect(legendStatuses(in: displayedSections(sections, layout: .split, tab: .needsYou)).isEmpty)
+  }
+
+  // A refresh can move the selected row out of the filter while the filter stays on.
+  @Test func aSelectedRowThatLeavesTheFilterIsNotListed() {
+    var refreshed = filterSections
+    refreshed[3].items.append(dotted("ok2", .ready))
+    refreshed[3].items[0].badge = Badge(text: "failed", variant: .failing)
+    let rows = selectableRows(
+      in: refreshed, layout: .split, tab: .waiting, expandedItemIds: [], statusFilter: .ready)
+    #expect(rows.map(\.id) == ["ok2", "w1", "w2"])
+    #expect(!isSelectionListed("ok1", in: rows))
+    #expect(isSelectionListed("ok2", in: rows))
+    #expect(isSelectionListed(nil, in: rows))
+  }
+
+  @Test func consolidatedFiltersTheWatchRows() {
+    let rows = selectableRows(
+      in: filterSections, layout: .consolidated, tab: .needsYou, expandedItemIds: [], statusFilter: .urgent)
+    #expect(rows.map(\.id) == ["bot", "w1"])
+  }
+}

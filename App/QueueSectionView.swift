@@ -8,6 +8,8 @@ struct QueueSectionView: View {
   var slidItemId: String?
   // The pinned Watch section shows only the first rows, then a "+N more" line.
   var visibleItemLimit = Int.max
+  // The count of the unfiltered section, so the header still counts the rows the status filter hides.
+  var headerCount: Int?
   @Binding var popoverItemId: String?
   let open: (QueueItem) -> Void
   let openInBrowser: (QueueItem) -> Void
@@ -23,7 +25,7 @@ struct QueueSectionView: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: Theme.Spacing.s) {
         Text(section.kind.title).font(Theme.Fonts.section)
-        Text("\(rowCount(of: section))").font(Theme.Fonts.sectionCount)
+        Text("\(headerCount ?? rowCount(of: section))").font(Theme.Fonts.sectionCount)
       }
       .foregroundStyle(Theme.textSecondary)
       .padding(.horizontal, Theme.Metrics.rowInset)
