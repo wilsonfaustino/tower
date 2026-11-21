@@ -349,20 +349,62 @@ struct StatusStripView: View {
   }
 }
 
-// Hidden from VoiceOver, because each row label already names its dot.
+// Names the dots of the listed rows. With one status it is a plain key, hidden from VoiceOver, because each row
+// label already names its dot. With two or more, each status is a button that shows only its rows.
 struct StatusLegendView: View {
+  let statuses: [StatusDot]
+  let activeStatus: StatusDot?
+  let choose: (StatusDot) -> Void
+
+  private var isFilter: Bool { statuses.count > 1 }
+
   var body: some View {
-    HStack(spacing: Theme.Spacing.m) {
-      ForEach(StatusDot.allCases, id: \.self) { dot in
-        HStack(spacing: Theme.Spacing.xs) {
-          StatusDotView(dot: dot, isSelected: false)
-          Text(dot.legendLabel)
+    HStack(spacing: isFilter ? Theme.Spacing.xs : Theme.Spacing.m) {
+      ForEach(statuses, id: \.self) { status in
+        if isFilter {
+          StatusFilterButton(status: status, isActive: status == activeStatus) { choose(status) }
+        } else {
+          StatusLegendEntry(status: status)
         }
       }
     }
     .font(Theme.Fonts.legend)
     .foregroundStyle(Theme.textSecondary)
     .frame(maxWidth: .infinity)
-    .accessibilityHidden(true)
+    .accessibilityHidden(!isFilter)
+  }
+}
+
+private struct StatusLegendEntry: View {
+  let status: StatusDot
+
+  var body: some View {
+    HStack(spacing: Theme.Spacing.xs) {
+      StatusDotView(dot: status, isSelected: false)
+      Text(status.legendLabel)
+    }
+  }
+}
+
+private struct StatusFilterButton: View {
+  let status: StatusDot
+  let isActive: Bool
+  let action: () -> Void
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      StatusLegendEntry(status: status)
+        .foregroundStyle(isActive ? Theme.textPrimary : Theme.textSecondary)
+        .padding(.horizontal, Theme.Spacing.s)
+        .padding(.vertical, Theme.Spacing.xxs)
+        .background(isActive ? Theme.neutralBadgeFill : isHovered ? Theme.surfaceHover : .clear, in: Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovered = $0 }
+    .pointerStyle(.link)
+    .accessibilityLabel("Show only \(status.legendLabel)")
+    .accessibilityAddTraits(isActive ? .isSelected : [])
   }
 }

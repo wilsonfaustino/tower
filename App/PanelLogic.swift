@@ -86,13 +86,40 @@ func visibleRows(in sections: [QueueSection], expandedItemIds: Set<String>) -> [
   }
 }
 
-// Up and Down go through the listed rows. In Split, the pinned Watch rows follow them.
+// Up and Down go through the listed rows. In Split, the pinned Watch rows follow them; the status filter skips them.
 func selectableRows(
-  in sections: [QueueSection], layout: PanelLayout, tab: PanelTab, expandedItemIds: Set<String>
+  in sections: [QueueSection], layout: PanelLayout, tab: PanelTab, expandedItemIds: Set<String>,
+  statusFilter: StatusDot? = nil
 ) -> [QueueItem] {
-  let listedRows = visibleRows(
-    in: displayedSections(sections, layout: layout, tab: tab), expandedItemIds: expandedItemIds)
+  let listedSections = filteredSections(displayedSections(sections, layout: layout, tab: tab), status: statusFilter)
+  let listedRows = visibleRows(in: listedSections, expandedItemIds: expandedItemIds)
   return layout == .split ? listedRows + pinnedWatchRows(in: sections) : listedRows
+}
+
+// The legend names the dots of the listed rows. A group adds its own dot, the one its row shows, not its children's.
+func legendStatuses(in sections: [QueueSection]) -> [StatusDot] {
+  let presentStatuses = Set(sections.flatMap(\.items).map(\.statusDot))
+  return StatusDot.allCases.filter(presentStatuses.contains)
+}
+
+// The chosen status filters only while the legend shows it with another status, so the list never goes empty.
+func effectiveStatusFilter(_ chosenStatus: StatusDot?, legendStatuses: [StatusDot]) -> StatusDot? {
+  guard let chosenStatus, legendStatuses.count > 1, legendStatuses.contains(chosenStatus) else { return nil }
+  return chosenStatus
+}
+
+// A matching group keeps all its children. A section with no matching rows leaves the list.
+func filteredSections(_ sections: [QueueSection], status: StatusDot?) -> [QueueSection] {
+  guard let status else { return sections }
+  return sections.compactMap { section in
+    let matchingItems = section.items.filter { $0.statusDot == status }
+    return matchingItems.isEmpty ? nil : QueueSection(kind: section.kind, items: matchingItems)
+  }
+}
+
+// A filtered section header still counts every row of its section.
+func sectionHeaderCount(of section: QueueSection, in unfilteredSections: [QueueSection]) -> Int {
+  rowCount(of: unfilteredSections.first { $0.kind == section.kind } ?? section)
 }
 
 enum DisclosureDirection: Sendable {
