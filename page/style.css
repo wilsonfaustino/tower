@@ -702,98 +702,13 @@ button.row {
   color: var(--haze);
 }
 
-/* The one load moment: the status item highlights, then the panel opens below it, as when you click it. */
-@media (prefers-reduced-motion: no-preference) {
-  .status-item {
-    animation: status-click 0.6s ease-out 0.5s both;
-  }
-
-  .panel {
-    animation: panel-open 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) 0.75s both;
-  }
-}
-
-@keyframes status-click {
-  from {
-    background: transparent;
-  }
-
-  to {
-    background: rgba(230, 236, 246, 0.2);
-  }
-}
-
-@keyframes panel-open {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (max-width: 860px) {
-  .order {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
-  }
-
-  .desk {
-    margin: 0 auto;
-  }
-}
-
-@media (max-width: 600px) {
-  body {
-    font-size: 16px;
-  }
-
-  .page {
-    padding: 0 16px;
-    gap: 88px;
-  }
-
-  .hero {
-    gap: 40px;
-  }
-
-  .hero-text {
-    padding-top: 16px;
-  }
-
-  h1 {
-    font-size: 32px;
-  }
-
-  .order h2,
-  .icons h2,
-  .sources h2 {
-    font-size: 26px;
-  }
-
-  .order-list li {
-    grid-template-columns: 28px minmax(0, 1fr);
-    padding-left: 16px;
-  }
-
-  .order-list p {
-    grid-column: 2;
-  }
-
-  .privacy {
-    padding: 28px 20px;
-  }
-
-  .install h2 {
-    font-size: 28px;
-  }
-
-  .install pre {
-    font-size: 13px;
-  }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Inline Phosphor glyphs (the sprite at the top of the body), sized like the icon font they replace */
@@ -931,6 +846,39 @@ button.row {
   font-size: 15px;
 }
 
+/* The one load moment: the status item highlights, then the panel opens below it, as when you click it. */
+@media (prefers-reduced-motion: no-preference) {
+  .status-item {
+    animation: status-click 0.6s ease-out 0.5s both;
+  }
+
+  .panel {
+    animation: panel-open 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) 0.75s both;
+  }
+}
+
+@keyframes status-click {
+  from {
+    background: transparent;
+  }
+
+  to {
+    background: rgba(230, 236, 246, 0.2);
+  }
+}
+
+@keyframes panel-open {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (max-width: 860px) {
   .flow {
     grid-template-columns: minmax(0, 1fr);
@@ -944,14 +892,71 @@ button.row {
   .flow-sources {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .order {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+
+  .desk {
+    margin: 0 auto;
+  }
 }
 
 @media (max-width: 600px) {
+  body {
+    font-size: 16px;
+  }
+
+  .page {
+    padding: 0 16px;
+    gap: 88px;
+  }
+
+  .hero {
+    gap: 40px;
+  }
+
+  .hero-text {
+    padding-top: 16px;
+  }
+
+  h1 {
+    font-size: 32px;
+  }
+
+  .order h2,
+  .icons h2,
+  .sources h2 {
+    font-size: 26px;
+  }
+
+  .order-list li {
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding-left: 16px;
+  }
+
+  .order-list p {
+    grid-column: 2;
+  }
+
+  .privacy {
+    padding: 28px 20px;
+  }
+
   .privacy h2 {
     font-size: 28px;
   }
 
   .flow-sources {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .install h2 {
+    font-size: 28px;
+  }
+
+  .install pre {
+    font-size: 13px;
   }
 }
