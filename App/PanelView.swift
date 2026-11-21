@@ -272,8 +272,8 @@ struct PanelView: View {
     QueueSectionView(
       section: section, selectedItemId: selectedItemId, expandedItemIds: expandedItemIds, slidItemId: slidItemId,
       visibleItemLimit: visibleItemLimit, headerCount: headerCount, popoverItemId: $popoverItemId, open: activate,
-      openInBrowser: open, showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
-      handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
+      openInBrowser: open, showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss,
+      hover: trackHover, handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
   }
 
   private var panelState: PanelContent {
