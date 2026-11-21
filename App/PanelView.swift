@@ -253,8 +253,8 @@ struct PanelView: View {
   private func sectionView(_ section: QueueSection, visibleItemLimit: Int = .max) -> some View {
     QueueSectionView(
       section: section, selectedItemId: selectedItemId, expandedItemIds: expandedItemIds, slidItemId: slidItemId,
-      visibleItemLimit: visibleItemLimit, popoverItemId: $popoverItemId, open: activate, showDetails: showDetails,
-      copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
+      visibleItemLimit: visibleItemLimit, popoverItemId: $popoverItemId, open: activate, openInBrowser: open,
+      showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
       handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
   }
 

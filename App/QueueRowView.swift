@@ -5,7 +5,10 @@ struct QueueRowView: View {
   let item: QueueItem
   let isSelected: Bool
   var isExpanded = false
+  // Click and Return. On a group row it toggles the group.
   let open: () -> Void
+  // The context menu's Open in Browser, which opens a group row's GitHub search instead of toggling it.
+  let openInBrowser: () -> Void
   let showDetails: () -> Void
   let copyLink: () -> Void
   let dismiss: () -> Void
@@ -20,7 +23,7 @@ struct QueueRowView: View {
     if isGroup {
       row
         .contextMenu {
-          Button("Open in Browser", action: open)
+          Button("Open in Browser", action: openInBrowser)
         }
     } else if item.details != nil {
       row
