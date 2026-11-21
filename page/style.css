@@ -198,7 +198,7 @@ h1 {
   font-weight: 500;
 }
 
-.menubar i {
+.menubar .ph {
   font-size: 16px;
 }
 
@@ -646,7 +646,7 @@ button.row {
 .privacy {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 40px;
   padding: 48px;
   border-radius: 14px;
   background: var(--night-raised);
@@ -654,7 +654,8 @@ button.row {
 }
 
 .privacy h2 {
-  font-size: 30px;
+  font-size: 38px;
+  line-height: 1.15;
 }
 
 .privacy p {
@@ -818,23 +819,13 @@ button.row {
 .trust .ph {
   flex: none;
   font-size: 20px;
-  color: var(--glass);
 }
 
 /* Privacy, the page's second section: the claim, the flow of data, four facts */
-.privacy {
-  gap: 40px;
-}
-
 .privacy-intro {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.privacy h2 {
-  font-size: 38px;
-  line-height: 1.15;
 }
 
 .flow {
@@ -869,8 +860,9 @@ button.row {
 }
 
 .flow-lines {
+  align-self: stretch;
   width: 120px;
-  height: 180px;
+  height: 100%;
   fill: none;
   stroke: var(--haze);
   stroke-width: 1.5;
