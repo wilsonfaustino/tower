@@ -93,8 +93,9 @@ struct PanelView: View {
     .onChange(of: legendStatusList) { _, statuses in
       chosenStatusFilter = effectiveStatusFilter(chosenStatusFilter, legendStatuses: statuses)
     }
-    .onChange(of: statusFilter) {
-      if let selectedItemId, !selectableItems.contains(where: { $0.id == selectedItemId }) { clearSelection() }
+    // The filter, a refresh or a dismissal can hide the selected row. Its popover closes with it.
+    .onChange(of: isSelectedRowListed) { _, isListed in
+      if !isListed { clearSelection() }
     }
     .focusable()
     .focusEffectDisabled()
@@ -270,8 +271,8 @@ struct PanelView: View {
   ) -> some View {
     QueueSectionView(
       section: section, selectedItemId: selectedItemId, expandedItemIds: expandedItemIds, slidItemId: slidItemId,
-      visibleItemLimit: visibleItemLimit, headerCount: headerCount, popoverItemId: $popoverItemId, open: activate, openInBrowser: open,
-      showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
+      visibleItemLimit: visibleItemLimit, headerCount: headerCount, popoverItemId: $popoverItemId, open: activate,
+      openInBrowser: open, showDetails: showDetails, copyLink: { writeLink($0.url, to: .general) }, dismiss: dismiss, hover: trackHover,
       handlePopoverInput: handle, handlePopoverSlideKey: { handleSlide($0) ?? .ignored })
   }
 
@@ -427,6 +428,8 @@ struct PanelView: View {
     slidDismissal = item.dismissal
     popoverItemId = nil
   }
+
+  private var isSelectedRowListed: Bool { isSelectionListed(selectedItemId, in: selectableItems) }
 
   private var isSlidRowListed: Bool {
     guard let slidItemId else { return false }

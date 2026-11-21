@@ -406,5 +406,6 @@ private struct StatusFilterButton: View {
     .pointerStyle(.link)
     .accessibilityLabel("Show only \(status.legendLabel)")
     .accessibilityAddTraits(isActive ? .isSelected : [])
+    .accessibilityHint(isActive ? "Shows every row again" : "")
   }
 }

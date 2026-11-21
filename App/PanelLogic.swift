@@ -86,7 +86,8 @@ func visibleRows(in sections: [QueueSection], expandedItemIds: Set<String>) -> [
   }
 }
 
-// Up and Down go through the listed rows. In Split, the pinned Watch rows follow them; the status filter skips them.
+// Up and Down go through the listed rows. In Split, the pinned Watch rows follow them; the status filter does not
+// cover the pinned rows.
 func selectableRows(
   in sections: [QueueSection], layout: PanelLayout, tab: PanelTab, expandedItemIds: Set<String>,
   statusFilter: StatusDot? = nil
@@ -94,6 +95,12 @@ func selectableRows(
   let listedSections = filteredSections(displayedSections(sections, layout: layout, tab: tab), status: statusFilter)
   let listedRows = visibleRows(in: listedSections, expandedItemIds: expandedItemIds)
   return layout == .split ? listedRows + pinnedWatchRows(in: sections) : listedRows
+}
+
+// No selection counts as listed, so only a selected row that leaves the list clears the selection.
+func isSelectionListed(_ selectedItemId: String?, in rows: [QueueItem]) -> Bool {
+  guard let selectedItemId else { return true }
+  return rows.contains { $0.id == selectedItemId }
 }
 
 // The legend names the dots of the listed rows. A group adds its own dot, the one its row shows, not its children's.

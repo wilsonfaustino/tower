@@ -8,7 +8,7 @@ struct QueueSectionView: View {
   var slidItemId: String?
   // The pinned Watch section shows only the first rows, then a "+N more" line.
   var visibleItemLimit = Int.max
-  // Set while the status filter hides rows, so the header still counts the whole section.
+  // The count of the unfiltered section, so the header still counts the rows the status filter hides.
   var headerCount: Int?
   @Binding var popoverItemId: String?
   let open: (QueueItem) -> Void

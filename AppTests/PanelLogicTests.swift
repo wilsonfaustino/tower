@@ -603,6 +603,24 @@ struct StatusFilterTests {
     #expect(rows.map(\.id) == ["p1", "w1", "w2"])
   }
 
+  @Test func aSplitTabWithOnlyPinnedWatchRowsHasNoLegend() {
+    let sections = [QueueSection(kind: .watch, items: [dotted("w1", .urgent), item("w2")])]
+    #expect(legendStatuses(in: displayedSections(sections, layout: .split, tab: .needsYou)).isEmpty)
+  }
+
+  // A refresh can move the selected row out of the filter while the filter stays on.
+  @Test func aSelectedRowThatLeavesTheFilterIsNotListed() {
+    var refreshed = filterSections
+    refreshed[3].items.append(dotted("ok2", .ready))
+    refreshed[3].items[0].badge = Badge(text: "failed", variant: .failing)
+    let rows = selectableRows(
+      in: refreshed, layout: .split, tab: .waiting, expandedItemIds: [], statusFilter: .ready)
+    #expect(rows.map(\.id) == ["ok2", "w1", "w2"])
+    #expect(!isSelectionListed("ok1", in: rows))
+    #expect(isSelectionListed("ok2", in: rows))
+    #expect(isSelectionListed(nil, in: rows))
+  }
+
   @Test func consolidatedFiltersTheWatchRows() {
     let rows = selectableRows(
       in: filterSections, layout: .consolidated, tab: .needsYou, expandedItemIds: [], statusFilter: .urgent)
