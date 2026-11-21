@@ -522,6 +522,36 @@ struct RepoGroupTests {
     #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#2", "pr:app-web#3", "pr:app-web#4"])
   }
 
+  @Test func everyParentComesBeforeItsChild() throws {
+    // feature is open twice: against main, and on top of base. The PR on feature must follow both, also when it is older.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 2, head: "feature", base: "main"),
+      waitingPullRequest(2, hoursAgo: 3, head: "base", base: "main"),
+      waitingPullRequest(3, hoursAgo: 1, head: "feature", base: "base"),
+      waitingPullRequest(4, hoursAgo: 9, head: "top", base: "feature"),
+      waitingPullRequest(5, hoursAgo: 1, base: "main"), waitingPullRequest(6, hoursAgo: 1.5, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id) == [
+      "pr:app-web#2", "pr:app-web#1", "pr:app-web#3", "pr:app-web#4", "pr:app-web#6", "pr:app-web#5",
+    ])
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func layersOfSharedHeadBranchesStayFast() {
+    // Each layer opens one branch three times, on top of the layer below. A walk over every path would take 3^16 steps.
+    let layerCount = 16
+    let pullRequests = (0..<layerCount).flatMap { layer in
+      (0..<3).map { copy in
+        waitingPullRequest(
+          layer * 3 + copy + 1, hoursAgo: Double(layer + 1), head: "layer-\(layer)", base: layer == 0 ? "main" : "layer-\(layer - 1)")
+      }
+    }
+    let sections = queue(authored: pullRequests)
+    #expect(items(sections, .waiting).count == layerCount * 3)
+    #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
+  }
+
   @Test func crossRepositoryPullRequestIsNeverTheBaseOfAStack() throws {
     // A fork PR from the fork's main branch must not pull every PR based on main into one stack.
     let sections = queue(authored: [
@@ -558,6 +588,14 @@ struct RepoGroupTests {
   @Test func childrenWithTheSameAgeKeepPullRequestNumberOrder() throws {
     let sections = queue(authored: [5, 2, 9, 1].map { waitingPullRequest($0, hoursAgo: 3) })
     #expect(try #require(repoGroup(sections)).children.map(\.id) == ["pr:app-web#1", "pr:app-web#2", "pr:app-web#5", "pr:app-web#9"])
+  }
+
+  @Test func waitingRowsWithTheSameAgeKeepTheirInputOrder() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, repository: "app-api", hoursAgo: 2), waitingPullRequest(2, repository: "app-web", hoursAgo: 2),
+      waitingPullRequest(3, repository: "app-ios", hoursAgo: 2), waitingPullRequest(4, repository: "app-api", hoursAgo: 2),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#1", "pr:app-web#2", "pr:app-ios#3", "pr:app-api#4"])
   }
 
   @Test func groupSortsWhereItsOldestPullRequestWould() {

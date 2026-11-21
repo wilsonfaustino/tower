@@ -220,7 +220,7 @@ private struct BranchKey: Hashable {
 private struct StackPosition {
   // The same for every PR of one stack.
   var stackId: String
-  // 0 for a bottom PR of a stack, 1 for a PR on top of it, and so on.
+  // 0 for a bottom PR of a stack, and one more than its deepest parent for any other PR.
   var depth: Int
 }
 
@@ -232,13 +232,15 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
   let pullRequestsByHeadBranch = Dictionary(grouping: pullRequests.filter { $0.isCrossRepository != true }) {
     BranchKey(repositoryPath: $0.repositoryPath, branch: $0.headBranch)
   }
-  var parentKeysByKey: [String: [String]] = [:]
+  var childKeysByKey: [String: [String]] = [:]
   var linkedKeysByKey: [String: [String]] = [:]
+  var parentCountByKey: [String: Int] = [:]
   for pullRequest in pullRequests {
     guard let baseBranch = pullRequest.baseBranch else { continue }
     let parents = pullRequestsByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: baseBranch)] ?? []
     for parent in parents where parent.stackKey != pullRequest.stackKey {
-      parentKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
+      childKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
+      parentCountByKey[pullRequest.stackKey, default: 0] += 1
       linkedKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
       linkedKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
     }
@@ -254,27 +256,33 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
     }
   }
 
-  // The shortest walk down to a bottom PR. The visited keys stop a loop of links from recursing forever.
-  func depth(of key: String, visitedKeys: Set<String>) -> Int {
-    let parentDepths = (parentKeysByKey[key] ?? []).filter { !visitedKeys.contains($0) }.map {
-      depth(of: $0, visitedKeys: visitedKeys.union([$0]))
+  // One topological pass from the bottom PRs. A PR's depth is one more than its deepest parent, so every parent sorts
+  // before its children. PRs in a loop of links never reach a parent count of 0 and keep the depth found so far.
+  var depthByKey: [String: Int] = [:]
+  var remainingParentCountByKey = parentCountByKey
+  var readyKeys = pullRequests.map(\.stackKey).filter { parentCountByKey[$0] == nil }
+  while let key = readyKeys.popLast() {
+    for childKey in childKeysByKey[key] ?? [] {
+      depthByKey[childKey] = max(depthByKey[childKey] ?? 0, (depthByKey[key] ?? 0) + 1)
+      remainingParentCountByKey[childKey]! -= 1
+      if remainingParentCountByKey[childKey] == 0 { readyKeys.append(childKey) }
     }
-    return parentDepths.min().map { $0 + 1 } ?? 0
   }
 
   let positions = pullRequests.map {
-    ($0.stackKey, StackPosition(stackId: stackIdByKey[$0.stackKey]!, depth: depth(of: $0.stackKey, visitedKeys: [$0.stackKey])))
+    ($0.stackKey, StackPosition(stackId: stackIdByKey[$0.stackKey]!, depth: depthByKey[$0.stackKey] ?? 0))
   }
   return Dictionary(positions) { first, _ in first }
 }
 
-// The section sorts the rows afterwards, so the output order does not matter.
+// Keeps the input order, so rows with the same date keep their place across refreshes. A group takes the place of its
+// first member.
 private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullRequests: [PullRequest], now: Date) -> [QueueItem] {
   let positions = stackPositions(authoredPullRequests)
   let rowsByRepository = Dictionary(grouping: waitingRows, by: \.pullRequest.repositoryPath)
-  return rowsByRepository.flatMap { repositoryPath, repositoryRows -> [QueueItem] in
+  let groupByRepository = rowsByRepository.compactMapValues { repositoryRows -> QueueItem? in
     let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.stackId }.values)
-    guard units.count >= minimumRepoGroupUnitCount else { return repositoryRows.map(\.item) }
+    guard units.count >= minimumRepoGroupUnitCount else { return nil }
     // Ties fall back to the PR number, so the order inside an expanded group does not change between refreshes.
     let orderedRows = units
       .map { unit in
@@ -290,14 +298,21 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
         return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
       }
       .flatMap(\.self)
-    return [repoGroupItem(repositoryPath: repositoryPath, rows: orderedRows, now: now)]
+    return repoGroupItem(rows: orderedRows, now: now)
+  }
+  var emittedRepositoryPaths: Set<String> = []
+  return waitingRows.compactMap { row in
+    let repositoryPath = row.pullRequest.repositoryPath
+    guard let groupItem = groupByRepository[repositoryPath] else { return row.item }
+    return emittedRepositoryPaths.insert(repositoryPath).inserted ? groupItem : nil
   }
 }
 
 private func oldestDate(_ rows: [WaitingRow]) -> Date { rows.map(\.item.sortDate).min()! }
 
 // The group sorts where its oldest PR would, and its age is the oldest PR's age, as on the bot group.
-private func repoGroupItem(repositoryPath: String, rows: [WaitingRow], now: Date) -> QueueItem {
+private func repoGroupItem(rows: [WaitingRow], now: Date) -> QueueItem {
+  let repositoryPath = rows[0].pullRequest.repositoryPath
   let oldestRowDate = oldestDate(rows)
   // A draft shows "Draft", not "Changes requested", so it does not count.
   let changesRequestedCount = rows.filter { !$0.pullRequest.isDraft && $0.pullRequest.reviewDecision == .changesRequested }.count
