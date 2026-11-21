@@ -218,32 +218,54 @@ private struct BranchKey: Hashable {
 }
 
 private struct StackPosition {
-  var bottomStackKey: String
-  // 0 for the bottom PR of a stack, 1 for the PR on top of it, and so on.
+  // The same for every PR of one stack.
+  var stackId: String
+  // 0 for a bottom PR of a stack, 1 for a PR on top of it, and so on.
   var depth: Int
 }
 
-// A PR stacks on the open authored PR whose head branch is its base branch in the same repo. All authored PRs take
-// part, so a stack member in Fix or Merge still joins the Waiting members above and below it into one unit.
+// A PR stacks on each open authored PR whose head branch is its base branch in the same repo. A stack is each connected
+// set of such links, so one branch opened against two bases joins both PRs into one stack. All authored PRs take part,
+// so a stack member in Fix or Merge still joins the Waiting members above and below it into one unit.
 // The head branch of a fork PR is in the fork, so a fork PR is never the base of another PR.
 private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosition] {
-  var parentByHeadBranch: [BranchKey: PullRequest] = [:]
-  for pullRequest in pullRequests where pullRequest.isCrossRepository != true {
-    parentByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: pullRequest.headBranch)] = pullRequest
+  let pullRequestsByHeadBranch = Dictionary(grouping: pullRequests.filter { $0.isCrossRepository != true }) {
+    BranchKey(repositoryPath: $0.repositoryPath, branch: $0.headBranch)
   }
-  var positions: [String: StackPosition] = [:]
+  var parentKeysByKey: [String: [String]] = [:]
+  var linkedKeysByKey: [String: [String]] = [:]
   for pullRequest in pullRequests {
-    var bottom = pullRequest
-    var visitedStackKeys: Set<String> = [pullRequest.stackKey]
-    while let baseBranch = bottom.baseBranch,
-      let parent = parentByHeadBranch[BranchKey(repositoryPath: bottom.repositoryPath, branch: baseBranch)],
-      visitedStackKeys.insert(parent.stackKey).inserted
-    {
-      bottom = parent
+    guard let baseBranch = pullRequest.baseBranch else { continue }
+    let parents = pullRequestsByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: baseBranch)] ?? []
+    for parent in parents where parent.stackKey != pullRequest.stackKey {
+      parentKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
+      linkedKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
+      linkedKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
     }
-    positions[pullRequest.stackKey] = StackPosition(bottomStackKey: bottom.stackKey, depth: visitedStackKeys.count - 1)
   }
-  return positions
+
+  var stackIdByKey: [String: String] = [:]
+  for pullRequest in pullRequests where stackIdByKey[pullRequest.stackKey] == nil {
+    var pendingKeys = [pullRequest.stackKey]
+    while let key = pendingKeys.popLast() {
+      guard stackIdByKey[key] == nil else { continue }
+      stackIdByKey[key] = pullRequest.stackKey
+      pendingKeys += linkedKeysByKey[key] ?? []
+    }
+  }
+
+  // The shortest walk down to a bottom PR. The visited keys stop a loop of links from recursing forever.
+  func depth(of key: String, visitedKeys: Set<String>) -> Int {
+    let parentDepths = (parentKeysByKey[key] ?? []).filter { !visitedKeys.contains($0) }.map {
+      depth(of: $0, visitedKeys: visitedKeys.union([$0]))
+    }
+    return parentDepths.min().map { $0 + 1 } ?? 0
+  }
+
+  let positions = pullRequests.map {
+    ($0.stackKey, StackPosition(stackId: stackIdByKey[$0.stackKey]!, depth: depth(of: $0.stackKey, visitedKeys: [$0.stackKey])))
+  }
+  return Dictionary(positions) { first, _ in first }
 }
 
 // The section sorts the rows afterwards, so the output order does not matter.
@@ -251,16 +273,22 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
   let positions = stackPositions(authoredPullRequests)
   let rowsByRepository = Dictionary(grouping: waitingRows, by: \.pullRequest.repositoryPath)
   return rowsByRepository.flatMap { repositoryPath, repositoryRows -> [QueueItem] in
-    let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.bottomStackKey }.values)
+    let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.stackId }.values)
     guard units.count >= minimumRepoGroupUnitCount else { return repositoryRows.map(\.item) }
+    // Ties fall back to the PR number, so the order inside an expanded group does not change between refreshes.
     let orderedRows = units
       .map { unit in
         unit.sorted {
           let (leftDepth, rightDepth) = (positions[$0.pullRequest.stackKey]!.depth, positions[$1.pullRequest.stackKey]!.depth)
-          return leftDepth != rightDepth ? leftDepth < rightDepth : $0.item.sortDate < $1.item.sortDate
+          if leftDepth != rightDepth { return leftDepth < rightDepth }
+          if $0.item.sortDate != $1.item.sortDate { return $0.item.sortDate < $1.item.sortDate }
+          return $0.pullRequest.number < $1.pullRequest.number
         }
       }
-      .sorted { oldestDate($0) < oldestDate($1) }
+      .sorted {
+        let (leftDate, rightDate) = (oldestDate($0), oldestDate($1))
+        return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
+      }
       .flatMap(\.self)
     return [repoGroupItem(repositoryPath: repositoryPath, rows: orderedRows, now: now)]
   }

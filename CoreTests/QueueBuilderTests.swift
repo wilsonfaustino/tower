@@ -506,6 +506,22 @@ struct RepoGroupTests {
     #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#3", "pr:app-web#4"])
   }
 
+  @Test func pullRequestsThatShareAHeadBranchJoinOneStack() throws {
+    // One branch opened against main and against release, with a third PR on top of it, is one unit.
+    let stack = [
+      waitingPullRequest(1, hoursAgo: 4, head: "feature", base: "main"),
+      waitingPullRequest(2, hoursAgo: 3, head: "feature", base: "release"),
+      waitingPullRequest(3, hoursAgo: 2, head: "next", base: "feature"),
+    ]
+    let sections = queue(authored: stack + [waitingPullRequest(4, hoursAgo: 1, base: "main")])
+    #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
+
+    let groupedSections = queue(
+      authored: stack + [waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 5, base: "main")])
+    let groupItem = try #require(repoGroup(groupedSections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#2", "pr:app-web#3", "pr:app-web#4"])
+  }
+
   @Test func crossRepositoryPullRequestIsNeverTheBaseOfAStack() throws {
     // A fork PR from the fork's main branch must not pull every PR based on main into one stack.
     let sections = queue(authored: [
@@ -537,6 +553,11 @@ struct RepoGroupTests {
     #expect(groupItem.children.map(\.symbol) == [.pullRequest, .draftPullRequest, .pullRequest])
     #expect(groupItem.children.map(\.badge?.text) == [nil, "Draft", "Changes requested"])
     #expect(groupItem.children.allSatisfy { $0.tag == "app-web" && $0.strip != nil })
+  }
+
+  @Test func childrenWithTheSameAgeKeepPullRequestNumberOrder() throws {
+    let sections = queue(authored: [5, 2, 9, 1].map { waitingPullRequest($0, hoursAgo: 3) })
+    #expect(try #require(repoGroup(sections)).children.map(\.id) == ["pr:app-web#1", "pr:app-web#2", "pr:app-web#5", "pr:app-web#9"])
   }
 
   @Test func groupSortsWhereItsOldestPullRequestWould() {
