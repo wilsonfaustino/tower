@@ -563,6 +563,36 @@ struct RepoGroupTests {
     #expect(groupItem.children.map(\.id) == ["pr:app-web#1", "pr:app-web#3", "pr:app-web#2", "pr:app-web#5", "pr:app-web#4"])
   }
 
+  @Test func loopIsReleasedAtALoopMemberNotAtAPullRequestOnTopOfIt() throws {
+    // #2 and #3 target each other's branch. #1 sits on #2 and has the lowest number, but it must not come first.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 9, head: "z", base: "y"),
+      waitingPullRequest(2, hoursAgo: 3, head: "y", base: "x"), waitingPullRequest(3, hoursAgo: 2, head: "x", base: "y"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 1.5, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id).prefix(3) == ["pr:app-web#2", "pr:app-web#1", "pr:app-web#3"])
+  }
+
+  @Test func loopOfThreeStillPutsTheParentFirst() throws {
+    // #1, #2 and #3 form a loop. #4 sits on #3 and is the oldest, but it must follow #3.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 3, head: "a", base: "c"), waitingPullRequest(2, hoursAgo: 2, head: "b", base: "a"),
+      waitingPullRequest(3, hoursAgo: 4, head: "c", base: "b"), waitingPullRequest(4, hoursAgo: 9, head: "d", base: "c"),
+      waitingPullRequest(5, hoursAgo: 1, base: "main"), waitingPullRequest(6, hoursAgo: 1.5, base: "main"),
+    ])
+    let childIds = try #require(repoGroup(sections)).children.map(\.id)
+    let parentIndex = try #require(childIds.firstIndex(of: "pr:app-web#3"))
+    let childIndex = try #require(childIds.firstIndex(of: "pr:app-web#4"))
+    #expect(parentIndex < childIndex)
+  }
+
+  @Test func duplicatePullRequestInTheInputGivesOneGroupRow() {
+    let duplicated = waitingPullRequest(1, hoursAgo: 5)
+    let sections = queue(authored: [duplicated, waitingPullRequest(2, hoursAgo: 2), duplicated, waitingPullRequest(3, hoursAgo: 1)])
+    #expect(items(sections, .waiting).map(\.id) == ["repo:acme/app-web"])
+  }
+
   @Test func crossRepositoryPullRequestIsNeverTheBaseOfAStack() throws {
     // A fork PR from the fork's main branch must not pull every PR based on main into one stack.
     let sections = queue(authored: [

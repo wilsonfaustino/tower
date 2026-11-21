@@ -235,6 +235,7 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
     BranchKey(repositoryPath: $0.repositoryPath, branch: $0.headBranch)
   }
   var childKeysByKey: [String: [String]] = [:]
+  var parentKeysByKey: [String: [String]] = [:]
   var linkedKeysByKey: [String: [String]] = [:]
   var parentCountByKey: [String: Int] = [:]
   for pullRequest in pullRequests {
@@ -242,6 +243,7 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
     let parents = pullRequestsByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: baseBranch)] ?? []
     for parent in parents where parent.stackKey != pullRequest.stackKey {
       childKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
+      parentKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
       parentCountByKey[pullRequest.stackKey, default: 0] += 1
       linkedKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
       linkedKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
@@ -272,10 +274,18 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
         if remainingParentCountByKey[childKey] == 0 { readyKeys.append(childKey) }
       }
     }
-    // PRs in a loop of links wait on each other. Releasing the lowest one lets the pass reach the PRs above the loop.
-    guard let waitingKey = remainingParentCountByKey.filter({ $0.value > 0 }).keys.min() else { break }
-    remainingParentCountByKey[waitingKey] = 0
-    readyKeys.append(waitingKey)
+    // PRs in a loop of links wait on each other, and so do the PRs above the loop. Following waiting parents from any
+    // waiting PR comes back to a PR in the loop. Releasing that PR lets the pass reach the rest in order.
+    let waitingKeys = Set(remainingParentCountByKey.filter { $0.value > 0 }.keys)
+    guard var loopKey = waitingKeys.min() else { break }
+    var walkedKeys: Set<String> = []
+    while walkedKeys.insert(loopKey).inserted,
+      let waitingParentKey = (parentKeysByKey[loopKey] ?? []).filter(waitingKeys.contains).min()
+    {
+      loopKey = waitingParentKey
+    }
+    remainingParentCountByKey[loopKey] = 0
+    readyKeys.append(loopKey)
   }
 
   let positions = pullRequests.map {
@@ -311,9 +321,13 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
     let anchorRow = repositoryRows.first { $0.item.sortDate == oldestRowDate }!
     return (anchorRow.pullRequest.stackKey, repoGroupItem(rows: orderedRows, now: now))
   }
+  // The set keeps a PR that the input holds twice from placing its group twice.
+  var placedRepositoryPaths: Set<String> = []
   return waitingRows.compactMap { row in
-    guard let group = groupByRepository[row.pullRequest.repositoryPath] else { return row.item }
-    return row.pullRequest.stackKey == group.anchorStackKey ? group.item : nil
+    let repositoryPath = row.pullRequest.repositoryPath
+    guard let group = groupByRepository[repositoryPath] else { return row.item }
+    let isAnchor = row.pullRequest.stackKey == group.anchorStackKey
+    return isAnchor && placedRepositoryPaths.insert(repositoryPath).inserted ? group.item : nil
   }
 }
 
