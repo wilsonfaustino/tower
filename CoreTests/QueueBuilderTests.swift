@@ -552,6 +552,17 @@ struct RepoGroupTests {
     #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
   }
 
+  @Test func loopOfLinksStillPutsTheParentFirst() throws {
+    // #1 and #2 target each other's branch. #3 sits on #1 and is older, but must still follow it.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 3, head: "x", base: "y"), waitingPullRequest(2, hoursAgo: 2, head: "y", base: "x"),
+      waitingPullRequest(3, hoursAgo: 9, head: "z", base: "x"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 1.5, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#1", "pr:app-web#3", "pr:app-web#2", "pr:app-web#5", "pr:app-web#4"])
+  }
+
   @Test func crossRepositoryPullRequestIsNeverTheBaseOfAStack() throws {
     // A fork PR from the fork's main branch must not pull every PR based on main into one stack.
     let sections = queue(authored: [
@@ -596,6 +607,14 @@ struct RepoGroupTests {
       waitingPullRequest(3, repository: "app-ios", hoursAgo: 2), waitingPullRequest(4, repository: "app-api", hoursAgo: 2),
     ])
     #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#1", "pr:app-web#2", "pr:app-ios#3", "pr:app-api#4"])
+  }
+
+  @Test func groupTakesThePlaceOfItsOldestMemberWhenAnotherRowTiesIt() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1), waitingPullRequest(7, repository: "app-api", hoursAgo: 10),
+      waitingPullRequest(3, hoursAgo: 10), waitingPullRequest(2, hoursAgo: 2),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#7", "repo:acme/app-web"])
   }
 
   @Test func groupSortsWhereItsOldestPullRequestWould() {

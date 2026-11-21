@@ -102,7 +102,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
 
   return SectionKind.allCases.compactMap { kind in
     guard let items = itemsByKind[kind], !items.isEmpty else { return nil }
-    return QueueSection(kind: kind, items: items.sorted { $0.sortDate < $1.sortDate })
+    // Ties keep the input order, so rows with the same date do not swap places between refreshes.
+    let sortedItems = items.enumerated().sorted { ($0.element.sortDate, $0.offset) < ($1.element.sortDate, $1.offset) }
+    return QueueSection(kind: kind, items: sortedItems.map(\.element))
   }
 }
 
@@ -257,16 +259,23 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
   }
 
   // One topological pass from the bottom PRs. A PR's depth is one more than its deepest parent, so every parent sorts
-  // before its children. PRs in a loop of links never reach a parent count of 0 and keep the depth found so far.
+  // before its children.
   var depthByKey: [String: Int] = [:]
   var remainingParentCountByKey = parentCountByKey
   var readyKeys = pullRequests.map(\.stackKey).filter { parentCountByKey[$0] == nil }
-  while let key = readyKeys.popLast() {
-    for childKey in childKeysByKey[key] ?? [] {
-      depthByKey[childKey] = max(depthByKey[childKey] ?? 0, (depthByKey[key] ?? 0) + 1)
-      remainingParentCountByKey[childKey]! -= 1
-      if remainingParentCountByKey[childKey] == 0 { readyKeys.append(childKey) }
+  while true {
+    while let key = readyKeys.popLast() {
+      // A child already released from a loop keeps its depth, so it is not pushed above its own children.
+      for childKey in childKeysByKey[key] ?? [] where remainingParentCountByKey[childKey]! > 0 {
+        depthByKey[childKey] = max(depthByKey[childKey] ?? 0, (depthByKey[key] ?? 0) + 1)
+        remainingParentCountByKey[childKey]! -= 1
+        if remainingParentCountByKey[childKey] == 0 { readyKeys.append(childKey) }
+      }
     }
+    // PRs in a loop of links wait on each other. Releasing the lowest one lets the pass reach the PRs above the loop.
+    guard let waitingKey = remainingParentCountByKey.filter({ $0.value > 0 }).keys.min() else { break }
+    remainingParentCountByKey[waitingKey] = 0
+    readyKeys.append(waitingKey)
   }
 
   let positions = pullRequests.map {
@@ -276,11 +285,11 @@ private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosi
 }
 
 // Keeps the input order, so rows with the same date keep their place across refreshes. A group takes the place of its
-// first member.
+// oldest member, so it sorts where that PR would, also next to a row with the same date.
 private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullRequests: [PullRequest], now: Date) -> [QueueItem] {
   let positions = stackPositions(authoredPullRequests)
   let rowsByRepository = Dictionary(grouping: waitingRows, by: \.pullRequest.repositoryPath)
-  let groupByRepository = rowsByRepository.compactMapValues { repositoryRows -> QueueItem? in
+  let groupByRepository = rowsByRepository.compactMapValues { repositoryRows -> (anchorStackKey: String, item: QueueItem)? in
     let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.stackId }.values)
     guard units.count >= minimumRepoGroupUnitCount else { return nil }
     // Ties fall back to the PR number, so the order inside an expanded group does not change between refreshes.
@@ -298,13 +307,13 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
         return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
       }
       .flatMap(\.self)
-    return repoGroupItem(rows: orderedRows, now: now)
+    let oldestRowDate = oldestDate(repositoryRows)
+    let anchorRow = repositoryRows.first { $0.item.sortDate == oldestRowDate }!
+    return (anchorRow.pullRequest.stackKey, repoGroupItem(rows: orderedRows, now: now))
   }
-  var emittedRepositoryPaths: Set<String> = []
   return waitingRows.compactMap { row in
-    let repositoryPath = row.pullRequest.repositoryPath
-    guard let groupItem = groupByRepository[repositoryPath] else { return row.item }
-    return emittedRepositoryPaths.insert(repositoryPath).inserted ? groupItem : nil
+    guard let group = groupByRepository[row.pullRequest.repositoryPath] else { return row.item }
+    return row.pullRequest.stackKey == group.anchorStackKey ? group.item : nil
   }
 }
 
