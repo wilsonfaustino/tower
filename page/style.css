@@ -198,7 +198,7 @@ h1 {
   font-weight: 500;
 }
 
-.menubar i {
+.menubar .ph {
   font-size: 16px;
 }
 
@@ -646,7 +646,7 @@ button.row {
 .privacy {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 40px;
   padding: 48px;
   border-radius: 14px;
   background: var(--night-raised);
@@ -654,7 +654,8 @@ button.row {
 }
 
 .privacy h2 {
-  font-size: 30px;
+  font-size: 38px;
+  line-height: 1.15;
 }
 
 .privacy p {
@@ -701,6 +702,153 @@ button.row {
   color: var(--haze);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Inline Phosphor glyphs (the sprite at the top of the body), sized like the icon font they replace */
+.ph {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  vertical-align: -0.125em;
+}
+
+.sym.ph {
+  width: 20px;
+}
+
+.trust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  color: var(--glass);
+}
+
+.trust .ph {
+  flex: none;
+  font-size: 20px;
+}
+
+/* Privacy, the page's second section: the claim, the flow of data, four facts */
+.privacy-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 0.8fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: 0 24px;
+}
+
+.flow-sources {
+  display: grid;
+  gap: 12px;
+}
+
+.flow-sources li,
+.flow-mac,
+.flow-none {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--horizon);
+  background: var(--night);
+}
+
+.flow-sources span,
+.flow-mac span,
+.flow-none span {
+  font-size: 14px;
+  color: var(--haze);
+}
+
+.flow-lines {
+  align-self: stretch;
+  width: 120px;
+  height: 100%;
+  fill: none;
+  stroke: var(--haze);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.flow-mac {
+  align-items: flex-start;
+  gap: 6px;
+  border-color: var(--glass);
+}
+
+.flow-mac strong {
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+.flow-none {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.flow-none .ph {
+  font-size: 22px;
+  color: var(--haze);
+}
+
+.flow-none strong {
+  text-decoration: line-through;
+  text-decoration-color: var(--haze);
+}
+
+.privacy-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 32px;
+}
+
+.privacy-facts li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.privacy-facts .ph {
+  font-size: 24px;
+  color: var(--glass);
+}
+
+.privacy-facts h3 {
+  font-size: 19px;
+}
+
+.privacy-facts p {
+  font-size: 16px;
+}
+
+.privacy-facts code {
+  color: var(--glass);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.privacy .note {
+  font-size: 15px;
+}
+
 /* The one load moment: the status item highlights, then the panel opens below it, as when you click it. */
 @media (prefers-reduced-motion: no-preference) {
   .status-item {
@@ -735,6 +883,19 @@ button.row {
 }
 
 @media (max-width: 860px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .flow-lines {
+    display: none;
+  }
+
+  .flow-sources {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .order {
     grid-template-columns: minmax(0, 1fr);
     gap: 32px;
@@ -784,6 +945,14 @@ button.row {
 
   .privacy {
     padding: 28px 20px;
+  }
+
+  .privacy h2 {
+    font-size: 28px;
+  }
+
+  .flow-sources {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .install h2 {
