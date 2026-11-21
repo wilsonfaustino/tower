@@ -398,7 +398,7 @@ private struct StatusFilterButton: View {
         .foregroundStyle(isActive ? Theme.textPrimary : Theme.textSecondary)
         .padding(.horizontal, Theme.Spacing.s)
         .padding(.vertical, Theme.Spacing.xxs)
-        .background(isActive ? Theme.neutralBadgeFill : isHovered ? Theme.surfaceHover : .clear, in: Capsule())
+        .background(fill, in: Capsule())
         .contentShape(Capsule())
     }
     .buttonStyle(.plain)
@@ -407,5 +407,10 @@ private struct StatusFilterButton: View {
     .accessibilityLabel("Show only \(status.legendLabel)")
     .accessibilityAddTraits(isActive ? .isSelected : [])
     .accessibilityHint(isActive ? "Shows every row again" : "")
+  }
+
+  private var fill: Color {
+    if isActive { return Theme.neutralBadgeFill }
+    return isHovered ? Theme.surfaceHover : .clear
   }
 }
