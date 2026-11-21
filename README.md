@@ -32,7 +32,7 @@ The panel has six sections in a fixed urgency order. Tower hides a section that 
 | Merge | Your approved PRs with no failing checks |
 | Tidy | Your in-progress Jira tickets with no PR, or whose PR has no reviewer |
 | Watch | Your running CircleCI pipelines that have no PR. Pipelines on hold for approval are urgent. |
-| Waiting | Your other open PRs: drafts, and PRs that wait for review. PRs with changes requested are urgent. Merged PRs leave the list. |
+| Waiting | Your other open PRs: drafts, and PRs that wait for review. PRs with changes requested are urgent. Merged PRs leave the list. A repo with 3 or more units of work (one PR, or one stack of PRs) collapses into one row per repo. |
 
 The menu bar icon changes shape, not color: a beacon and a count for urgent items, a filled cab and a count for items to fix.
 

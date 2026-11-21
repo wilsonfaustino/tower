@@ -31,11 +31,14 @@ private let urgentReviewAge: TimeInterval = 24 * 3600
 
 public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   var itemsByKind: [SectionKind: [QueueItem]] = [:]
+  var waitingRows: [WaitingRow] = []
 
   for pullRequest in input.authoredPullRequests {
     if pullRequest.isDraft {
-      itemsByKind[.waiting, default: []].append(
-        authoredItem(pullRequest, symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), now: now))
+      waitingRows.append(
+        WaitingRow(
+          pullRequest: pullRequest,
+          item: authoredItem(pullRequest, symbol: .draftPullRequest, badge: Badge(text: "Draft", variant: .neutral), now: now)))
     } else if pullRequest.isFailing {
       let checkWord = pullRequest.failedCheckCount == 1 ? "check" : "checks"
       itemsByKind[.fix, default: []].append(
@@ -45,7 +48,8 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
         authoredItem(pullRequest, symbol: .merge, badge: Badge(text: "Approved", variant: .ready), now: now))
     } else {
       let badge = pullRequest.reviewDecision == .changesRequested ? Badge(text: "Changes requested", variant: .urgent) : nil
-      itemsByKind[.waiting, default: []].append(authoredItem(pullRequest, symbol: .pullRequest, badge: badge, now: now))
+      waitingRows.append(
+        WaitingRow(pullRequest: pullRequest, item: authoredItem(pullRequest, symbol: .pullRequest, badge: badge, now: now)))
     }
   }
 
@@ -60,8 +64,8 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
     itemsByKind[.review, default: []].append(
       botReviewItem(botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin, now: now))
   }
-  if let waitingItems = itemsByKind[.waiting] {
-    itemsByKind[.waiting] = groupedByTitlePrefix(waitingItems, now: now)
+  if !waitingRows.isEmpty {
+    itemsByKind[.waiting] = groupedByRepository(waitingRows, authoredPullRequests: input.authoredPullRequests, now: now)
   }
 
   for ticket in input.jiraTickets {
@@ -98,7 +102,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
 
   return SectionKind.allCases.compactMap { kind in
     guard let items = itemsByKind[kind], !items.isEmpty else { return nil }
-    return QueueSection(kind: kind, items: items.sorted { $0.sortDate < $1.sortDate })
+    // Ties keep the input order, so rows with the same date do not swap places between refreshes.
+    let sortedItems = items.enumerated().sorted { ($0.element.sortDate, $0.offset) < ($1.element.sortDate, $1.offset) }
+    return QueueSection(kind: kind, items: sortedItems.map(\.element))
   }
 }
 
@@ -188,41 +194,160 @@ private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewer
     symbol: .review, badge: nil, sortDate: oldestRequest, children: children)
 }
 
-// This many waiting PRs in one repo with the same title prefix (the text before the first ":") become one group row.
-private let minimumTitleGroupSize = 3
+// This many units of work in one repo's Waiting PRs become one repo group row. A unit is one PR or one stack.
+private let minimumRepoGroupUnitCount = 3
 
-private struct TitleGroupKey: Hashable {
-  var repository: String
-  var prefix: String
+private struct WaitingRow {
+  var pullRequest: PullRequest
+  var item: QueueItem
 }
 
-private func titleGroupKey(_ item: QueueItem) -> TitleGroupKey? {
-  guard let repository = item.tag, let colonIndex = item.title.firstIndex(of: ":") else { return nil }
-  let prefix = item.title[..<colonIndex].trimmingCharacters(in: .whitespaces)
-  return prefix.isEmpty ? nil : TitleGroupKey(repository: repository, prefix: prefix)
+extension PullRequest {
+  // "<owner>/<repo>" from the PR URL (https://github.com/<owner>/<repo>/pull/<number>), so same-named repos in two
+  // organizations stay apart. The PR model stores only the repo name.
+  var repositoryPath: String {
+    // The first path component is the root.
+    let pathParts = Array(url.pathComponents.dropFirst())
+    return pathParts.count >= 2 ? "\(pathParts[0])/\(pathParts[1])" : repository
+  }
+
+  // Unlike itemId, it includes the owner.
+  fileprivate var stackKey: String { "\(repositoryPath)#\(number)" }
 }
 
-// Keeps the input order. A group takes the place of its first member.
-private func groupedByTitlePrefix(_ waitingItems: [QueueItem], now: Date) -> [QueueItem] {
-  let itemsByGroupKey = Dictionary(grouping: waitingItems, by: titleGroupKey)
-  var emittedGroupKeys: Set<TitleGroupKey> = []
-  return waitingItems.compactMap { item in
-    guard let groupKey = titleGroupKey(item), let members = itemsByGroupKey[groupKey],
-      members.count >= minimumTitleGroupSize
-    else { return item }
-    guard emittedGroupKeys.insert(groupKey).inserted else { return nil }
-    return titleGroupItem(groupKey, members: members, now: now)
+private struct BranchKey: Hashable {
+  var repositoryPath: String
+  var branch: String
+}
+
+private struct StackPosition {
+  // The same for every PR of one stack.
+  var stackId: String
+  // 0 for a bottom PR of a stack, and one more than its deepest parent for any other PR.
+  var depth: Int
+}
+
+// A PR stacks on each open authored PR whose head branch is its base branch in the same repo. A stack is each connected
+// set of such links, so one branch opened against two bases joins both PRs into one stack. All authored PRs take part,
+// so a stack member in Fix or Merge still joins the Waiting members above and below it into one unit.
+// The head branch of a fork PR is in the fork, so a fork PR is never the base of another PR.
+private func stackPositions(_ pullRequests: [PullRequest]) -> [String: StackPosition] {
+  let pullRequestsByHeadBranch = Dictionary(grouping: pullRequests.filter { $0.isCrossRepository != true }) {
+    BranchKey(repositoryPath: $0.repositoryPath, branch: $0.headBranch)
+  }
+  var childKeysByKey: [String: [String]] = [:]
+  var parentKeysByKey: [String: [String]] = [:]
+  var linkedKeysByKey: [String: [String]] = [:]
+  var parentCountByKey: [String: Int] = [:]
+  for pullRequest in pullRequests {
+    guard let baseBranch = pullRequest.baseBranch else { continue }
+    let parents = pullRequestsByHeadBranch[BranchKey(repositoryPath: pullRequest.repositoryPath, branch: baseBranch)] ?? []
+    for parent in parents where parent.stackKey != pullRequest.stackKey {
+      childKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
+      parentKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
+      parentCountByKey[pullRequest.stackKey, default: 0] += 1
+      linkedKeysByKey[pullRequest.stackKey, default: []].append(parent.stackKey)
+      linkedKeysByKey[parent.stackKey, default: []].append(pullRequest.stackKey)
+    }
+  }
+
+  var stackIdByKey: [String: String] = [:]
+  for pullRequest in pullRequests where stackIdByKey[pullRequest.stackKey] == nil {
+    var pendingKeys = [pullRequest.stackKey]
+    while let key = pendingKeys.popLast() {
+      guard stackIdByKey[key] == nil else { continue }
+      stackIdByKey[key] = pullRequest.stackKey
+      pendingKeys += linkedKeysByKey[key] ?? []
+    }
+  }
+
+  // One topological pass from the bottom PRs. A PR's depth is one more than its deepest parent, so every parent sorts
+  // before its children.
+  var depthByKey: [String: Int] = [:]
+  var remainingParentCountByKey = parentCountByKey
+  var readyKeys = pullRequests.map(\.stackKey).filter { parentCountByKey[$0] == nil }
+  while true {
+    while let key = readyKeys.popLast() {
+      // A child already released from a loop keeps its depth, so it is not pushed above its own children.
+      for childKey in childKeysByKey[key] ?? [] where remainingParentCountByKey[childKey]! > 0 {
+        depthByKey[childKey] = max(depthByKey[childKey] ?? 0, (depthByKey[key] ?? 0) + 1)
+        remainingParentCountByKey[childKey]! -= 1
+        if remainingParentCountByKey[childKey] == 0 { readyKeys.append(childKey) }
+      }
+    }
+    // PRs in a loop of links wait on each other, and so do the PRs above the loop. Following waiting parents from any
+    // waiting PR comes back to a PR in the loop. Releasing that PR lets the pass reach the rest in order.
+    let waitingKeys = Set(remainingParentCountByKey.filter { $0.value > 0 }.keys)
+    guard var loopKey = waitingKeys.min() else { break }
+    var walkedKeys: Set<String> = []
+    while walkedKeys.insert(loopKey).inserted,
+      let waitingParentKey = (parentKeysByKey[loopKey] ?? []).filter(waitingKeys.contains).min()
+    {
+      loopKey = waitingParentKey
+    }
+    remainingParentCountByKey[loopKey] = 0
+    readyKeys.append(loopKey)
+  }
+
+  let positions = pullRequests.map {
+    ($0.stackKey, StackPosition(stackId: stackIdByKey[$0.stackKey]!, depth: depthByKey[$0.stackKey] ?? 0))
+  }
+  return Dictionary(positions) { first, _ in first }
+}
+
+// Keeps the input order, so rows with the same date keep their place across refreshes. A group takes the place of its
+// oldest member, so it sorts where that PR would, also next to a row with the same date.
+private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullRequests: [PullRequest], now: Date) -> [QueueItem] {
+  let positions = stackPositions(authoredPullRequests)
+  let rowsByRepository = Dictionary(grouping: waitingRows, by: \.pullRequest.repositoryPath)
+  let groupByRepository = rowsByRepository.compactMapValues { repositoryRows -> (anchorStackKey: String, item: QueueItem)? in
+    let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.stackId }.values)
+    guard units.count >= minimumRepoGroupUnitCount else { return nil }
+    let orderedRows = orderedGroupRows(units, positions: positions)
+    let oldestRowDate = oldestDate(repositoryRows)
+    let anchorRow = repositoryRows.first { $0.item.sortDate == oldestRowDate }!
+    return (anchorRow.pullRequest.stackKey, repoGroupItem(rows: orderedRows, now: now))
+  }
+  // The set keeps a PR that the input holds twice from placing its group twice.
+  var placedRepositoryPaths: Set<String> = []
+  return waitingRows.compactMap { row in
+    let repositoryPath = row.pullRequest.repositoryPath
+    guard let group = groupByRepository[repositoryPath] else { return row.item }
+    let isAnchor = row.pullRequest.stackKey == group.anchorStackKey
+    return isAnchor && placedRepositoryPaths.insert(repositoryPath).inserted ? group.item : nil
   }
 }
 
-// The group sorts where its oldest PR would, and its age is the newest PR's age.
-private func titleGroupItem(_ groupKey: TitleGroupKey, members: [QueueItem], now: Date) -> QueueItem {
-  let children = members.sorted { $0.sortDate < $1.sortDate }
+// Units by their oldest PR, and the PRs of a stack bottom first. Ties fall back to the PR number, so the order inside an
+// expanded group does not change between refreshes.
+private func orderedGroupRows(_ units: [[WaitingRow]], positions: [String: StackPosition]) -> [WaitingRow] {
+  func isBefore(_ left: WaitingRow, _ right: WaitingRow) -> Bool {
+    let (leftDepth, rightDepth) = (positions[left.pullRequest.stackKey]!.depth, positions[right.pullRequest.stackKey]!.depth)
+    if leftDepth != rightDepth { return leftDepth < rightDepth }
+    if left.item.sortDate != right.item.sortDate { return left.item.sortDate < right.item.sortDate }
+    return left.pullRequest.number < right.pullRequest.number
+  }
+  let sortedUnits = units.map { $0.sorted(by: isBefore) }
+  return sortedUnits.sorted {
+    let (leftDate, rightDate) = (oldestDate($0), oldestDate($1))
+    return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
+  }.flatMap(\.self)
+}
+
+private func oldestDate(_ rows: [WaitingRow]) -> Date { rows.map(\.item.sortDate).min()! }
+
+// The group sorts where its oldest PR would, and its age is the oldest PR's age, as on the bot group.
+private func repoGroupItem(rows: [WaitingRow], now: Date) -> QueueItem {
+  let repositoryPath = rows[0].pullRequest.repositoryPath
+  let oldestRowDate = oldestDate(rows)
+  // A draft shows "Draft", not "Changes requested", so it does not count.
+  let changesRequestedCount = rows.filter { !$0.pullRequest.isDraft && $0.pullRequest.reviewDecision == .changesRequested }.count
   return QueueItem(
-    id: "group:\(groupKey.repository):\(groupKey.prefix)", title: "\(groupKey.prefix) · \(children.count) PRs",
-    tag: groupKey.repository, meta: shortAge(from: children.last!.sortDate, now: now),
-    url: gitHubPullsSearchURL("is:pr is:open author:@me in:title \"\(groupKey.prefix)\""),
-    symbol: .pullRequest, badge: nil, sortDate: children.first!.sortDate, children: children)
+    id: "repo:\(repositoryPath)", title: rows[0].pullRequest.repository,
+    meta: "\(rows.count) PRs · \(shortAge(from: oldestRowDate, now: now))",
+    url: gitHubPullsSearchURL("is:pr is:open author:@me repo:\(repositoryPath)"), symbol: .pullRequest,
+    badge: changesRequestedCount > 0 ? Badge(text: "\(changesRequestedCount) changes requested", variant: .urgent) : nil,
+    sortDate: oldestRowDate, children: rows.map(\.item))
 }
 
 private func tidyItem(

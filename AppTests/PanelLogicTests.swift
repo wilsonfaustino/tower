@@ -480,10 +480,11 @@ struct PanelKeyOutcomeTests {
     #expect(rowSymbolVariant(for: draft) == .neutral)
   }
 
-  @Test func titleGroupSymbolIsGray() {
+  @Test func repoGroupSymbolIsGrayEvenWithAnUrgentBadge() {
     let group = QueueItem(
-      id: "g", title: "chore · 3 PRs", meta: "1h", url: URL(string: "https://example.com/g")!, symbol: .pullRequest,
-      badge: nil, sortDate: .distantPast, children: [row(id: "c1", checks: .passed)])
+      id: "g", title: "app-web", meta: "3 PRs · 1h", url: URL(string: "https://example.com/g")!, symbol: .pullRequest,
+      badge: Badge(text: "1 changes requested", variant: .urgent), sortDate: .distantPast,
+      children: [row(id: "c1", checks: .passed)])
     #expect(rowSymbolVariant(for: group) == .neutral)
   }
 

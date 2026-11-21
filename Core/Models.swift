@@ -52,6 +52,10 @@ public struct PullRequest: Codable, Sendable, Equatable {
   // The newest review request aimed at the viewer, or at a requested team when the request is team-only.
   // Notifications read it, so a request to someone else does not look like a new request to the viewer.
   public var viewerReviewRequestedAt: Date?
+  // The branch the PR merges into. Nil in caches written before Tower read it, and on review requests.
+  public var baseBranch: String?
+  // True when the head branch is in a fork. Nil in caches written before Tower read it, and on review requests.
+  public var isCrossRepository: Bool?
 
   public init(
     repository: String, number: Int, title: String, url: URL, author: String, authorIsBot: Bool, isDraft: Bool,
@@ -59,7 +63,8 @@ public struct PullRequest: Codable, Sendable, Equatable {
     failedCheckCount: Int, additions: Int, deletions: Int, requestedReviewerLogins: [String],
     requestedTeamSlugs: [String], reviewCount: Int, reviewRequestedAt: Date?, unresolvedThreadCount: Int = 0,
     hasMoreThreadsThanFetched: Bool = false, approvalCount: Int = 0, requiredApprovalCount: Int = 1,
-    viewerLatestReviewState: ReviewState? = nil, headCommitId: String? = nil, viewerReviewRequestedAt: Date? = nil
+    viewerLatestReviewState: ReviewState? = nil, headCommitId: String? = nil, viewerReviewRequestedAt: Date? = nil,
+    baseBranch: String? = nil, isCrossRepository: Bool? = nil
   ) {
     self.repository = repository
     self.number = number
@@ -86,6 +91,8 @@ public struct PullRequest: Codable, Sendable, Equatable {
     self.headCommitId = headCommitId
     self.viewerLatestReviewState = viewerLatestReviewState
     self.viewerReviewRequestedAt = viewerReviewRequestedAt
+    self.baseBranch = baseBranch
+    self.isCrossRepository = isCrossRepository
   }
 }
 
@@ -360,7 +367,7 @@ public struct QueueItem: Identifiable, Equatable, Sendable {
   public var details: PullRequestDetails?
   // Set only on the rows the owner can dismiss: failed pipelines and single review requests.
   public var dismissal: Dismissal?
-  // Non-empty on a group row (bot PRs, PRs with the same title prefix). The panel expands it in place.
+  // Non-empty on a group row (bot PRs, a repo's Waiting PRs). The panel expands it in place.
   public var children: [QueueItem]
 
   public init(

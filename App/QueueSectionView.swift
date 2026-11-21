@@ -10,6 +10,7 @@ struct QueueSectionView: View {
   var visibleItemLimit = Int.max
   @Binding var popoverItemId: String?
   let open: (QueueItem) -> Void
+  let openInBrowser: (QueueItem) -> Void
   let showDetails: (QueueItem) -> Void
   let copyLink: (QueueItem) -> Void
   let dismiss: (QueueItem) -> Void
@@ -61,8 +62,8 @@ struct QueueSectionView: View {
   private func rowView(for item: QueueItem) -> some View {
     QueueRowView(
       item: item, isSelected: item.id == selectedItemId, isExpanded: expandedItemIds.contains(item.id),
-      open: { open(item) }, showDetails: { showDetails(item) }, copyLink: { copyLink(item) },
-      dismiss: { dismiss(item) }, isSlid: item.id == slidItemId, hover: { hover(item, $0) })
+      open: { open(item) }, openInBrowser: { openInBrowser(item) }, showDetails: { showDetails(item) },
+      copyLink: { copyLink(item) }, dismiss: { dismiss(item) }, isSlid: item.id == slidItemId, hover: { hover(item, $0) })
       .id(item.id)
       .accessibilityFocused($accessibilityFocusedItemId, equals: item.id)
       // The leading point puts the arrow at the vertical middle of the row, with the popover left of the panel.

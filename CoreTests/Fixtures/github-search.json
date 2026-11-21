@@ -12,6 +12,8 @@
           "isDraft": false,
           "updatedAt": "2027-01-15T11:35:00Z",
           "headRefName": "proj-1201-maplibre",
+          "baseRefName": "proj-1200-map",
+          "isCrossRepository": false,
           "additions": 120,
           "deletions": 80,
           "reviewDecision": "REVIEW_REQUIRED",

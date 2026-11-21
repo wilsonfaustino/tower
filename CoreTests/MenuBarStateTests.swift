@@ -61,4 +61,15 @@ struct MenuBarStateAccessibilityTests {
     let group = QueueItem(id: "g", title: "g", meta: "1h", url: url, symbol: .pullRequest, badge: nil, sortDate: .distantPast, children: [child])
     #expect(MenuBarState(sections: [QueueSection(kind: .waiting, items: [group])]) == .urgent(count: 1))
   }
+
+  @Test func urgentGroupBadgeDoesNotCountTheChildTwice() {
+    let url = URL(string: "https://example.com")!
+    let child = QueueItem(
+      id: "c", title: "c", meta: "1h", url: url, symbol: .pullRequest, badge: Badge(text: "Changes requested", variant: .urgent),
+      sortDate: .distantPast)
+    let group = QueueItem(
+      id: "g", title: "g", meta: "1h", url: url, symbol: .pullRequest, badge: Badge(text: "1 changes requested", variant: .urgent),
+      sortDate: .distantPast, children: [child])
+    #expect(MenuBarState(sections: [QueueSection(kind: .waiting, items: [group])]) == .urgent(count: 1))
+  }
 }

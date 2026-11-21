@@ -6,6 +6,7 @@ private let now = Date(timeIntervalSince1970: 1_800_000_000)
 private let hour: TimeInterval = 3600
 
 private func pullRequest(
+  owner: String = "acme",
   repository: String = "app-web",
   number: Int = 1,
   title: String = "Some change",
@@ -28,11 +29,13 @@ private func pullRequest(
   approvalCount: Int = 0,
   requiredApprovalCount: Int = 1,
   viewerLatestReviewState: ReviewState? = nil,
-  headCommitId: String? = nil
+  headCommitId: String? = nil,
+  baseBranch: String? = nil,
+  isCrossRepository: Bool? = nil
 ) -> PullRequest {
   PullRequest(
     repository: repository, number: number, title: title,
-    url: URL(string: "https://github.com/acme/\(repository)/pull/\(number)")!,
+    url: URL(string: "https://github.com/\(owner)/\(repository)/pull/\(number)")!,
     author: author, authorIsBot: authorIsBot, isDraft: isDraft, updatedAt: now.addingTimeInterval(-updatedHoursAgo * hour),
     headBranch: headBranch, reviewDecision: reviewDecision, checkState: checkState,
     failedCheckCount: failedCheckCount, additions: additions, deletions: deletions,
@@ -41,7 +44,7 @@ private func pullRequest(
     reviewRequestedAt: reviewRequestedHoursAgo.map { now.addingTimeInterval(-$0 * hour) },
     unresolvedThreadCount: unresolvedThreadCount, hasMoreThreadsThanFetched: hasMoreThreadsThanFetched,
     approvalCount: approvalCount, requiredApprovalCount: requiredApprovalCount, viewerLatestReviewState: viewerLatestReviewState,
-    headCommitId: headCommitId)
+    headCommitId: headCommitId, baseBranch: baseBranch, isCrossRepository: isCrossRepository)
 }
 
 private func ticket(
@@ -408,72 +411,288 @@ struct QueueBuilderTests {
   }
 }
 
-struct TitleGroupTests {
-  private func featureFlagPullRequests(count: Int, repository: String = "app-web") -> [PullRequest] {
-    (1...count).map { index in
-      pullRequest(
-        repository: repository, number: index, title: "chore(feature-flags): remove flag \(index)",
-        updatedHoursAgo: Double(index), reviewDecision: .reviewRequired)
-    }
+struct RepoGroupTests {
+  private func waitingPullRequest(
+    _ number: Int, owner: String = "acme", repository: String = "app-web", hoursAgo: Double, head: String = "",
+    base: String? = nil, title: String = "Some change", isDraft: Bool = false, reviewDecision: ReviewDecision? = nil,
+    isCrossRepository: Bool? = nil
+  ) -> PullRequest {
+    pullRequest(
+      owner: owner, repository: repository, number: number, title: title, isDraft: isDraft, updatedHoursAgo: hoursAgo,
+      headBranch: head.isEmpty ? "branch-\(number)" : head, reviewDecision: reviewDecision, baseBranch: base,
+      isCrossRepository: isCrossRepository)
   }
 
-  @Test func threePullRequestsWithSamePrefixBecomeOneGroup() throws {
-    let sections = queue(authored: featureFlagPullRequests(count: 3) + [pullRequest(number: 9, title: "Fix login")])
-    let waitingItems = items(sections, .waiting)
-    #expect(waitingItems.count == 2)
-    let groupItem = try #require(waitingItems.first { $0.id == "group:app-web:chore(feature-flags)" })
-    #expect(groupItem.title == "chore(feature-flags) · 3 PRs")
-    #expect(groupItem.tag == "app-web")
-    #expect(groupItem.metaTail == "1h")
+  private func repoGroup(_ sections: [QueueSection], _ id: String = "repo:acme/app-web") -> QueueItem? {
+    items(sections, .waiting).first { $0.id == id }
+  }
+
+  @Test func threeIndependentPullRequestsBecomeOneGroup() throws {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1), waitingPullRequest(2, hoursAgo: 50), waitingPullRequest(3, hoursAgo: 3),
+      waitingPullRequest(9, repository: "app-api", hoursAgo: 2),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["repo:acme/app-web", "pr:app-api#9"])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.title == "app-web")
+    #expect(groupItem.tag == nil)
+    #expect(groupItem.metaTail == "3 PRs · 2d")
     #expect(groupItem.symbol == .pullRequest)
     #expect(groupItem.badge == nil)
-    #expect(groupItem.sortDate == now.addingTimeInterval(-3 * hour))
-    #expect(groupItem.children.map(\.id) == ["pr:app-web#3", "pr:app-web#2", "pr:app-web#1"])
+    #expect(groupItem.sortDate == now.addingTimeInterval(-50 * hour))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#2", "pr:app-web#3", "pr:app-web#1"])
     #expect(groupItem.url == URL(
-      string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20author%3A%40me%20in%3Atitle%20%22chore%28feature-flags%29%22"))
+      string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20author%3A%40me%20repo%3Aacme%2Fapp-web"))
   }
 
-  @Test func groupChildrenKeepTheirOwnSymbols() throws {
-    let draft = pullRequest(number: 4, title: "chore(feature-flags): remove flag 4", isDraft: true, updatedHoursAgo: 4)
-    let sections = queue(authored: featureFlagPullRequests(count: 2) + [draft])
-    let groupItem = try #require(items(sections, .waiting).first { $0.id == "group:app-web:chore(feature-flags)" })
-    #expect(groupItem.symbol == .pullRequest)
-    #expect(groupItem.children.map(\.symbol) == [.draftPullRequest, .pullRequest, .pullRequest])
-  }
-
-  @Test func groupSortsWhereItsOldestPullRequestWould() {
-    let sections = queue(authored: featureFlagPullRequests(count: 3) + [pullRequest(number: 9, title: "Fix", updatedHoursAgo: 2)])
-    #expect(items(sections, .waiting).map(\.id) == ["group:app-web:chore(feature-flags)", "pr:app-web#9"])
-  }
-
-  @Test func twoPullRequestsWithSamePrefixStayPlainRows() {
-    let sections = queue(authored: featureFlagPullRequests(count: 2))
+  @Test func twoPullRequestsStayPlainRows() {
+    let sections = queue(authored: [waitingPullRequest(1, hoursAgo: 1), waitingPullRequest(2, hoursAgo: 2)])
     #expect(items(sections, .waiting).map(\.id) == ["pr:app-web#2", "pr:app-web#1"])
   }
 
-  @Test func samePrefixInDifferentReposDoesNotGroup() {
-    let sections = queue(authored: featureFlagPullRequests(count: 2) + featureFlagPullRequests(count: 2, repository: "app-api"))
+  @Test func stackOfThreeAndOneIndependentPullRequestStayPlainRows() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 4, head: "one", base: "main"),
+      waitingPullRequest(2, hoursAgo: 3, head: "two", base: "one"),
+      waitingPullRequest(3, hoursAgo: 2, head: "three", base: "two"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"),
+    ])
     #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
     #expect(items(sections, .waiting).count == 4)
   }
 
-  @Test func titlesWithoutColonDoNotGroup() {
-    let sections = queue(authored: (1...3).map { pullRequest(number: $0, title: "Bump deps", reviewDecision: .reviewRequired) })
-    #expect(items(sections, .waiting).count == 3)
+  @Test func stackOfTwoAndTwoIndependentPullRequestsBecomeOneGroup() throws {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 5, head: "one", base: "main"),
+      waitingPullRequest(2, hoursAgo: 1, head: "two", base: "one"),
+      waitingPullRequest(3, hoursAgo: 4, base: "main"),
+      waitingPullRequest(4, hoursAgo: 2, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(items(sections, .waiting).count == 1)
+    #expect(groupItem.metaTail == "4 PRs · 5h")
+  }
+
+  @Test func stackMembersSitTogetherBottomFirst() throws {
+    // The top of the stack is the oldest PR, but the bottom comes first, and the stack sorts by its oldest PR.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 2, head: "bottom", base: "main"),
+      waitingPullRequest(2, hoursAgo: 9, head: "top", base: "middle"),
+      waitingPullRequest(3, hoursAgo: 1, head: "middle", base: "bottom"),
+      waitingPullRequest(4, hoursAgo: 5, base: "main"),
+      waitingPullRequest(5, hoursAgo: 12, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#3", "pr:app-web#2", "pr:app-web#4"])
+  }
+
+  @Test func stackWithMemberInFixCountsAsOneUnitAndLeavesTheFixMemberOut() throws {
+    let failing = pullRequest(
+      number: 2, updatedHoursAgo: 3, headBranch: "two", checkState: .failure, failedCheckCount: 1, baseBranch: "one")
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 4, head: "one", base: "main"), failing,
+      waitingPullRequest(3, hoursAgo: 2, head: "three", base: "two"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"),
+    ])
+    #expect(items(sections, .fix).map(\.id) == ["pr:app-web#2"])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-web#1", "pr:app-web#3", "pr:app-web#4"])
+
+    let groupedSections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 4, head: "one", base: "main"), failing,
+      waitingPullRequest(3, hoursAgo: 2, head: "three", base: "two"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 6, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(groupedSections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#3", "pr:app-web#4"])
+  }
+
+  @Test func pullRequestsThatShareAHeadBranchJoinOneStack() throws {
+    // One branch opened against main and against release, with a third PR on top of it, is one unit.
+    let stack = [
+      waitingPullRequest(1, hoursAgo: 4, head: "feature", base: "main"),
+      waitingPullRequest(2, hoursAgo: 3, head: "feature", base: "release"),
+      waitingPullRequest(3, hoursAgo: 2, head: "next", base: "feature"),
+    ]
+    let sections = queue(authored: stack + [waitingPullRequest(4, hoursAgo: 1, base: "main")])
+    #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
+
+    let groupedSections = queue(
+      authored: stack + [waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 5, base: "main")])
+    let groupItem = try #require(repoGroup(groupedSections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#5", "pr:app-web#1", "pr:app-web#2", "pr:app-web#3", "pr:app-web#4"])
+  }
+
+  @Test func everyParentComesBeforeItsChild() throws {
+    // feature is open twice: against main, and on top of base. The PR on feature must follow both, also when it is older.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 2, head: "feature", base: "main"),
+      waitingPullRequest(2, hoursAgo: 3, head: "base", base: "main"),
+      waitingPullRequest(3, hoursAgo: 1, head: "feature", base: "base"),
+      waitingPullRequest(4, hoursAgo: 9, head: "top", base: "feature"),
+      waitingPullRequest(5, hoursAgo: 1, base: "main"), waitingPullRequest(6, hoursAgo: 1.5, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id) == [
+      "pr:app-web#2", "pr:app-web#1", "pr:app-web#3", "pr:app-web#4", "pr:app-web#6", "pr:app-web#5",
+    ])
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func layersOfSharedHeadBranchesStayFast() {
+    // Each layer opens one branch three times, on top of the layer below. A walk over every path would take 3^16 steps.
+    let layerCount = 16
+    let pullRequests = (0..<layerCount).flatMap { layer in
+      (0..<3).map { copy in
+        waitingPullRequest(
+          layer * 3 + copy + 1, hoursAgo: Double(layer + 1), head: "layer-\(layer)", base: layer == 0 ? "main" : "layer-\(layer - 1)")
+      }
+    }
+    let sections = queue(authored: pullRequests)
+    #expect(items(sections, .waiting).count == layerCount * 3)
     #expect(items(sections, .waiting).allSatisfy { $0.children.isEmpty })
   }
 
-  @Test func emptyPrefixDoesNotGroup() {
-    let sections = queue(authored: (1...3).map { pullRequest(number: $0, title: " : thing \($0)") })
-    #expect(items(sections, .waiting).count == 3)
+  @Test func loopOfLinksStillPutsTheParentFirst() throws {
+    // #1 and #2 target each other's branch. #3 sits on #1 and is older, but must still follow it.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 3, head: "x", base: "y"), waitingPullRequest(2, hoursAgo: 2, head: "y", base: "x"),
+      waitingPullRequest(3, hoursAgo: 9, head: "z", base: "x"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 1.5, base: "main"),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id) == ["pr:app-web#1", "pr:app-web#3", "pr:app-web#2", "pr:app-web#5", "pr:app-web#4"])
   }
 
-  @Test func prefixIsTrimmed() {
+  @Test func loopIsReleasedAtALoopMemberNotAtAPullRequestOnTopOfIt() throws {
+    // #2 and #3 target each other's branch. #1 sits on #2 and has the lowest number, but it must not come first.
     let sections = queue(authored: [
-      pullRequest(number: 1, title: "chore(ci): a"), pullRequest(number: 2, title: "chore(ci) : b"),
-      pullRequest(number: 3, title: " chore(ci): c"),
+      waitingPullRequest(1, hoursAgo: 9, head: "z", base: "y"),
+      waitingPullRequest(2, hoursAgo: 3, head: "y", base: "x"), waitingPullRequest(3, hoursAgo: 2, head: "x", base: "y"),
+      waitingPullRequest(4, hoursAgo: 1, base: "main"), waitingPullRequest(5, hoursAgo: 1.5, base: "main"),
     ])
-    #expect(items(sections, .waiting).map(\.id) == ["group:app-web:chore(ci)"])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.id).prefix(3) == ["pr:app-web#2", "pr:app-web#1", "pr:app-web#3"])
+  }
+
+  @Test func loopOfThreeStillPutsTheParentFirst() throws {
+    // #1, #2 and #3 form a loop. #4 sits on #3 and is the oldest, but it must follow #3.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 3, head: "a", base: "c"), waitingPullRequest(2, hoursAgo: 2, head: "b", base: "a"),
+      waitingPullRequest(3, hoursAgo: 4, head: "c", base: "b"), waitingPullRequest(4, hoursAgo: 9, head: "d", base: "c"),
+      waitingPullRequest(5, hoursAgo: 1, base: "main"), waitingPullRequest(6, hoursAgo: 1.5, base: "main"),
+    ])
+    let childIds = try #require(repoGroup(sections)).children.map(\.id)
+    let parentIndex = try #require(childIds.firstIndex(of: "pr:app-web#3"))
+    let childIndex = try #require(childIds.firstIndex(of: "pr:app-web#4"))
+    #expect(parentIndex < childIndex)
+  }
+
+  @Test func duplicatePullRequestInTheInputGivesOneGroupRow() {
+    let duplicated = waitingPullRequest(1, hoursAgo: 5)
+    let sections = queue(authored: [duplicated, waitingPullRequest(2, hoursAgo: 2), duplicated, waitingPullRequest(3, hoursAgo: 1)])
+    #expect(items(sections, .waiting).map(\.id) == ["repo:acme/app-web"])
+  }
+
+  @Test func crossRepositoryPullRequestIsNeverTheBaseOfAStack() throws {
+    // A fork PR from the fork's main branch must not pull every PR based on main into one stack.
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 4, head: "main", base: "main", isCrossRepository: true),
+      waitingPullRequest(2, hoursAgo: 3, base: "main", isCrossRepository: false),
+      waitingPullRequest(3, hoursAgo: 2, base: "main", isCrossRepository: false),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.count == 3)
+  }
+
+  @Test func badgeCountsPullRequestsWithChangesRequested() throws {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1, reviewDecision: .changesRequested),
+      waitingPullRequest(2, hoursAgo: 2, reviewDecision: .changesRequested),
+      waitingPullRequest(3, hoursAgo: 3, isDraft: true, reviewDecision: .changesRequested),
+      waitingPullRequest(4, hoursAgo: 4),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.badge == Badge(text: "2 changes requested", variant: .urgent))
+  }
+
+  @Test func childrenKeepTheirOwnSymbolsAndBadges() throws {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1, reviewDecision: .changesRequested),
+      waitingPullRequest(2, hoursAgo: 2, isDraft: true), waitingPullRequest(3, hoursAgo: 3),
+    ])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(groupItem.children.map(\.symbol) == [.pullRequest, .draftPullRequest, .pullRequest])
+    #expect(groupItem.children.map(\.badge?.text) == [nil, "Draft", "Changes requested"])
+    #expect(groupItem.children.allSatisfy { $0.tag == "app-web" && $0.strip != nil })
+  }
+
+  @Test func childrenWithTheSameAgeKeepPullRequestNumberOrder() throws {
+    let sections = queue(authored: [5, 2, 9, 1].map { waitingPullRequest($0, hoursAgo: 3) })
+    #expect(try #require(repoGroup(sections)).children.map(\.id) == ["pr:app-web#1", "pr:app-web#2", "pr:app-web#5", "pr:app-web#9"])
+  }
+
+  @Test func waitingRowsWithTheSameAgeKeepTheirInputOrder() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, repository: "app-api", hoursAgo: 2), waitingPullRequest(2, repository: "app-web", hoursAgo: 2),
+      waitingPullRequest(3, repository: "app-ios", hoursAgo: 2), waitingPullRequest(4, repository: "app-api", hoursAgo: 2),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#1", "pr:app-web#2", "pr:app-ios#3", "pr:app-api#4"])
+  }
+
+  @Test func groupTakesThePlaceOfItsOldestMemberWhenAnotherRowTiesIt() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1), waitingPullRequest(7, repository: "app-api", hoursAgo: 10),
+      waitingPullRequest(3, hoursAgo: 10), waitingPullRequest(2, hoursAgo: 2),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#7", "repo:acme/app-web"])
+  }
+
+  @Test func groupSortsWhereItsOldestPullRequestWould() {
+    let sections = queue(authored: [
+      waitingPullRequest(1, hoursAgo: 1), waitingPullRequest(2, hoursAgo: 2), waitingPullRequest(3, hoursAgo: 10),
+      waitingPullRequest(7, repository: "app-api", hoursAgo: 12), waitingPullRequest(8, repository: "app-api", hoursAgo: 5),
+    ])
+    #expect(items(sections, .waiting).map(\.id) == ["pr:app-api#7", "repo:acme/app-web", "pr:app-api#8"])
+  }
+
+  @Test func sameRepoNameInTwoOrganizationsMakesTwoGroups() throws {
+    let sections = queue(authored: (1...3).map { waitingPullRequest($0, hoursAgo: Double($0)) }
+      + (4...6).map { waitingPullRequest($0, owner: "other-org", hoursAgo: Double($0)) })
+    #expect(Set(items(sections, .waiting).map(\.id)) == ["repo:acme/app-web", "repo:other-org/app-web"])
+    #expect(try #require(repoGroup(sections, "repo:other-org/app-web")).children.map(\.id)
+      == ["pr:app-web#6", "pr:app-web#5", "pr:app-web#4"])
+
+    let splitSections = queue(authored: (1...2).map { waitingPullRequest($0, hoursAgo: Double($0)) }
+      + (4...5).map { waitingPullRequest($0, owner: "other-org", hoursAgo: Double($0)) })
+    #expect(items(splitSections, .waiting).allSatisfy { $0.children.isEmpty })
+  }
+
+  @Test func titlePrefixPullRequestsSitInTheRepoGroupWithNoNestedGroup() throws {
+    let sections = queue(authored: (1...3).map {
+      waitingPullRequest($0, hoursAgo: Double($0), title: "chore(feature-flags): remove flag \($0)")
+    } + [waitingPullRequest(9, hoursAgo: 4, title: "Fix login")])
+    let groupItem = try #require(repoGroup(sections))
+    #expect(items(sections, .waiting).count == 1)
+    #expect(groupItem.children.count == 4)
+    #expect(groupItem.children.allSatisfy { $0.children.isEmpty })
+  }
+
+  @Test func pullRequestsWithoutBaseBranchAreIndependent() throws {
+    // Caches written before Tower read the base branch have none, so every PR is one unit.
+    let sections = queue(authored: (1...3).map { waitingPullRequest($0, hoursAgo: Double($0), head: "same") })
+    #expect(try #require(repoGroup(sections)).children.count == 3)
+  }
+
+  @Test func otherSectionsDoNotGroupByRepo() {
+    let sections = queue(
+      authored: (1...3).map { pullRequest(number: $0, checkState: .failure, failedCheckCount: 1) }
+        + (4...6).map { pullRequest(number: $0, reviewDecision: .approved) },
+      reviewRequests: (7...9).map { pullRequest(number: $0, author: "ana", requestedReviewerLogins: ["me"]) },
+      tickets: (1...3).map { ticket(key: "PROJ-\($0)") })
+    for kind in [SectionKind.fix, .review, .merge, .tidy] {
+      #expect(items(sections, kind).count == 3)
+      #expect(items(sections, kind).allSatisfy { $0.children.isEmpty })
+    }
   }
 }
 
