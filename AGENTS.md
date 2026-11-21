@@ -8,6 +8,10 @@ GitHub Issues on wilsonfaustino/tower, via the gh CLI. See `docs/agents/issue-tr
 
 Default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
 
+### Roadmap
+
+The roadmap lives first in the Serena memory `roadmap` (project `tower`). Read it before you answer "what is next" or plan new work. GitHub issues and the README "Next steps" list can be empty or behind it. When an item ships or changes, update the memory and the README list.
+
 ### Domain docs
 
 Single-context: GLOSSARY.md and docs/adr/ at the repo root. See `docs/agents/domain.md`.

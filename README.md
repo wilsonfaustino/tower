@@ -131,7 +131,8 @@ The script runs `release.sh --allow-dirty`, quits a running Tower, replaces `/Ap
 
 ## Next steps
 
-1. **Later:** GitHub sign-in without `gh`.
+1. **Next (v0.6.0):** group Waiting PRs by repo ([#90](https://github.com/wilsonfaustino/tower/issues/90)).
+2. **Later:** GitHub sign-in without `gh`.
 
 Update this list when an item ships or changes.
 
