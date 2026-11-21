@@ -206,7 +206,8 @@ extension PullRequest {
   // "<owner>/<repo>" from the PR URL (https://github.com/<owner>/<repo>/pull/<number>), so same-named repos in two
   // organizations stay apart. The PR model stores only the repo name.
   var repositoryPath: String {
-    let pathParts = url.pathComponents.filter { $0 != "/" }
+    // The first path component is the root.
+    let pathParts = Array(url.pathComponents.dropFirst())
     return pathParts.count >= 2 ? "\(pathParts[0])/\(pathParts[1])" : repository
   }
 
@@ -302,21 +303,7 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
   let groupByRepository = rowsByRepository.compactMapValues { repositoryRows -> (anchorStackKey: String, item: QueueItem)? in
     let units = Array(Dictionary(grouping: repositoryRows) { positions[$0.pullRequest.stackKey]!.stackId }.values)
     guard units.count >= minimumRepoGroupUnitCount else { return nil }
-    // Ties fall back to the PR number, so the order inside an expanded group does not change between refreshes.
-    let orderedRows = units
-      .map { unit in
-        unit.sorted {
-          let (leftDepth, rightDepth) = (positions[$0.pullRequest.stackKey]!.depth, positions[$1.pullRequest.stackKey]!.depth)
-          if leftDepth != rightDepth { return leftDepth < rightDepth }
-          if $0.item.sortDate != $1.item.sortDate { return $0.item.sortDate < $1.item.sortDate }
-          return $0.pullRequest.number < $1.pullRequest.number
-        }
-      }
-      .sorted {
-        let (leftDate, rightDate) = (oldestDate($0), oldestDate($1))
-        return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
-      }
-      .flatMap(\.self)
+    let orderedRows = orderedGroupRows(units, positions: positions)
     let oldestRowDate = oldestDate(repositoryRows)
     let anchorRow = repositoryRows.first { $0.item.sortDate == oldestRowDate }!
     return (anchorRow.pullRequest.stackKey, repoGroupItem(rows: orderedRows, now: now))
@@ -329,6 +316,22 @@ private func groupedByRepository(_ waitingRows: [WaitingRow], authoredPullReques
     let isAnchor = row.pullRequest.stackKey == group.anchorStackKey
     return isAnchor && placedRepositoryPaths.insert(repositoryPath).inserted ? group.item : nil
   }
+}
+
+// Units by their oldest PR, and the PRs of a stack bottom first. Ties fall back to the PR number, so the order inside an
+// expanded group does not change between refreshes.
+private func orderedGroupRows(_ units: [[WaitingRow]], positions: [String: StackPosition]) -> [WaitingRow] {
+  func isBefore(_ left: WaitingRow, _ right: WaitingRow) -> Bool {
+    let (leftDepth, rightDepth) = (positions[left.pullRequest.stackKey]!.depth, positions[right.pullRequest.stackKey]!.depth)
+    if leftDepth != rightDepth { return leftDepth < rightDepth }
+    if left.item.sortDate != right.item.sortDate { return left.item.sortDate < right.item.sortDate }
+    return left.pullRequest.number < right.pullRequest.number
+  }
+  let sortedUnits = units.map { $0.sorted(by: isBefore) }
+  return sortedUnits.sorted {
+    let (leftDate, rightDate) = (oldestDate($0), oldestDate($1))
+    return leftDate != rightDate ? leftDate < rightDate : $0[0].pullRequest.number < $1[0].pullRequest.number
+  }.flatMap(\.self)
 }
 
 private func oldestDate(_ rows: [WaitingRow]) -> Date { rows.map(\.item.sortDate).min()! }
