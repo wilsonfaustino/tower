@@ -52,7 +52,7 @@ public struct KeyCombo: Codable, Hashable, Sendable {
 
   private var keyLabel: String {
     if let label = specialKeyLabels[keyCode] { return label }
-    // A dead key can type no character, so the label falls back to the key code.
+    // A key that types no character has no label, so the label falls back to the key code.
     return key.isEmpty ? "Key \(keyCode)" : key.uppercased()
   }
 }

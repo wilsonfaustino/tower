@@ -30,7 +30,7 @@ private let panelKeyHelp: [(keys: String, text: String)] = [
   ("⌘⌫", "Dismiss the row"),
   ("⌘Z", "Undo the dismissal"),
   ("⌘,", "Open Settings"),
-  ("Esc", "Close the panel"),
+  ("Esc ⌘.", "Close the panel"),
 ]
 
 private let registrationFailedText = "This shortcut does not work. Another app uses it."

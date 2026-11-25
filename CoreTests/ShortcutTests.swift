@@ -80,7 +80,7 @@ struct ShortcutDisplayTests {
     #expect(KeyCombo(keyCode: 122, key: "", modifiers: [.option]).displayText == "⌥F1")
     #expect(KeyCombo(keyCode: 105, key: "\u{F710}", modifiers: [.control]).displayText == "⌃F13")
     #expect(KeyCombo(keyCode: 116, key: "\u{F72C}", modifiers: [.option]).displayText == "⌥⇞")
-    #expect(KeyCombo(keyCode: 33, key: "", modifiers: [.option]).displayText == "⌥Key 33")
+    #expect(KeyCombo(keyCode: 110, key: "", modifiers: [.option]).displayText == "⌥Key 110")
   }
 }
 
