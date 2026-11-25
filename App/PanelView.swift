@@ -9,6 +9,7 @@ struct PanelView: View {
   let openSettings: () -> Void
   // The global shortcut opens the panel with the first row selected. A click opens it with no selection.
   var selectsFirstRow = false
+  @State private var hasSelectedFirstRow = false
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
   @State private var selectedTab = PanelTab.needsYou
@@ -87,6 +88,8 @@ struct PanelView: View {
       if !isListed { slidItemId = nil }
     }
     // The selection stays while its row is still listed in the new view.
+    // On a first launch the queue can still be loading when the shortcut opens the panel.
+    .onChange(of: showsQueue) { selectFirstRowIfOpenedByShortcut() }
     .onChange(of: layout) {
       popoverItemId = nil
       chosenStatusFilter = nil
@@ -106,7 +109,7 @@ struct PanelView: View {
     .focused($isListFocused)
     .onAppear {
       isListFocused = true
-      if selectsFirstRow && showsQueue { selectedItemId = shortcutOpenSelection(in: store.sections, layout: layout) }
+      selectFirstRowIfOpenedByShortcut()
       // The panel may open without activating the app, so the activation refresh can miss the Reconnect return.
       if store.hasAuthenticationFailure { Task { await store.refresh() } }
       scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
@@ -369,6 +372,12 @@ struct PanelView: View {
   private func chooseStatusFilter(_ status: StatusDot) {
     chosenStatusFilter = chosenStatusFilter == status ? nil : status
     isListFocused = true
+  }
+
+  private func selectFirstRowIfOpenedByShortcut() {
+    guard selectsFirstRow, !hasSelectedFirstRow, showsQueue else { return }
+    hasSelectedFirstRow = true
+    selectedItemId = shortcutOpenSelection(in: store.sections, layout: layout)
   }
 
   private func clearSelection() {

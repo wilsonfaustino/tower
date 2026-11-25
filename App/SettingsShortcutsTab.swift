@@ -122,7 +122,8 @@ struct SettingsShortcutsTab: View {
     globalHotKey.setPaused(true)
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak settingsWindow] event in
       let combo = KeyCombo(
-        keyCode: event.keyCode, key: event.charactersIgnoringModifiers ?? "",
+        // With Command applied, a layout like Dvorak-QWERTY gives the character that the panel's Cmd keys see.
+        keyCode: event.keyCode, key: event.characters(byApplyingModifiers: .command) ?? "",
         modifiers: keyModifiers(from: event.modifierFlags))
       let isRecordingWindow = MainActor.assumeIsolated { event.window != nil && event.window === settingsWindow }
       guard isRecordingWindow else { return event }
