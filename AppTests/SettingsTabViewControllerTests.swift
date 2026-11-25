@@ -5,8 +5,8 @@ import Testing
 
 @MainActor struct SettingsTabViewControllerTests {
   @Test func opensOnTheRequestedTabWithOneTabPerArea() {
-    let controller = SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), initialTab: .jira) { _ in }
-    #expect(controller.tabViewItems.map(\.label) == ["General", "GitHub", "Jira", "CircleCI", "About"])
+    let controller = SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), globalHotKey: GlobalHotKey(), initialTab: .jira) { _ in }
+    #expect(controller.tabViewItems.map(\.label) == ["General", "Shortcuts", "GitHub", "Jira", "CircleCI", "About"])
     #expect(controller.selectedTabViewItemIndex == SettingsTab.allCases.firstIndex(of: .jira))
     _ = controller.view
     #expect(controller.selectedTabViewItemIndex == SettingsTab.allCases.firstIndex(of: .jira))
@@ -14,7 +14,7 @@ import Testing
 
   @Test func reportsTheSelectedTab() {
     var selectedTabs: [SettingsTab] = []
-    let controller = SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), initialTab: .general) { selectedTabs.append($0) }
+    let controller = SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), globalHotKey: GlobalHotKey(), initialTab: .general) { selectedTabs.append($0) }
     // The tab view reports a selection only after its view loads, as it does in the Settings window.
     _ = controller.view
     controller.selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: .about)!
@@ -23,7 +23,7 @@ import Testing
 
   @Test func keepsTheWindowTitle() {
     let windowController = SettingsWindowController {
-      SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), initialTab: .circleci) { _ in }
+      SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), globalHotKey: GlobalHotKey(), initialTab: .circleci) { _ in }
     }
     windowController.show()
     #expect(windowController.window?.title == "Tower Settings")

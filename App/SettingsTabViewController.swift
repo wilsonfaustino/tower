@@ -3,6 +3,7 @@ import SwiftUI
 
 enum SettingsTab: Hashable, CaseIterable {
   case general
+  case shortcuts
   case github
   case jira
   case circleci
@@ -11,6 +12,7 @@ enum SettingsTab: Hashable, CaseIterable {
   var label: String {
     switch self {
     case .general: "General"
+    case .shortcuts: "Shortcuts"
     case .github: "GitHub"
     case .jira: "Jira"
     case .circleci: "CircleCI"
@@ -21,6 +23,7 @@ enum SettingsTab: Hashable, CaseIterable {
   var symbol: SettingsSymbol {
     switch self {
     case .general: .general
+    case .shortcuts: .shortcuts
     case .github: .github
     case .jira: .jira
     case .circleci: .circleci
@@ -36,7 +39,7 @@ enum SettingsTab: Hashable, CaseIterable {
   private var contentSizes: [SettingsTab: CGSize] = [:]
 
   init(
-    store: QueueStore, updateChecker: UpdateChecker, initialTab: SettingsTab,
+    store: QueueStore, updateChecker: UpdateChecker, globalHotKey: GlobalHotKey, initialTab: SettingsTab,
     didSelectTab: @escaping (SettingsTab) -> Void
   ) {
     self.didSelectTab = didSelectTab
@@ -45,6 +48,7 @@ enum SettingsTab: Hashable, CaseIterable {
     // The window keeps the title "Tower Settings" for every tab.
     canPropagateSelectedChildViewControllerTitle = false
     addTab(.general, content: SettingsGeneralTab())
+    addTab(.shortcuts, content: SettingsShortcutsTab(globalHotKey: globalHotKey))
     addTab(.github, content: SettingsGitHubTab(store: store))
     addTab(.jira, content: SettingsJiraTab(store: store))
     addTab(.circleci, content: SettingsCircleCITab(store: store))

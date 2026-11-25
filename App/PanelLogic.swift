@@ -103,6 +103,11 @@ func selectableRows(
   return layout == .split ? listedRows + pinnedWatchRows(in: sections) : listedRows
 }
 
+// The global shortcut opens the panel on Needs you with the first row selected, so Return opens the most urgent item.
+func shortcutOpenSelection(in sections: [QueueSection], layout: PanelLayout) -> String? {
+  selectableRows(in: sections, layout: layout, tab: .needsYou, expandedItemIds: []).first?.id
+}
+
 // No selection counts as listed, so only a selected row that leaves the list clears the selection.
 func isSelectionListed(_ selectedItemId: String?, in rows: [QueueItem]) -> Bool {
   guard let selectedItemId else { return true }
@@ -200,11 +205,12 @@ func swipeOutcome(
 
 enum PanelInput: Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
+  case switchPanelView
 }
 
 enum PanelAction: Equatable, Sendable {
   case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
-  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo
+  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView
 }
 
 // Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
@@ -226,6 +232,7 @@ func panelAction(
   case .rightClick: return selectedItemHasDetails || selectedItemIsDismissible ? .showContextMenu : .ignore
   case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore
   case .undo: return canUndo ? .undo : .ignore
+  case .switchPanelView: return .switchPanelView
   }
 }
 
@@ -235,6 +242,7 @@ struct PanelKeyOutcome: Equatable {
   var copiesSelectedLink = false
   var dismissesSelectedItem = false
   var undoesLastDismissal = false
+  var switchesPanelView = false
   var isHandled = true
 }
 
@@ -254,6 +262,9 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
     return PanelKeyOutcome(popoverItemId: nil, dismissesSelectedItem: true)
   case .undo:
     return PanelKeyOutcome(popoverItemId: popoverItemId, undoesLastDismissal: true)
+  // The list changes under the popover, so it closes. The selection stays while its row is still listed.
+  case .switchPanelView:
+    return PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }

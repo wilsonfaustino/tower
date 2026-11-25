@@ -27,6 +27,7 @@ enum MenuSymbol: String, CaseIterable {
 // Symbols for the Settings window, from the same asset catalog.
 enum SettingsSymbol: String, CaseIterable {
   case general = "ph-gear"
+  case shortcuts = "ph-keyboard"
   // Drawn for the Settings design canvas in the Phosphor style, not part of the Phosphor set.
   case github = "settings-github"
   case jira = "settings-jira"

@@ -441,6 +441,8 @@ public enum PanelLayout: String, CaseIterable, Sendable {
     case .consolidated: "Consolidated"
     }
   }
+
+  public var toggled: PanelLayout { self == .split ? .consolidated : .split }
 }
 
 // The sections the scroll list shows. The queue builder already leaves out empty sections and keeps

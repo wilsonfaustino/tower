@@ -636,3 +636,41 @@ struct StatusFilterTests {
     #expect(rows.map(\.id) == ["bot", "w1"])
   }
 }
+
+@Suite struct ShortcutOpenSelectionTests {
+  @Test func splitSelectsTheFirstNeedsYouRow() {
+    #expect(shortcutOpenSelection(in: tabSections, layout: .split) == "r1")
+  }
+
+  @Test func consolidatedSelectsTheFirstRow() {
+    let sections = [QueueSection(kind: .watch, items: [item("w1")]), QueueSection(kind: .waiting, items: [item("p1")])]
+    #expect(shortcutOpenSelection(in: sections, layout: .consolidated) == "w1")
+  }
+
+  @Test(arguments: PanelLayout.allCases)
+  func emptyQueueSelectsNothing(layout: PanelLayout) {
+    #expect(shortcutOpenSelection(in: [], layout: layout) == nil)
+  }
+
+  @Test func aFirstGroupIsSelectedCollapsed() {
+    let sections = [QueueSection(kind: .tidy, items: [botGroup, item("t1")])]
+    #expect(shortcutOpenSelection(in: sections, layout: .split) == "bot")
+  }
+
+  @Test func splitWithOnlyWatchRowsSelectsThePinnedWatchRow() {
+    let sections = [QueueSection(kind: .watch, items: [item("w1")]), QueueSection(kind: .waiting, items: [item("p1")])]
+    #expect(shortcutOpenSelection(in: sections, layout: .split) == "w1")
+  }
+}
+
+@Suite struct SwitchPanelViewKeyTests {
+  @Test(arguments: [false, true])
+  func switchPanelViewAlwaysActs(isPopoverOpen: Bool) {
+    #expect(panelAction(for: .switchPanelView, selectedItemHasDetails: false, isPopoverOpen: isPopoverOpen) == .switchPanelView)
+  }
+
+  @Test func switchPanelViewClosesThePopoverAndKeepsTheSelection() {
+    let outcome = panelKeyOutcome(for: .switchPanelView, selectedItemId: "a", popoverItemId: "a")
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true))
+  }
+}
