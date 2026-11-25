@@ -87,9 +87,9 @@ struct PanelView: View {
     .onChange(of: isSlidRowListed) { _, isListed in
       if !isListed { slidItemId = nil }
     }
-    // The selection stays while its row is still listed in the new view.
     // On a first launch the queue can still be loading when the shortcut opens the panel.
     .onChange(of: showsQueue) { selectFirstRowIfOpenedByShortcut() }
+    // The selection stays while its row is still listed in the new view.
     .onChange(of: layout) {
       popoverItemId = nil
       chosenStatusFilter = nil

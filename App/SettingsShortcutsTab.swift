@@ -32,6 +32,8 @@ private let panelKeyHelp: [(keys: String, text: String)] = [
   ("Esc", "Close the panel"),
 ]
 
+private let registrationFailedText = "This shortcut does not work. Another app uses it."
+
 struct SettingsShortcutsTab: View {
   let globalHotKey: GlobalHotKey
   @State private var shortcuts = ShortcutSettings.loadAll()
@@ -84,6 +86,13 @@ struct SettingsShortcutsTab: View {
         if action.canBeCleared, shortcuts[action] ?? nil != nil {
           Button("Turn Off") { clear(action) }
         }
+        // Stays in sight while the caption shows a rejection, without changing the tab height.
+        if action == .openPanel && globalHotKey.registrationFailed {
+          Image(SettingsSymbol.failed.rawValue)
+            .foregroundStyle(Theme.statusText(.failing))
+            .help(registrationFailedText)
+            .accessibilityLabel(registrationFailedText)
+        }
       }
       SettingsCaption(text: caption(action))
     }
@@ -103,7 +112,7 @@ struct SettingsShortcutsTab: View {
       return action.canBeCleared ? "Press Esc to cancel, or Delete to turn it off." : "Press Esc to cancel."
     }
     if rejectedAction == action, let rejection { return rejection.message }
-    if action == .openPanel && globalHotKey.registrationFailed { return "This shortcut does not work. Another app uses it." }
+    if action == .openPanel && globalHotKey.registrationFailed { return registrationFailedText }
     switch action {
     case .openPanel: return "Opens or closes the panel from any app."
     case .switchPanelView: return "Switches the view while the panel is open."
@@ -122,8 +131,10 @@ struct SettingsShortcutsTab: View {
     globalHotKey.setPaused(true)
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak settingsWindow] event in
       let combo = KeyCombo(
-        // With Command applied, a layout like Dvorak-QWERTY gives the character that the panel's Cmd keys see.
-        keyCode: event.keyCode, key: event.characters(byApplyingModifiers: .command) ?? "",
+        // With Command down, a layout like Dvorak-QWERTY gives the character that the panel's Cmd keys see.
+        keyCode: event.keyCode,
+        key: (event.modifierFlags.contains(.command)
+          ? event.characters(byApplyingModifiers: .command) : event.charactersIgnoringModifiers) ?? "",
         modifiers: keyModifiers(from: event.modifierFlags))
       let isRecordingWindow = MainActor.assumeIsolated { event.window != nil && event.window === settingsWindow }
       guard isRecordingWindow else { return event }
