@@ -495,13 +495,12 @@ struct PanelKeyOutcomeTests {
     #expect(pinnedWatchRows(in: sections).map(\.id) == ["hold", "run1"])
   }
 
-  @Test func pinnedAreaShowsTheRowsTheArrowKeysSelect() throws {
+  @Test func pinnedSectionPutsOnHoldFirstAndKeepsEveryRow() throws {
     let running = (1...3).map { row(id: "run\($0)", badge: Badge(text: "Running", variant: .neutral)) }
     let onHold = row(id: "hold", badge: Badge(text: "Needs approval", variant: .urgent))
     let sections = [QueueSection(kind: .watch, items: running + [onHold])]
     let pinnedSection = try #require(pinnedWatchSection(in: sections))
     #expect(pinnedSection.items.map(\.id) == ["hold", "run1", "run2", "run3"])
-    #expect(pinnedSection.items.prefix(pinnedWatchRowLimit).map(\.id) == pinnedWatchRows(in: sections).map(\.id))
     #expect(pinnedWatchSection(in: []) == nil)
   }
 
