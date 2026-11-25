@@ -76,6 +76,9 @@ struct PullRequestPopoverView: View {
       guard press.modifiers.subtracting(.capsLock) == .command else { return .ignored }
       return handleInput(.undo)
     }
+    .onKeyPress(phases: .down) { _ in
+      isSwitchPanelViewKey(NSApp.currentEvent) ? handleInput(.switchPanelView) : .ignored
+    }
     // Each copy cancels the previous task, so the 1.5 s feedback restarts.
     .task(id: copyEventCount) {
       guard isShowingCopied else { return }

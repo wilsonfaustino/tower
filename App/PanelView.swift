@@ -7,6 +7,9 @@ struct PanelView: View {
   let updateChecker: UpdateChecker
   let close: () -> Void
   let openSettings: () -> Void
+  // The global shortcut opens the panel with the first row selected. A click opens it with no selection.
+  var selectsFirstRow = false
+  @State private var hasSelectedFirstRow = false
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
   @State private var selectedTab = PanelTab.needsYou
@@ -53,6 +56,12 @@ struct PanelView: View {
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
         }
+        // The kept selection can sit lower in the other view, so the list scrolls to it again. The scroll waits a
+        // main actor turn, so the rows of the new view are laid out first.
+        .onChange(of: layout) {
+          guard let selectedItemId else { return }
+          Task { @MainActor in proxy.scrollTo(selectedItemId) }
+        }
         // Gives keyboard focus back to the list, with the same row selected, when the popover closes.
         .onChange(of: popoverItemId) { _, newValue in
           if newValue == nil { isListFocused = true }
@@ -84,9 +93,13 @@ struct PanelView: View {
     .onChange(of: isSlidRowListed) { _, isListed in
       if !isListed { slidItemId = nil }
     }
+    // On a first launch the queue can still be loading when the shortcut opens the panel.
+    .onChange(of: showsQueue) { selectFirstRowIfOpenedByShortcut() }
+    // The selection stays while its row is still listed in the new view.
     .onChange(of: layout) {
-      clearSelection()
+      popoverItemId = nil
       chosenStatusFilter = nil
+      isListFocused = true
     }
     // A refresh, dismiss or undo can take the chosen status out of the legend. Forgetting it then means
     // the status does not filter again by itself when it comes back.
@@ -102,6 +115,7 @@ struct PanelView: View {
     .focused($isListFocused)
     .onAppear {
       isListFocused = true
+      selectFirstRowIfOpenedByShortcut()
       // The panel may open without activating the app, so the activation refresh can miss the Reconnect return.
       if store.hasAuthenticationFailure { Task { await store.refresh() } }
       scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
@@ -145,6 +159,9 @@ struct PanelView: View {
     .onKeyPress(keys: [.delete]) { press in
       guard press.modifiers.contains(.command) else { return .ignored }
       return handle(.dismiss)
+    }
+    .onKeyPress(phases: .down) { _ in
+      isSwitchPanelViewKey(NSApp.currentEvent) ? handle(.switchPanelView) : .ignored
     }
     .onKeyPress(keys: ["z"]) { press in
       // Only Cmd (Caps Lock aside), so Shift-Cmd-Z (redo) does not undo.
@@ -363,6 +380,12 @@ struct PanelView: View {
     isListFocused = true
   }
 
+  private func selectFirstRowIfOpenedByShortcut() {
+    guard selectsFirstRow, !hasSelectedFirstRow, showsQueue else { return }
+    hasSelectedFirstRow = true
+    selectedItemId = shortcutOpenSelection(in: store.sections, layout: layout)
+  }
+
   private func clearSelection() {
     selectedItemId = nil
     popoverItemId = nil
@@ -401,6 +424,11 @@ struct PanelView: View {
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
     if outcome.dismissesSelectedItem, let selectedItem { dismiss(selectedItem) }
     if outcome.undoesLastDismissal { store.undoLastDismissal() }
+    // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
+    if outcome.switchesPanelView {
+      chosenStatusFilter = nil
+      layout = layout.toggled
+    }
     if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
     return outcome.isHandled ? .handled : .ignored
   }

@@ -147,6 +147,15 @@ private struct UnusedTransport: HTTPTransport {
     }
   }
 
+  @Test func hotKeyOpensThePanelThenClosesIt() {
+    withController { controller, _ in
+      controller.toggleFromHotKey()
+      #expect(controller.isPanelVisible)
+      controller.toggleFromHotKey()
+      #expect(!controller.isPanelVisible)
+    }
+  }
+
   @Test func resizeKeepsThePanelOpenAndCloseHidesIt() {
     withController { controller, _ in
       controller.showPanel()

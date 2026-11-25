@@ -162,9 +162,19 @@ import SwiftUI
 
   var isPanelVisible: Bool { panel.isVisible }
 
-  func showPanel() {
+  func toggleFromHotKey() {
+    switch hotKeyAction(isPanelVisible: panel.isVisible) {
+    case .showPanel: showPanel(selectsFirstRow: true)
+    case .closePanel: closePanel()
+    case .showMenu: break
+    }
+  }
+
+  func showPanel(selectsFirstRow: Bool = false) {
     let hostingController = NSHostingController(
-      rootView: PanelView(store: store, updateChecker: updateChecker, close: { [weak self] in self?.closePanel() }, openSettings: openSettings)
+      rootView: PanelView(
+        store: store, updateChecker: updateChecker, close: { [weak self] in self?.closePanel() },
+        openSettings: openSettings, selectsFirstRow: selectsFirstRow)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel)))
     hostingController.sizingOptions = .preferredContentSize
@@ -187,12 +197,21 @@ import SwiftUI
     outsideClickMonitor = nil
   }
 
+  // A status item hidden behind the notch or by the user has no screen, so the panel goes to the main screen.
   private func positionPanel() {
-    guard let buttonWindow = statusItem.button?.window, let screen = buttonWindow.screen else { return }
+    let anchor: NSRect
+    let visibleFrame: NSRect
+    if let buttonWindow = statusItem.button?.window, let screen = buttonWindow.screen {
+      anchor = buttonWindow.frame
+      visibleFrame = screen.visibleFrame
+    } else if let screen = NSScreen.main {
+      anchor = fallbackPanelAnchor(visibleFrame: screen.visibleFrame)
+      visibleFrame = screen.visibleFrame
+    } else {
+      return
+    }
     panel.setFrameOrigin(
-      panelOrigin(
-        anchor: buttonWindow.frame, panelSize: panel.frame.size, visibleFrame: screen.visibleFrame,
-        gap: Theme.Metrics.panelGap))
+      panelOrigin(anchor: anchor, panelSize: panel.frame.size, visibleFrame: visibleFrame, gap: Theme.Metrics.panelGap))
   }
 
   func windowDidResize(_ notification: Notification) {
@@ -248,6 +267,11 @@ func panelOrigin(anchor: NSRect, panelSize: NSSize, visibleFrame: NSRect, gap: C
   let originX = min(max(anchor.minX, visibleFrame.minX), visibleFrame.maxX - panelSize.width)
   let originY = anchor.minY - gap - panelSize.height
   return NSPoint(x: originX, y: originY)
+}
+
+// The top right corner of the screen, where the status items sit.
+func fallbackPanelAnchor(visibleFrame: NSRect) -> NSRect {
+  NSRect(x: visibleFrame.maxX, y: visibleFrame.maxY, width: 0, height: 0)
 }
 
 enum PanelKeyChangeAction {

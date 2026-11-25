@@ -99,3 +99,21 @@ struct PanelOriginTests {
     #expect(panelKeyChangeAction(newKeyWindow: nil, panel: panel, resignedChildIsVisible: nil) == .closePanel)
   }
 }
+
+struct HotKeyActionTests {
+  @Test func hotKeyOpensAClosedPanelAndClosesAnOpenOne() {
+    #expect(hotKeyAction(isPanelVisible: false) == .showPanel)
+    #expect(hotKeyAction(isPanelVisible: true) == .closePanel)
+  }
+}
+
+struct FallbackPanelAnchorTests {
+  // A hidden status item has no screen, so the panel opens at the top right of the main screen.
+  @Test func panelOpensAtTheTopRightOfTheScreen() {
+    let visibleFrame = NSRect(x: 0, y: 0, width: 1512, height: 944)
+    let origin = panelOrigin(
+      anchor: fallbackPanelAnchor(visibleFrame: visibleFrame), panelSize: NSSize(width: 380, height: 300),
+      visibleFrame: visibleFrame, gap: 4)
+    #expect(origin == NSPoint(x: 1512 - 380, y: 944 - 4 - 300))
+  }
+}
