@@ -78,6 +78,7 @@ struct ShortcutDisplayTests {
     #expect(KeyCombo(keyCode: 49, key: " ", modifiers: [.control]).displayText == "⌃Space")
     #expect(KeyCombo(keyCode: 36, key: "\r", modifiers: [.command]).displayText == "⌘↩")
     #expect(KeyCombo(keyCode: 122, key: "", modifiers: [.option]).displayText == "⌥F1")
+    #expect(KeyCombo(keyCode: 105, key: "\u{F710}", modifiers: [.control]).displayText == "⌃F13")
   }
 }
 
@@ -127,7 +128,7 @@ struct ShortcutValidationTests {
     KeyCombo(keyCode: 53, key: "", modifiers: [.command]),
   ])
   func panelKeysAreReserved(combo: KeyCombo) {
-    #expect(validateShortcut(combo, for: .switchPanelView, current: defaultShortcuts) == .reservedByPanel)
+    #expect(validateShortcut(combo, for: .switchPanelView, current: defaultShortcuts) == .reservedByTower)
   }
 
   // The panel undoes only on Cmd-Z alone, so other Z combos stay free.
@@ -151,7 +152,7 @@ struct ShortcutValidationTests {
 
   @Test func rejectionsExplainThemselves() {
     #expect(ShortcutRejection.needsModifier.message == "Use Control, Option or Command with the key.")
-    #expect(ShortcutRejection.reservedByPanel.message == "The panel already uses this key.")
+    #expect(ShortcutRejection.reservedByTower.message == "Tower already uses this key.")
     #expect(ShortcutRejection.usedBy(.switchPanelView).message == "Switch panel view already uses this shortcut.")
   }
 }
@@ -170,11 +171,22 @@ struct ShortcutLayoutValidationTests {
   // On a layout like Dvorak, C sits on another physical key. The panel matches Cmd-C by character.
   @Test func commandCOnAnotherPhysicalKeyIsReserved() {
     let combo = KeyCombo(keyCode: 34, key: "c", modifiers: [.command])
-    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByPanel)
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByTower)
+  }
+
+  // On Dvorak, the physical US C key types J, so Cmd-J does not reach the panel's Copy.
+  @Test func commandJOnTheUSCKeyIsFree() {
+    let combo = KeyCombo(keyCode: 8, key: "j", modifiers: [.command])
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == nil)
+  }
+
+  @Test func commandCommaOpensSettingsSoItIsReserved() {
+    let combo = KeyCombo(keyCode: 43, key: ",", modifiers: [.command])
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByTower)
   }
 
   @Test func commandZOnAnotherPhysicalKeyIsReserved() {
     let combo = KeyCombo(keyCode: 44, key: "z", modifiers: [.command])
-    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByPanel)
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByTower)
   }
 }

@@ -113,10 +113,11 @@ struct SettingsShortcutsTab: View {
   // The hot key pauses, so the current Open panel shortcut reaches the recorder instead of the panel.
   private func startRecording(_ action: ShortcutAction) {
     stopRecording()
+    // Without a key window the recorder could not tell its keys apart or notice focus loss, so it does not start.
+    guard let settingsWindow = NSApp.keyWindow else { return }
     rejectedAction = nil
     rejection = nil
     recordingAction = action
-    let settingsWindow = NSApp.keyWindow
     recordingWindow = settingsWindow
     globalHotKey.setPaused(true)
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak settingsWindow] event in

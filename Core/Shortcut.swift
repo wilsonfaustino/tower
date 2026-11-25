@@ -13,13 +13,8 @@ public struct KeyModifiers: OptionSet, Codable, Hashable, Sendable {
 // Virtual key codes (kVK_* in Carbon), so Core needs no Carbon import. They name physical keys, not characters.
 public enum KeyCode {
   public static let s: UInt16 = 1
-  public static let z: UInt16 = 6
-  public static let c: UInt16 = 8
   public static let t: UInt16 = 17
-  public static let one: UInt16 = 18
-  public static let two: UInt16 = 19
   public static let returnKey: UInt16 = 36
-  public static let period: UInt16 = 47
   public static let tab: UInt16 = 48
   public static let space: UInt16 = 49
   public static let delete: UInt16 = 51
@@ -66,7 +61,7 @@ private let specialKeyLabels: [UInt16: String] = [
   KeyCode.downArrow: "↓", KeyCode.upArrow: "↑",
   // Function keys F1 to F12.
   122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8", 101: "F9", 109: "F10",
-  103: "F11", 111: "F12",
+  103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20",
 ]
 
 public enum ShortcutAction: String, CaseIterable, Sendable {
@@ -128,12 +123,12 @@ public enum ShortcutSettings {
 }
 
 public enum ShortcutRejection: Equatable, Sendable {
-  case needsModifier, reservedByPanel, usedBy(ShortcutAction)
+  case needsModifier, reservedByTower, usedBy(ShortcutAction)
 
   public var message: String {
     switch self {
     case .needsModifier: "Use Control, Option or Command with the key."
-    case .reservedByPanel: "The panel already uses this key."
+    case .reservedByTower: "Tower already uses this key."
     case .usedBy(let action): "\(action.title) already uses this shortcut."
     }
   }
@@ -144,13 +139,11 @@ private let panelKeysWithAnyModifiers: Set<UInt16> = [
   KeyCode.upArrow, KeyCode.downArrow, KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.returnKey, KeyCode.space,
   KeyCode.escape, KeyCode.delete,
 ]
-// The panel matches these by character, so a combo is checked by its US key code and by the character it types.
+// Tower matches these by the character the key types in the current layout, so the check uses the same character.
 // Whenever Command is down: Cmd-1 and Cmd-2 tabs, Cmd-C copy.
-private let panelKeysWithCommand: Set<UInt16> = [KeyCode.one, KeyCode.two, KeyCode.c]
-private let panelCharactersWithCommand: Set<String> = ["1", "2", "c"]
-// Only with Command alone: Cmd-Z undoes and Cmd-period closes the panel.
-private let panelKeysWithCommandAlone: Set<UInt16> = [KeyCode.z, KeyCode.period]
-private let panelCharactersWithCommandAlone: Set<String> = ["z", "."]
+private let charactersWithCommand: Set<String> = ["1", "2", "c"]
+// Only with Command alone: Cmd-Z undoes, Cmd-period closes the panel, Cmd-comma opens Settings.
+private let charactersWithCommandAlone: Set<String> = ["z", ".", ","]
 
 // Nil means the combo is valid for the action.
 public func validateShortcut(
@@ -158,14 +151,11 @@ public func validateShortcut(
 ) -> ShortcutRejection? {
   guard !combo.modifiers.isDisjoint(with: [.control, .option, .command]) else { return .needsModifier }
   let character = combo.key.lowercased()
-  let usesCommandKey = panelKeysWithCommand.contains(combo.keyCode) || panelCharactersWithCommand.contains(character)
-  let usesCommandAloneKey =
-    panelKeysWithCommandAlone.contains(combo.keyCode) || panelCharactersWithCommandAlone.contains(character)
   if panelKeysWithAnyModifiers.contains(combo.keyCode)
-    || (usesCommandKey && combo.modifiers.contains(.command))
-    || (usesCommandAloneKey && combo.modifiers == .command)
+    || (charactersWithCommand.contains(character) && combo.modifiers.contains(.command))
+    || (charactersWithCommandAlone.contains(character) && combo.modifiers == .command)
   {
-    return .reservedByPanel
+    return .reservedByTower
   }
   for otherAction in ShortcutAction.allCases where otherAction != action {
     if let otherCombo = current[otherAction] ?? nil, otherCombo.matches(keyCode: combo.keyCode, modifiers: combo.modifiers) {
