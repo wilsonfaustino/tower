@@ -73,7 +73,7 @@ func carbonModifiers(for modifiers: KeyModifiers) -> UInt32 {
     update()
   }
 
-  fileprivate func handlePress() {
+  func handlePress() {
     onPress?()
   }
 }
