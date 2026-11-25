@@ -255,7 +255,7 @@ struct PanelView: View {
   // In Consolidated, Watch is in the list, so only the legend stays here.
   private var pinnedContent: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-      if layout == .split, let watchSection = store.sections.first(where: { $0.kind == .watch }) {
+      if layout == .split, let watchSection = pinnedWatchSection(in: store.sections) {
         sectionView(watchSection, visibleItemLimit: pinnedWatchRowLimit)
       }
       if !legendStatusList.isEmpty {

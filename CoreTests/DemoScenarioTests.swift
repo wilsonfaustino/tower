@@ -46,6 +46,12 @@ struct DemoScenarioTests {
     #expect(Set(tidyItems.map(\.symbol)).count > 1)
   }
 
+  @Test func longListListsTheOnHoldPipelineAfterTwoRunningOnes() {
+    let watchItems = demoSections(.longList).first { $0.kind == .watch }?.items ?? []
+    #expect(watchItems.prefix(2).allSatisfy { $0.badge?.text == "Running" })
+    #expect(watchItems.dropFirst(2).contains { $0.badge?.text == "Needs approval" })
+  }
+
   @Test func longListHasEnoughRowsToScroll() {
     #expect(rowCount(demoSections(.longList)) >= 30)
   }
