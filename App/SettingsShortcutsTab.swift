@@ -29,6 +29,7 @@ private let panelKeyHelp: [(keys: String, text: String)] = [
   ("⌘C", "Copy the link"),
   ("⌘⌫", "Dismiss the row"),
   ("⌘Z", "Undo the dismissal"),
+  ("⌘,", "Open Settings"),
   ("Esc", "Close the panel"),
 ]
 
@@ -131,10 +132,10 @@ struct SettingsShortcutsTab: View {
     globalHotKey.setPaused(true)
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak settingsWindow] event in
       let combo = KeyCombo(
-        // With Command down, a layout like Dvorak-QWERTY gives the character that the panel's Cmd keys see.
         keyCode: event.keyCode,
-        key: (event.modifierFlags.contains(.command)
-          ? event.characters(byApplyingModifiers: .command) : event.charactersIgnoringModifiers) ?? "",
+        // With Command down, a layout like Dvorak-QWERTY gives the character that the panel's Cmd keys see.
+        // Without it, the plain character, so Shift shows as ⇧ and not as a shifted symbol.
+        key: event.characters(byApplyingModifiers: event.modifierFlags.contains(.command) ? .command : []) ?? "",
         modifiers: keyModifiers(from: event.modifierFlags))
       let isRecordingWindow = MainActor.assumeIsolated { event.window != nil && event.window === settingsWindow }
       guard isRecordingWindow else { return event }

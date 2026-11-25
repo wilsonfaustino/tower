@@ -56,6 +56,12 @@ struct PanelView: View {
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
         }
+        // The kept selection can sit lower in the other view, so the list scrolls to it again. The scroll waits a
+        // main actor turn, so the rows of the new view are laid out first.
+        .onChange(of: layout) {
+          guard let selectedItemId else { return }
+          Task { @MainActor in proxy.scrollTo(selectedItemId) }
+        }
         // Gives keyboard focus back to the list, with the same row selected, when the popover closes.
         .onChange(of: popoverItemId) { _, newValue in
           if newValue == nil { isListFocused = true }
