@@ -67,6 +67,14 @@ func carbonModifiers(for modifiers: KeyModifiers) -> UInt32 {
     registrationFailed = status != noErr
   }
 
+  // Removes the hot key and the handler, which points at this object without retaining it.
+  func stop() {
+    if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+    hotKeyRef = nil
+    if let handlerRef { RemoveEventHandler(handlerRef) }
+    handlerRef = nil
+  }
+
   // While paused, the recorder gets the current shortcut as a plain key press.
   func setPaused(_ paused: Bool) {
     isPaused = paused

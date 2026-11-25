@@ -98,8 +98,8 @@ func recordedCombo(from event: NSEvent) -> KeyCombo {
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
       let combo = recordedCombo(from: event)
       let isRecordingWindow = MainActor.assumeIsolated { event.window != nil && event.window === window }
-      guard isRecordingWindow else { return event }
-      MainActor.assumeIsolated { self?.record(combo) }
+      guard isRecordingWindow, let self else { return event }
+      MainActor.assumeIsolated { self.record(combo) }
       return nil
     }
   }

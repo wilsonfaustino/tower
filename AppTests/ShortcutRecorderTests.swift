@@ -25,6 +25,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func showsTheDefaultsWithTheirCaptions() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     #expect(recorder.recorderText(.openPanel) == "⌃⌘T")
     #expect(recorder.recorderText(.switchPanelView) == "⌃⌘S")
     #expect(recorder.caption(.openPanel) == "Opens or closes the panel from any app.")
@@ -34,6 +35,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func recordingShowsAPromptAndAHint() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: window)
     #expect(recorder.recordingAction == .openPanel)
     #expect(recorder.recorderText(.openPanel) == "Type a shortcut")
@@ -47,12 +49,14 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func recordingDoesNotStartWithoutAWindow() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: nil)
     #expect(recorder.recordingAction == nil)
   }
 
   @Test func aValidComboIsSavedAndRecordingStops() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: window)
     recorder.record(optionCommandK)
     #expect(recorder.recordingAction == nil)
@@ -63,6 +67,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func aTakenComboShowsWhyAndKeepsTheShortcut() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: window)
     recorder.record(ShortcutAction.switchPanelView.defaultCombo)
     #expect(recorder.caption(.openPanel) == "Switch panel view already uses this shortcut.")
@@ -74,6 +79,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func escapeCancelsWithoutAChange() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.switchPanelView, in: window)
     recorder.record(KeyCombo(keyCode: KeyCode.escape, key: "", modifiers: []))
     #expect(recorder.recordingAction == nil)
@@ -82,6 +88,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func deleteTurnsOpenPanelOff() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: window)
     recorder.record(KeyCombo(keyCode: KeyCode.delete, key: "", modifiers: []))
     #expect(recorder.recorderText(.openPanel) == "Off")
@@ -90,12 +97,14 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func aKeyPressWithoutRecordingDoesNothing() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.record(optionCommandK)
     #expect(recorder.hasOnlyDefaults)
   }
 
   @Test func turnOffAndRestoreDefaults() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.clear(.openPanel)
     #expect(recorder.savedText(.openPanel) == "Off")
     recorder.restoreDefaults()
@@ -105,6 +114,7 @@ private let optionCommandK = KeyCombo(keyCode: 40, key: "k", modifiers: [.option
 
   @Test func onlyTheRecordingWindowLosingFocusStopsRecording() {
     let recorder = makeRecorder()
+    defer { recorder.stop() }
     recorder.start(.openPanel, in: window)
     recorder.windowDidResignKey(makeWindow())
     #expect(recorder.recordingAction == .openPanel)
@@ -142,13 +152,16 @@ private let testHotKey = KeyCombo(keyCode: 80, key: "", modifiers: [.control, .o
     let latecomer = GlobalHotKey(defaults: defaults)
     holder.start()
     latecomer.start()
+    defer {
+      holder.stop()
+      latecomer.stop()
+    }
     #expect(!holder.registrationFailed)
     #expect(latecomer.registrationFailed)
     // The recorder pauses the holder, so the shortcut is free again.
     holder.setPaused(true)
     latecomer.update()
     #expect(!latecomer.registrationFailed)
-    latecomer.setPaused(true)
   }
 
   @Test func aShortcutThatIsOffRegistersNothing() {
@@ -156,6 +169,7 @@ private let testHotKey = KeyCombo(keyCode: 80, key: "", modifiers: [.control, .o
     ShortcutSettings.save(nil, for: .openPanel, defaults: defaults)
     let hotKey = GlobalHotKey(defaults: defaults)
     hotKey.start()
+    defer { hotKey.stop() }
     #expect(!hotKey.registrationFailed)
   }
 
