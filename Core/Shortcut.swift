@@ -144,18 +144,26 @@ private let panelKeysWithAnyModifiers: Set<UInt16> = [
   KeyCode.upArrow, KeyCode.downArrow, KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.returnKey, KeyCode.space,
   KeyCode.escape, KeyCode.delete,
 ]
-// The panel handles these keys whenever Command is down: Cmd-1 and Cmd-2 tabs, Cmd-C copy.
+// The panel matches these by character, so a combo is checked by its US key code and by the character it types.
+// Whenever Command is down: Cmd-1 and Cmd-2 tabs, Cmd-C copy.
 private let panelKeysWithCommand: Set<UInt16> = [KeyCode.one, KeyCode.two, KeyCode.c]
+private let panelCharactersWithCommand: Set<String> = ["1", "2", "c"]
+// Only with Command alone: Cmd-Z undoes and Cmd-period closes the panel.
+private let panelKeysWithCommandAlone: Set<UInt16> = [KeyCode.z, KeyCode.period]
+private let panelCharactersWithCommandAlone: Set<String> = ["z", "."]
 
 // Nil means the combo is valid for the action.
 public func validateShortcut(
   _ combo: KeyCombo, for action: ShortcutAction, current: [ShortcutAction: KeyCombo?]
 ) -> ShortcutRejection? {
   guard !combo.modifiers.isDisjoint(with: [.control, .option, .command]) else { return .needsModifier }
+  let character = combo.key.lowercased()
+  let usesCommandKey = panelKeysWithCommand.contains(combo.keyCode) || panelCharactersWithCommand.contains(character)
+  let usesCommandAloneKey =
+    panelKeysWithCommandAlone.contains(combo.keyCode) || panelCharactersWithCommandAlone.contains(character)
   if panelKeysWithAnyModifiers.contains(combo.keyCode)
-    || (panelKeysWithCommand.contains(combo.keyCode) && combo.modifiers.contains(.command))
-    // Cmd-Z undoes and Cmd-period closes the panel, both only with Command alone.
-    || ([KeyCode.z, KeyCode.period].contains(combo.keyCode) && combo.modifiers == .command)
+    || (usesCommandKey && combo.modifiers.contains(.command))
+    || (usesCommandAloneKey && combo.modifiers == .command)
   {
     return .reservedByPanel
   }

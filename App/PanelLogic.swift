@@ -108,6 +108,13 @@ func shortcutOpenSelection(in sections: [QueueSection], layout: PanelLayout) -> 
   selectableRows(in: sections, layout: layout, tab: .needsYou, expandedItemIds: []).first?.id
 }
 
+// The saved shortcut matches the physical key, as the global hot key does.
+@MainActor func isSwitchPanelViewKey(_ event: NSEvent?) -> Bool {
+  guard let event, event.type == .keyDown else { return false }
+  return ShortcutSettings.load(.switchPanelView)?.matches(
+    keyCode: event.keyCode, modifiers: keyModifiers(from: event.modifierFlags)) == true
+}
+
 // No selection counts as listed, so only a selected row that leaves the list clears the selection.
 func isSelectionListed(_ selectedItemId: String?, in rows: [QueueItem]) -> Bool {
   guard let selectedItemId else { return true }

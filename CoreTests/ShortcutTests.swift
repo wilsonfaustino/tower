@@ -162,3 +162,19 @@ struct PanelLayoutToggleTests {
     #expect(PanelLayout.consolidated.toggled == .split)
   }
 }
+
+struct ShortcutLayoutValidationTests {
+  private let defaultShortcuts = Dictionary(
+    uniqueKeysWithValues: ShortcutAction.allCases.map { ($0, Optional($0.defaultCombo)) })
+
+  // On a layout like Dvorak, C sits on another physical key. The panel matches Cmd-C by character.
+  @Test func commandCOnAnotherPhysicalKeyIsReserved() {
+    let combo = KeyCombo(keyCode: 34, key: "c", modifiers: [.command])
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByPanel)
+  }
+
+  @Test func commandZOnAnotherPhysicalKeyIsReserved() {
+    let combo = KeyCombo(keyCode: 44, key: "z", modifiers: [.command])
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByPanel)
+  }
+}

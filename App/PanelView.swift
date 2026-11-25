@@ -151,13 +151,8 @@ struct PanelView: View {
       guard press.modifiers.contains(.command) else { return .ignored }
       return handle(.dismiss)
     }
-    // The saved shortcut matches the physical key, so it works with any keyboard layout.
     .onKeyPress(phases: .down) { _ in
-      guard let event = NSApp.currentEvent, event.type == .keyDown,
-        ShortcutSettings.load(.switchPanelView)?.matches(
-          keyCode: event.keyCode, modifiers: keyModifiers(from: event.modifierFlags)) == true
-      else { return .ignored }
-      return handle(.switchPanelView)
+      isSwitchPanelViewKey(NSApp.currentEvent) ? handle(.switchPanelView) : .ignored
     }
     .onKeyPress(keys: ["z"]) { press in
       // Only Cmd (Caps Lock aside), so Shift-Cmd-Z (redo) does not undo.
@@ -414,7 +409,11 @@ struct PanelView: View {
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
     if outcome.dismissesSelectedItem, let selectedItem { dismiss(selectedItem) }
     if outcome.undoesLastDismissal { store.undoLastDismissal() }
-    if outcome.switchesPanelView { layout = layout.toggled }
+    // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
+    if outcome.switchesPanelView {
+      chosenStatusFilter = nil
+      layout = layout.toggled
+    }
     if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
     return outcome.isHandled ? .handled : .ignored
   }

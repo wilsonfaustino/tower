@@ -39,6 +39,8 @@ struct SettingsShortcutsTab: View {
   @State private var rejectedAction: ShortcutAction?
   @State private var rejection: ShortcutRejection?
   @State private var keyMonitor: Any?
+  // The Settings window. The recorder listens only to its keys and stops when it loses focus.
+  @State private var recordingWindow: NSWindow?
 
   var body: some View {
     SettingsTabLayout {
@@ -63,6 +65,9 @@ struct SettingsShortcutsTab: View {
       }
     }
     .onDisappear(perform: stopRecording)
+    .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
+      if let recordingWindow, notification.object as? NSWindow === recordingWindow { stopRecording() }
+    }
   }
 
   private func shortcutRow(_ action: ShortcutAction) -> some View {
@@ -111,11 +116,15 @@ struct SettingsShortcutsTab: View {
     rejectedAction = nil
     rejection = nil
     recordingAction = action
+    let settingsWindow = NSApp.keyWindow
+    recordingWindow = settingsWindow
     globalHotKey.setPaused(true)
-    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak settingsWindow] event in
       let combo = KeyCombo(
         keyCode: event.keyCode, key: event.charactersIgnoringModifiers ?? "",
         modifiers: keyModifiers(from: event.modifierFlags))
+      let isRecordingWindow = MainActor.assumeIsolated { event.window != nil && event.window === settingsWindow }
+      guard isRecordingWindow else { return event }
       MainActor.assumeIsolated { record(combo, for: action) }
       return nil
     }
@@ -139,6 +148,7 @@ struct SettingsShortcutsTab: View {
     NSEvent.removeMonitor(keyMonitor)
     self.keyMonitor = nil
     recordingAction = nil
+    recordingWindow = nil
     globalHotKey.setPaused(false)
   }
 

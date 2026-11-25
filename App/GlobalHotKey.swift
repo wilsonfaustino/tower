@@ -37,7 +37,7 @@ func carbonModifiers(for modifiers: KeyModifiers) -> UInt32 {
   @ObservationIgnored private var handlerRef: EventHandlerRef?
   @ObservationIgnored private var isPaused = false
   @ObservationIgnored private let defaults: UserDefaults
-  // "TOWR" as a four-character code, so the hot key event can be told apart from those of other code.
+  // "TOWR" as a four-character code. Carbon needs an ID for each hot key; Tower registers only one.
   private static let signature: OSType = 0x544F_5752
 
   init(defaults: UserDefaults = .standard) {
@@ -45,6 +45,7 @@ func carbonModifiers(for modifiers: KeyModifiers) -> UInt32 {
   }
 
   func start() {
+    guard handlerRef == nil else { return }
     var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
     InstallEventHandler(
       GetEventDispatcherTarget(), hotKeyHandler, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
@@ -59,9 +60,10 @@ func carbonModifiers(for modifiers: KeyModifiers) -> UInt32 {
       return
     }
     let hotKeyId = EventHotKeyID(signature: Self.signature, id: 1)
+    // Exclusive, so a shortcut that another app already holds fails here and Settings can say so.
     let status = RegisterEventHotKey(
-      UInt32(combo.keyCode), carbonModifiers(for: combo.modifiers), hotKeyId, GetEventDispatcherTarget(), 0,
-      &hotKeyRef)
+      UInt32(combo.keyCode), carbonModifiers(for: combo.modifiers), hotKeyId, GetEventDispatcherTarget(),
+      OptionBits(kEventHotKeyExclusive), &hotKeyRef)
     registrationFailed = status != noErr
   }
 
