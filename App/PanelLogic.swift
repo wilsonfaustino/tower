@@ -74,10 +74,16 @@ func toggledExpansion(of groupId: String, in expandedItemIds: Set<String>) -> Se
 
 let pinnedWatchRowLimit = 2
 
-func pinnedWatchRows(in sections: [QueueSection]) -> [QueueItem] {
-  let watchItems = sections.first { $0.kind == .watch }?.items ?? []
+// The pinned area shows the first rows of this section, so "Needs approval" pipelines come first on screen too.
+func pinnedWatchSection(in sections: [QueueSection]) -> QueueSection? {
+  guard let watchSection = sections.first(where: { $0.kind == .watch }) else { return nil }
+  let watchItems = watchSection.items
   let urgentFirst = watchItems.filter { $0.statusDot == .urgent } + watchItems.filter { $0.statusDot != .urgent }
-  return Array(urgentFirst.prefix(pinnedWatchRowLimit))
+  return QueueSection(kind: .watch, items: urgentFirst)
+}
+
+func pinnedWatchRows(in sections: [QueueSection]) -> [QueueItem] {
+  Array(pinnedWatchSection(in: sections)?.items.prefix(pinnedWatchRowLimit) ?? [])
 }
 
 func visibleRows(in sections: [QueueSection], expandedItemIds: Set<String>) -> [QueueItem] {

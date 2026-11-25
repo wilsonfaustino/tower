@@ -46,7 +46,7 @@ public struct DemoScenario: Sendable {
       githubSnapshot = factory.snapshot(
         authored: factory.typicalAuthored, reviews: factory.typicalReviews + factory.manyBotReviews + factory.manyTeamReviews)
       jiraTickets = factory.typicalTickets
-      pipelines = factory.typicalPipelines
+      pipelines = factory.typicalPipelines + factory.olderRunningPipelines
     case .clearSkies:
       githubSnapshot = factory.snapshot(authored: [], reviews: [], reviewsSubmittedToday: 4, mergedToday: 2)
       jiraTickets = []
@@ -181,6 +181,14 @@ private struct DemoFactory {
       pipeline("demo-org/tower", 880, ref: "main", state: .failed, hoursAgo: 0.7),
       pipeline("demo-org/tower", 881, ref: "release", state: .onHold, hoursAgo: 0.2),
       pipeline("demo-org/api", 1204, ref: "feat/today-summary", state: .running, hoursAgo: 0.05),
+    ]
+  }
+
+  // Older than the on-hold pipeline, so by date Watch lists both before it, and the pinned area must move it up.
+  var olderRunningPipelines: [Pipeline] {
+    [
+      pipeline("demo-org/web", 512, ref: "feat/search", state: .running, hoursAgo: 1.5),
+      pipeline("demo-org/web", 513, ref: "fix/login", state: .running, hoursAgo: 1.2),
     ]
   }
 
