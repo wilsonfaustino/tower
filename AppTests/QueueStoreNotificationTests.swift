@@ -350,6 +350,7 @@ private final class SettingsBox: @unchecked Sendable {
     transport.openGate.finish()
     await staleRefresh.value
     #expect(transport.summaryBodies.count == 3)
+    #expect(transport.summaryBodies.last?.contains("user-review-requested:@me") == true)
     #expect(store.githubSnapshot?.reviewRequests.isEmpty == true)
   }
 
