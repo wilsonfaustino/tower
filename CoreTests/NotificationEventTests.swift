@@ -34,9 +34,11 @@ private func snapshot(authored: [PullRequest] = [], reviewRequests: [PullRequest
 }
 
 private func githubEvents(
-  previous: GitHubSnapshot, current: GitHubSnapshot, dismissed: Set<PullRequestDismissal> = []
+  previous: GitHubSnapshot, current: GitHubSnapshot, dismissed: Set<PullRequestDismissal> = [],
+  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
 ) -> [NotificationEvent] {
-  notificationEvents(previous: previous, current: current, dismissedPullRequests: dismissed)
+  notificationEvents(
+    previous: previous, current: current, dismissedPullRequests: dismissed, teamAuthorFilters: teamAuthorFilters)
 }
 
 private func pipeline(
@@ -170,6 +172,14 @@ struct ReviewRequestEventTests {
     let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
     let events = githubEvents(previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]))
     #expect(events.map(\.kind) == [.reviewRequested])
+  }
+
+  @Test func teamRequestFromAnAuthorTheTeamFilterHidesGivesNoEvent() {
+    let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]),
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
+    #expect(events.isEmpty)
   }
 
   @Test func teamRequestTheViewerAlreadyApprovedGivesNoEvent() {

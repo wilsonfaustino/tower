@@ -59,6 +59,11 @@ public struct GitHubSnapshot: Codable, Sendable, Equatable {
   }
 }
 
+// A user or organization login. It also keeps search qualifiers out of a query built from it.
+func isValidGitHubLogin(_ text: String) -> Bool {
+  !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+}
+
 public struct GitHubClient: Sendable {
   private static let endpoint = URL(string: "https://api.github.com/graphql")!
   private static let failedCheckRunStates: Set<String> = ["FAILURE", "TIMED_OUT", "STARTUP_FAILURE"]
@@ -77,7 +82,7 @@ public struct GitHubClient: Sendable {
     self.transport = transport
     ownerQualifiers = owners
       .map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") } }
+      .filter(isValidGitHubLogin)
       .map { " org:\($0)" }
       .joined()
   }

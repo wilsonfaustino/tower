@@ -77,13 +77,13 @@ private func pipeline(
 private func queue(
   authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = [],
   dismissedPipelines: Set<PipelineDismissal> = [], dismissedPullRequests: Set<PullRequestDismissal> = [],
-  merged: [MergedPullRequest] = []
+  merged: [MergedPullRequest] = [], teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
 ) -> [QueueSection] {
   buildQueue(
     QueueInput(
       viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
       pipelines: pipelines, dismissedPipelines: dismissedPipelines, dismissedPullRequests: dismissedPullRequests,
-      mergedPullRequests: merged),
+      mergedPullRequests: merged, teamAuthorFilters: teamAuthorFilters),
     now: now)
 }
 
@@ -1192,5 +1192,77 @@ struct PrunedPullRequestDismissalsTests {
   @Test func matchesOnRepositoryAndNumber() {
     let otherRepository = pullRequest(repository: "api-config", number: 11)
     #expect(prunedDismissals([requested.dismissal], reviewRequests: [otherRepository]).isEmpty)
+  }
+}
+
+struct TeamAuthorFilterTests {
+  private let webOnlyAna = TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]])
+
+  @Test func teamRequestFromAnAuthorNotAllowedHasNoReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "rui", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func teamRequestFromAnAllowedAuthorHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func directRequestFromAnAuthorNotAllowedHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(author: "rui", requestedReviewerLogins: ["me"], requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)
+      ],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func requestToAnUnfilteredTeamHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "rui", requestedTeamSlugs: ["platform"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func requestToTwoFilteredTeamsShowsWhenEitherAllowsTheAuthor() {
+    let filters = TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"], "platform": ["rui"]])
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, author: "rui", requestedTeamSlugs: ["web", "platform"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, author: "bea", requestedTeamSlugs: ["web", "platform"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: filters)
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#1"])
+  }
+
+  @Test func emptyAllowListHidesEveryRequestToThatTeam() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, author: "ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, author: "renovate", authorIsBot: true, requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": []]))
+    #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func loginMatchIgnoresCase() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "Ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: TeamAuthorFilters(rawLoginsByTeam: ["web": "ANA"]))
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func settingsTextDropsBlankAndInvalidLines() {
+    let filters = TeamAuthorFilters(rawLoginsByTeam: ["web": "  Ana  \n\n   \nbad login\nevil:qualifier\nunder_score\nrui-2\n"])
+    #expect(filters.allowedAuthorsByTeam == ["web": ["ana", "rui-2"]])
+  }
+
+  @Test func settingsTextWithNoValidLineKeepsTheTeamFiltered() {
+    let filters = TeamAuthorFilters(rawLoginsByTeam: ["web": "", "platform": " \nnot valid"])
+    #expect(filters.allowedAuthorsByTeam == ["web": [], "platform": []])
   }
 }
