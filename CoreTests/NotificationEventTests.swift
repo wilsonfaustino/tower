@@ -190,6 +190,12 @@ struct ReviewRequestEventTests {
     #expect(events.isEmpty)
   }
 
+  @Test func directRequestUnderDirectOnlyCounts() {
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [pullRequest()]), reviewRequestScope: .directOnly)
+    #expect(events.map(\.kind) == [.reviewRequested])
+  }
+
   @Test func teamRequestTheViewerAlreadyApprovedGivesNoEvent() {
     let approvedTeamRequest = pullRequest(
       requestedReviewerLogins: [], requestedTeamSlugs: ["web"], viewerLatestReviewState: .approved)
