@@ -10,7 +10,7 @@ import SwiftUI
   private let store: QueueStore
   private let updateChecker: UpdateChecker
   private let refresh: () -> Void
-  private let openSettings: () -> Void
+  private let openSettings: (SettingsTab?) -> Void
   private let quit: () -> Void
   let panel = PanelWindow()
   private var outsideClickMonitor: Any?
@@ -20,7 +20,7 @@ import SwiftUI
 
   init(
     store: QueueStore, updateChecker: UpdateChecker, refresh: @escaping () -> Void,
-    openSettings: @escaping () -> Void, quit: @escaping () -> Void
+    openSettings: @escaping (SettingsTab?) -> Void, quit: @escaping () -> Void
   ) {
     self.store = store
     self.updateChecker = updateChecker
@@ -61,7 +61,7 @@ import SwiftUI
 
   @objc func chooseSettings() {
     closePanel()
-    openSettings()
+    openSettings(nil)
   }
 
   // A newer version opens the panel, where the notice and Update button sit.

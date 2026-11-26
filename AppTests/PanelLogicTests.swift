@@ -796,6 +796,26 @@ struct PanelKeyInputTests {
     #expect(panelInput(for: "0", modifiers: modifiers) == nil)
   }
 
+  // On a US layout ? is Shift-slash.
+  @Test(arguments: [EventModifiers(), .shift, [.shift, .capsLock]])
+  func questionMarkOpensTheShortcutSettings(modifiers: EventModifiers) {
+    #expect(panelInput(for: "?", modifiers: modifiers) == .openShortcutSettings)
+  }
+
+  @Test(arguments: [EventModifiers.command, [.command, .shift], .control, .option])
+  func questionMarkWithCommandControlOrOptionGivesNoInput(modifiers: EventModifiers) {
+    #expect(panelInput(for: "?", modifiers: modifiers) == nil)
+  }
+
+  @Test(arguments: [nil, "a"])
+  func shortcutSettingsAlwaysOpenAndClosePopover(popoverItemId: String?) {
+    #expect(
+      panelAction(for: .openShortcutSettings, selectedItemHasDetails: false, isPopoverOpen: popoverItemId != nil)
+        == .openShortcutSettings)
+    let outcome = panelKeyOutcome(for: .openShortcutSettings, selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, opensShortcutSettings: true))
+  }
+
   @Test func otherKeysGiveNoInput() {
     #expect(panelInput(for: "x", modifiers: []) == nil)
     #expect(panelInput(for: .leftArrow, modifiers: .command) == nil)

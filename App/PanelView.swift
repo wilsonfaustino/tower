@@ -6,7 +6,8 @@ struct PanelView: View {
   let store: QueueStore
   let updateChecker: UpdateChecker
   let close: () -> Void
-  let openSettings: () -> Void
+  // Nil opens Settings on the last tab shown.
+  let openSettings: (SettingsTab?) -> Void
   // The global shortcut opens the panel with the first row selected. A click opens it with no selection.
   var selectsFirstRow = false
   @State private var hasSelectedFirstRow = false
@@ -215,7 +216,7 @@ struct PanelView: View {
       .help("Refresh")
       .accessibilityLabel("Refresh")
       .accessibilityValue(store.isRefreshing ? "Refreshing…" : "")
-      Button(action: showSettings) {
+      Button { showSettings() } label: {
         Image(PanelSymbol.settings.rawValue)
       }
       .buttonStyle(.borderless)
@@ -314,14 +315,15 @@ struct PanelView: View {
       if store.jiraStatus == .failed(.authentication) {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           AuthBannerView(
-            title: "Jira sign-in expired", message: store.jiraBannerMessage(now: context.date), reconnect: showSettings)
+            title: "Jira sign-in expired", message: store.jiraBannerMessage(now: context.date),
+            reconnect: { showSettings() })
         }
       }
       if store.circleciStatus == .failed(.authentication) {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           AuthBannerView(
             title: "CircleCI token expired", message: store.circleciBannerMessage(now: context.date),
-            actionTitle: "Open Settings", reconnect: showSettings)
+            actionTitle: "Open Settings", reconnect: { showSettings() })
         }
       }
       switch panelState {
@@ -347,9 +349,9 @@ struct PanelView: View {
     }
   }
 
-  private func showSettings() {
+  private func showSettings(tab: SettingsTab? = nil) {
     close()
-    openSettings()
+    openSettings(tab)
   }
 
   private func subtitle(now: Date) -> String {
@@ -430,6 +432,7 @@ struct PanelView: View {
     if let step = outcome.statusFilterStep {
       chosenStatusFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatusList)
     }
+    if outcome.opensShortcutSettings { showSettings(tab: .shortcuts) }
     // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
     if outcome.switchesPanelView {
       chosenStatusFilter = nil

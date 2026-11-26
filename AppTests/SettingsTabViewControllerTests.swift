@@ -21,6 +21,20 @@ import Testing
     #expect(selectedTabs.last == .about)
   }
 
+  @Test func showSettingsWithATabSelectsItInTheOpenWindow() {
+    let windowController = SettingsWindowController {
+      SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), globalHotKey: GlobalHotKey(), initialTab: .general) { _ in }
+    }
+    let delegate = AppDelegate(settingsWindowController: windowController)
+    delegate.showSettings()
+    let controller = windowController.window?.contentViewController as? SettingsTabViewController
+    #expect(controller?.selectedTabViewItemIndex == SettingsTab.allCases.firstIndex(of: .general))
+    delegate.showSettings(tab: .shortcuts)
+    #expect(windowController.window?.contentViewController === controller)
+    #expect(controller?.selectedTabViewItemIndex == SettingsTab.allCases.firstIndex(of: .shortcuts))
+    windowController.window?.close()
+  }
+
   @Test func keepsTheWindowTitle() {
     let windowController = SettingsWindowController {
       SettingsTabViewController(store: makeSettingsStore(), updateChecker: makeOfflineUpdateChecker(), globalHotKey: GlobalHotKey(), initialTab: .circleci) { _ in }

@@ -34,6 +34,7 @@ private let panelKeyHelp: [(keys: String, text: String)] = [
   ("⌘Z", "Undo the dismissal"),
   ("⌘R", "Refresh"),
   ("⌘,", "Open Settings"),
+  ("?", "Show these keys"),
   ("Esc ⌘.", "Close the panel"),
 ]
 

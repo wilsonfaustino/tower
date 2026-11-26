@@ -235,13 +235,15 @@ func swipeOutcome(
 enum PanelInput: Equatable, Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
   case switchPanelView, commandUpArrow, commandDownArrow, refresh, stepStatusFilter(StatusFilterStep)
+  case openShortcutSettings
 }
 
 // The keys that `panelInput` reads by the character they type, as Cmd-C does, so they follow the keyboard layout.
-let panelCharacterKeys: Set<KeyEquivalent> = ["r", "]", "[", "0"]
+let panelCharacterKeys: Set<KeyEquivalent> = ["r", "]", "[", "0", "?"]
 
 // The arrows act with any modifiers. With Command they go to the first or last row.
-// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does. The legend keys need no Control, Option or Command.
+// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does. The legend keys and ? need no Control, Option or
+// Command. ? types with Shift on most layouts, so Shift is allowed.
 func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput? {
   let hasCommand = modifiers.contains(.command)
   let isPlain = modifiers.isDisjoint(with: [.control, .option, .command])
@@ -252,6 +254,7 @@ func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput
   case "]": return isPlain ? .stepStatusFilter(.next) : nil
   case "[": return isPlain ? .stepStatusFilter(.previous) : nil
   case "0": return isPlain ? .stepStatusFilter(.clear) : nil
+  case "?": return isPlain ? .openShortcutSettings : nil
   default: return nil
   }
 }
@@ -259,7 +262,7 @@ func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput
 enum PanelAction: Equatable, Sendable {
   case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(SelectionMove)
   case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView, refresh
-  case stepStatusFilter(StatusFilterStep)
+  case stepStatusFilter(StatusFilterStep), openShortcutSettings
 }
 
 // Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
@@ -289,6 +292,7 @@ func panelAction(
   case .stepStatusFilter(let step):
     let changesFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatuses) != statusFilter
     return changesFilter ? .stepStatusFilter(step) : .ignore
+  case .openShortcutSettings: return .openShortcutSettings
   }
 }
 
@@ -301,6 +305,7 @@ struct PanelKeyOutcome: Equatable {
   var switchesPanelView = false
   var refreshes = false
   var statusFilterStep: StatusFilterStep?
+  var opensShortcutSettings = false
   var isHandled = true
 }
 
@@ -329,6 +334,9 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
   // As with a legend click, the popover closes only when the filter hides its row.
   case .stepStatusFilter(let step):
     return PanelKeyOutcome(popoverItemId: popoverItemId, statusFilterStep: step)
+  // The panel closes before Settings opens, so the popover closes with it.
+  case .openShortcutSettings:
+    return PanelKeyOutcome(popoverItemId: nil, opensShortcutSettings: true)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }
