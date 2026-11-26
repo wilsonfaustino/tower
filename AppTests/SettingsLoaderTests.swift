@@ -88,4 +88,21 @@ struct GitHubSettingsLoaderTests {
       #expect(GitHubSettingsKeys.loadOrganizations(defaults: defaults).isEmpty)
     }
   }
+
+  @Test func addingLoginTrimsLowercasesAndSorts() {
+    #expect(GitHubSettingsKeys.logins(["rui"], adding: "  Ana-2 \n") == ["ana-2", "rui"])
+  }
+
+  @Test(arguments: ["", "   ", "bad login", "evil:qualifier"])
+  func addingInvalidLoginReturnsNil(typedLogin: String) {
+    #expect(GitHubSettingsKeys.logins(["rui"], adding: typedLogin) == nil)
+  }
+
+  @Test func addingManagedUserLoginKeepsTheUnderscore() {
+    #expect(GitHubSettingsKeys.logins([], adding: "ana_acme") == ["ana_acme"])
+  }
+
+  @Test func addingKnownLoginKeepsOneCopy() {
+    #expect(GitHubSettingsKeys.logins(["ana", "rui"], adding: "ANA") == ["ana", "rui"])
+  }
 }

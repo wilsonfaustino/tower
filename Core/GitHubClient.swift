@@ -59,6 +59,16 @@ public struct GitHubSnapshot: Codable, Sendable, Equatable {
   }
 }
 
+// An organization login. It also keeps search qualifiers out of a query built from it.
+public func isValidGitHubLogin(_ text: String) -> Bool {
+  !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+}
+
+// A user login. Enterprise Managed User logins add "_" and a short code, for example "ana_acme".
+public func isValidGitHubUserLogin(_ text: String) -> Bool {
+  !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+}
+
 public struct GitHubClient: Sendable {
   private static let endpoint = URL(string: "https://api.github.com/graphql")!
   private static let failedCheckRunStates: Set<String> = ["FAILURE", "TIMED_OUT", "STARTUP_FAILURE"]
@@ -71,13 +81,18 @@ public struct GitHubClient: Sendable {
   private let tokenProvider: GitHubTokenProvider
   private let transport: HTTPTransport
   private let ownerQualifiers: String
+  private let reviewRequestScope: ReviewRequestScope
 
-  public init(tokenProvider: GitHubTokenProvider, transport: HTTPTransport, owners: [String] = []) {
+  public init(
+    tokenProvider: GitHubTokenProvider, transport: HTTPTransport, owners: [String] = [],
+    reviewRequestScope: ReviewRequestScope = .directAndTeam
+  ) {
     self.tokenProvider = tokenProvider
     self.transport = transport
+    self.reviewRequestScope = reviewRequestScope
     ownerQualifiers = owners
       .map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") } }
+      .filter(isValidGitHubLogin)
       .map { " org:\($0)" }
       .joined()
   }
@@ -89,7 +104,7 @@ public struct GitHubClient: Sendable {
     let recentlyMergedStart = Calendar.current.date(byAdding: .day, value: -recentlyMergedDays, to: now) ?? now
     let recentlyMergedSince = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: recentlyMergedStart))
     let summaryVariables = [
-      "requestedQuery": "is:pr is:open review-requested:@me archived:false\(ownerQualifiers)",
+      "requestedQuery": "is:pr is:open \(reviewRequestScope.searchQualifier) archived:false\(ownerQualifiers)",
       "reviewedQuery": "is:pr reviewed-by:@me -author:@me updated:>=\(today)\(ownerQualifiers)",
       "mergedQuery": "is:pr author:@me merged:>=\(today)\(ownerQualifiers)",
       "recentlyMergedQuery": "is:pr author:@me is:merged merged:>=\(recentlyMergedSince) sort:updated-desc\(ownerQualifiers)",
@@ -242,11 +257,11 @@ private let pullRequestFieldsFragment = """
     author { __typename login }
     commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 1) {
       checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
-    reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
+    reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { combinedSlug } } } }
     reviews(first: 1) { totalCount }
     viewerLatestReview { state }
     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 25) { nodes { ... on ReviewRequestedEvent {
-      createdAt requestedReviewer { ... on User { login } ... on Team { slug } } } } }
+      createdAt requestedReviewer { ... on User { login } ... on Team { combinedSlug } } } } }
   }
   """
 
@@ -338,7 +353,7 @@ private struct PullRequestNode: Decodable {
   struct ReviewRequest: Decodable { var requestedReviewer: Reviewer? }
   struct Reviewer: Decodable {
     var login: String?
-    var slug: String?
+    var combinedSlug: String?
   }
   struct TotalCount: Decodable { var totalCount: Int }
   // GitHub can return a null event, for example one the token cannot read.
@@ -398,7 +413,7 @@ private struct PullRequestNode: Decodable {
     let viewerRequestEvent = requestEvents.last { event in
       isDirectRequest
         ? event.requestedReviewer?.login == viewerLogin
-        : event.requestedReviewer?.slug.map { reviewers.compactMap(\.slug).contains($0) } == true
+        : event.requestedReviewer?.combinedSlug.map { reviewers.compactMap(\.combinedSlug).contains($0) } == true
     }
     let requiredApprovalCounts = baseRef?.rules?.nodes.compactMap { $0.parameters?.requiredApprovingReviewCount } ?? []
     return PullRequest(
@@ -408,7 +423,7 @@ private struct PullRequestNode: Decodable {
       checkState: rollup.flatMap { CheckState(rawValue: $0.state) },
       failedCheckCount: failedCheckRuns + failedStatusContexts,
       additions: additions ?? 0, deletions: deletions ?? 0,
-      requestedReviewerLogins: reviewers.compactMap(\.login), requestedTeamSlugs: reviewers.compactMap(\.slug),
+      requestedReviewerLogins: reviewers.compactMap(\.login), requestedTeamSlugs: reviewers.compactMap(\.combinedSlug),
       reviewCount: reviews?.totalCount ?? 0, reviewRequestedAt: requestEvents.last?.createdAt,
       unresolvedThreadCount: reviewThreads?.nodes.filter { !$0.isResolved }.count ?? 0,
       hasMoreThreadsThanFetched: (reviewThreads?.totalCount ?? 0) > reviewThreadPageSize,

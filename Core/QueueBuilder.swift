@@ -9,11 +9,14 @@ public struct QueueInput: Sendable {
   public var dismissedPipelines: Set<PipelineDismissal>
   public var dismissedPullRequests: Set<PullRequestDismissal>
   public var mergedPullRequests: [MergedPullRequest]
+  public var teamAuthorFilters: TeamAuthorFilters
+  public var reviewRequestScope: ReviewRequestScope
 
   public init(
     viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
     pipelines: [Pipeline], dismissedPipelines: Set<PipelineDismissal> = [],
-    dismissedPullRequests: Set<PullRequestDismissal> = [], mergedPullRequests: [MergedPullRequest] = []
+    dismissedPullRequests: Set<PullRequestDismissal> = [], mergedPullRequests: [MergedPullRequest] = [],
+    teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(), reviewRequestScope: ReviewRequestScope = .directAndTeam
   ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
@@ -23,6 +26,8 @@ public struct QueueInput: Sendable {
     self.dismissedPipelines = dismissedPipelines
     self.dismissedPullRequests = dismissedPullRequests
     self.mergedPullRequests = mergedPullRequests
+    self.teamAuthorFilters = teamAuthorFilters
+    self.reviewRequestScope = reviewRequestScope
   }
 }
 
@@ -54,7 +59,10 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   }
 
   let openReviewRequests = input.reviewRequests.filter {
-    isOpenReviewRequest($0, viewerLogin: input.viewerLogin) && !input.dismissedPullRequests.contains($0.dismissal)
+    isOpenReviewRequest(
+      $0, viewerLogin: input.viewerLogin, teamAuthorFilters: input.teamAuthorFilters,
+      reviewRequestScope: input.reviewRequestScope)
+      && !input.dismissedPullRequests.contains($0.dismissal)
   }
   for pullRequest in openReviewRequests where !pullRequest.authorIsBot {
     itemsByKind[.review, default: []].append(reviewItem(pullRequest, viewerLogin: input.viewerLogin, now: now))
@@ -62,7 +70,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   let botPullRequestsByAuthor = Dictionary(grouping: openReviewRequests.filter(\.authorIsBot), by: \.author)
   for (botLogin, pullRequests) in botPullRequestsByAuthor {
     itemsByKind[.review, default: []].append(
-      botReviewItem(botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin, now: now))
+      botReviewItem(
+        botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin,
+        reviewRequestScope: input.reviewRequestScope, now: now))
   }
   if !waitingRows.isEmpty {
     itemsByKind[.waiting] = groupedByRepository(waitingRows, authoredPullRequests: input.authoredPullRequests, now: now)
@@ -109,8 +119,13 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
 }
 
 // The search also matches team requests, which stay after the viewer approves. A direct request always shows.
-func isOpenReviewRequest(_ pullRequest: PullRequest, viewerLogin: String) -> Bool {
-  pullRequest.requestedReviewerLogins.contains(viewerLogin) || pullRequest.viewerLatestReviewState != .approved
+func isOpenReviewRequest(
+  _ pullRequest: PullRequest, viewerLogin: String, teamAuthorFilters: TeamAuthorFilters,
+  reviewRequestScope: ReviewRequestScope
+) -> Bool {
+  pullRequest.requestedReviewerLogins.contains(viewerLogin)
+    || (reviewRequestScope == .directAndTeam && pullRequest.viewerLatestReviewState != .approved
+      && teamAuthorFilters.allows(pullRequest))
 }
 
 extension PullRequest {
@@ -166,10 +181,11 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : nil
-  let teamSlug = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first
+  // The row is short, so it drops the "org/" part of the team key.
+  let teamName = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first?.split(separator: "/").last
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, tag: pullRequest.repository,
-    meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamSlug.map { "team \($0)" },
+    meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamName.map { "team \($0)" },
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
     details: pullRequest.details, dismissal: .pullRequest(pullRequest.dismissal))
 }
@@ -181,7 +197,9 @@ private func gitHubPullsSearchURL(_ searchQuery: String) -> URL {
 }
 
 // Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.
-private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewerLogin: String, now: Date) -> QueueItem {
+private func botReviewItem(
+  botLogin: String, pullRequests: [PullRequest], viewerLogin: String, reviewRequestScope: ReviewRequestScope, now: Date
+) -> QueueItem {
   let oldestRequest = pullRequests.map { $0.reviewRequestedAt ?? $0.updatedAt }.min() ?? now
   let repositoryCount = Set(pullRequests.map(\.repository)).count
   let displayName = botLogin.replacingOccurrences(of: "[bot]", with: "").capitalized
@@ -190,7 +208,7 @@ private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewer
     id: "bots:\(botLogin)",
     title: "\(pullRequests.count) \(displayName) \(pullRequests.count == 1 ? "PR" : "PRs")", tag: "bot",
     meta: "\(repositoryCount) \(repositoryCount == 1 ? "repo" : "repos") · \(shortAge(from: oldestRequest, now: now))",
-    url: gitHubPullsSearchURL("is:pr is:open review-requested:@me author:app/\(botLogin)"),
+    url: gitHubPullsSearchURL("is:pr is:open \(reviewRequestScope.searchQualifier) author:app/\(botLogin)"),
     symbol: .review, badge: nil, sortDate: oldestRequest, children: children)
 }
 

@@ -77,13 +77,14 @@ private func pipeline(
 private func queue(
   authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = [],
   dismissedPipelines: Set<PipelineDismissal> = [], dismissedPullRequests: Set<PullRequestDismissal> = [],
-  merged: [MergedPullRequest] = []
+  merged: [MergedPullRequest] = [], teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(),
+  reviewRequestScope: ReviewRequestScope = .directAndTeam
 ) -> [QueueSection] {
   buildQueue(
     QueueInput(
       viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
       pipelines: pipelines, dismissedPipelines: dismissedPipelines, dismissedPullRequests: dismissedPullRequests,
-      mergedPullRequests: merged),
+      mergedPullRequests: merged, teamAuthorFilters: teamAuthorFilters, reviewRequestScope: reviewRequestScope),
     now: now)
 }
 
@@ -224,6 +225,17 @@ struct QueueBuilderTests {
     #expect(allItems.allSatisfy { $0.details == nil })
   }
 
+  @Test func botRowUnderDirectOnlyOpensADirectOnlySearch() throws {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(repository: "api-config", number: 9, author: "dependabot", authorIsBot: true,
+                    requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)
+      ],
+      reviewRequestScope: .directOnly)
+    let botItem = try #require(items(sections, .review).first { $0.id == "bots:dependabot" })
+    #expect(botItem.url == URL(string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20user-review-requested%3A%40me%20author%3Aapp%2Fdependabot"))
+  }
+
   @Test func botReviewRequestsCollapseIntoOneRow() throws {
     let sections = queue(reviewRequests: [
       pullRequest(repository: "api-notifier", number: 7, author: "dependabot", authorIsBot: true,
@@ -260,7 +272,7 @@ struct QueueBuilderTests {
 
   @Test func teamReviewRequestShowsTeamInMeta() {
     let sections = queue(reviewRequests: [
-      pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
+      pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["acme/web-core"], reviewRequestedHoursAgo: 30)
     ])
     #expect(items(sections, .review).first?.meta == "app-web · Ana · 1d · team web-core")
   }
@@ -269,7 +281,7 @@ struct QueueBuilderTests {
   @Test func pullRequestRowsSplitRepoAndTeamFromRestOfMeta() {
     let sections = queue(
       authored: [pullRequest(repository: "app-api", number: 45, updatedHoursAgo: 3, reviewDecision: .reviewRequired, checkState: nil)],
-      reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
+      reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["acme/web-core"], reviewRequestedHoursAgo: 30)])
     let authoredItem = items(sections, .waiting).first
     let reviewItem = items(sections, .review).first
     #expect(authoredItem?.tag == "app-api")
@@ -1192,5 +1204,89 @@ struct PrunedPullRequestDismissalsTests {
   @Test func matchesOnRepositoryAndNumber() {
     let otherRepository = pullRequest(repository: "api-config", number: 11)
     #expect(prunedDismissals([requested.dismissal], reviewRequests: [otherRepository]).isEmpty)
+  }
+}
+
+struct TeamAuthorFilterTests {
+  private let webOnlyAna = TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]])
+
+  @Test func teamRequestFromAnAuthorNotAllowedHasNoReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "rui", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func teamRequestFromAnAllowedAuthorHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func directRequestFromAnAuthorNotAllowedHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(author: "rui", requestedReviewerLogins: ["me"], requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)
+      ],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func requestToAnUnfilteredTeamHasReviewRow() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "rui", requestedTeamSlugs: ["platform"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: webOnlyAna)
+    #expect(items(sections, .review).count == 1)
+  }
+
+  @Test func requestToTwoFilteredTeamsShowsWhenEitherAllowsTheAuthor() {
+    let filters = TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"], "platform": ["rui"]])
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, author: "rui", requestedTeamSlugs: ["web", "platform"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, author: "bea", requestedTeamSlugs: ["web", "platform"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: filters)
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#1"])
+  }
+
+  @Test func emptyAllowListHidesEveryRequestToThatTeam() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, author: "ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, author: "renovate", authorIsBot: true, requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": []]))
+    #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func filterOnATeamHidesOnlyThatOrganizationsTeamOfTheSameName() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(owner: "acme", number: 1, author: "rui", requestedTeamSlugs: ["acme/frontend"], reviewRequestedHoursAgo: 2),
+        pullRequest(owner: "globex", number: 2, author: "rui", requestedTeamSlugs: ["globex/frontend"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["acme/frontend": ["ana"]]))
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#2"])
+  }
+
+  @Test func loginMatchIgnoresCase() {
+    let sections = queue(
+      reviewRequests: [pullRequest(author: "Ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
+    #expect(items(sections, .review).count == 1)
+  }
+}
+
+struct ReviewRequestScopeTests {
+  @Test func directOnlyHidesTeamRequestsAndKeepsDirectOnes() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+      ],
+      reviewRequestScope: .directOnly)
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#1"])
   }
 }

@@ -235,7 +235,7 @@
             "nodes": [
               {
                 "requestedReviewer": {
-                  "slug": "web-core"
+                  "combinedSlug": "acme/web-core"
                 }
               }
             ]
@@ -373,7 +373,7 @@
             "nodes": [
               {
                 "requestedReviewer": {
-                  "slug": "web-core"
+                  "combinedSlug": "acme/web-core"
                 }
               }
             ]

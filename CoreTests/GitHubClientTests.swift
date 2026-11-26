@@ -119,7 +119,7 @@ struct GitHubClientTests {
     #expect(failing.requestedTeamSlugs == [])
     #expect(failing.reviewCount == 0)
     #expect(failing.reviewRequestedAt == isoDate("2027-01-14T10:00:00Z"))
-    #expect(snapshot.reviewRequests[0].requestedTeamSlugs == ["web-core"])
+    #expect(snapshot.reviewRequests[0].requestedTeamSlugs == ["acme/web-core"])
     #expect(snapshot.reviewRequests[0].viewerLatestReviewState == .approved)
     #expect(snapshot.reviewRequests[0].reviewCount == 0)
     #expect(snapshot.reviewRequests[1].viewerLatestReviewState == .commented)
@@ -157,6 +157,17 @@ struct GitHubClientTests {
     #expect(summary["recentlyMergedQuery"] as? String == "is:pr author:@me is:merged merged:>=\(monthAgo) sort:updated-desc")
     let authored = try variables(containing: "authoredQuery", in: transport)
     #expect(authored["authoredQuery"] as? String == "is:pr is:open author:@me archived:false")
+  }
+
+  @Test func directOnlyAsksForRequestsThatNameTheViewer() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let transport = StubTransport { _ in (fixtureData, 200) }
+    let directOnlyClient = GitHubClient(
+      tokenProvider: StubTokenProvider(result: .success("secret-token")), transport: transport, owners: ["acme"],
+      reviewRequestScope: .directOnly)
+    _ = try await directOnlyClient.fetch(now: now)
+    let summary = try variables(containing: "requestedQuery", in: transport)
+    #expect(summary["requestedQuery"] as? String == "is:pr is:open user-review-requested:@me archived:false org:acme")
   }
 
   @Test func authoredSearchAsksForASmallPage() async throws {
@@ -479,15 +490,15 @@ struct GitHubClientTests {
 
   @Test func directRequestIgnoresALaterRequestToATeam() async throws {
     let pullRequest = try await firstReviewRequest(
-      reviewers: [["login": "octo-me"], ["slug": "design"]],
-      requestEvents: [("2027-01-14T09:00:00Z", ["login": "octo-me"]), ("2027-01-14T11:00:00Z", ["slug": "design"])])
+      reviewers: [["login": "octo-me"], ["combinedSlug": "acme/design"]],
+      requestEvents: [("2027-01-14T09:00:00Z", ["login": "octo-me"]), ("2027-01-14T11:00:00Z", ["combinedSlug": "acme/design"])])
     #expect(pullRequest?.viewerReviewRequestedAt == isoDate("2027-01-14T09:00:00Z"))
   }
 
   @Test func teamOnlyRequestUsesTheNewestRequestedTeam() async throws {
     let pullRequest = try await firstReviewRequest(
-      reviewers: [["slug": "web"]],
-      requestEvents: [("2027-01-14T09:00:00Z", ["slug": "web"]), ("2027-01-14T11:00:00Z", ["login": "someone-else"])])
+      reviewers: [["combinedSlug": "acme/web"]],
+      requestEvents: [("2027-01-14T09:00:00Z", ["combinedSlug": "acme/web"]), ("2027-01-14T11:00:00Z", ["login": "someone-else"])])
     #expect(pullRequest?.viewerReviewRequestedAt == isoDate("2027-01-14T09:00:00Z"))
   }
 

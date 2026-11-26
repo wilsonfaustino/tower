@@ -34,9 +34,12 @@ private func snapshot(authored: [PullRequest] = [], reviewRequests: [PullRequest
 }
 
 private func githubEvents(
-  previous: GitHubSnapshot, current: GitHubSnapshot, dismissed: Set<PullRequestDismissal> = []
+  previous: GitHubSnapshot, current: GitHubSnapshot, dismissed: Set<PullRequestDismissal> = [],
+  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(), reviewRequestScope: ReviewRequestScope = .directAndTeam
 ) -> [NotificationEvent] {
-  notificationEvents(previous: previous, current: current, dismissedPullRequests: dismissed)
+  notificationEvents(
+    previous: previous, current: current, dismissedPullRequests: dismissed, teamAuthorFilters: teamAuthorFilters,
+    reviewRequestScope: reviewRequestScope)
 }
 
 private func pipeline(
@@ -169,6 +172,27 @@ struct ReviewRequestEventTests {
   @Test func teamRequestCounts() {
     let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
     let events = githubEvents(previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]))
+    #expect(events.map(\.kind) == [.reviewRequested])
+  }
+
+  @Test func teamRequestFromAnAuthorTheTeamFilterHidesGivesNoEvent() {
+    let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]),
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
+    #expect(events.isEmpty)
+  }
+
+  @Test func teamRequestUnderDirectOnlyGivesNoEvent() {
+    let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]), reviewRequestScope: .directOnly)
+    #expect(events.isEmpty)
+  }
+
+  @Test func directRequestUnderDirectOnlyCounts() {
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [pullRequest()]), reviewRequestScope: .directOnly)
     #expect(events.map(\.kind) == [.reviewRequested])
   }
 

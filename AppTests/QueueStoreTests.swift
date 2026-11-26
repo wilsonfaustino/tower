@@ -30,11 +30,10 @@ private func temporaryDefaults(suiteName: String = "tower-store-\(UUID().uuidStr
 
 // Answers each source by host, so one stub serves the whole refresh.
 private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int = 200) throws -> StubTransport {
-  let githubData = try fixture("github-search.json")
   let jiraData = try fixture("jira-search.json")
   return StubTransport { request in
     switch request.url?.host() {
-    case "api.github.com": (githubData, github)
+    case "api.github.com": (try githubFixture(answering: request), github)
     case "acme.atlassian.net": (jiraData, jira)
     default: (Data(#"{"items":[]}"#.utf8), circleci)
     }
@@ -573,5 +572,101 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     let unfilteredVariables = try await searchVariables(organizations: [])
     let variables = try await searchVariables(organizations: ["", "  ", "not valid", "a/b"])
     #expect(variables == unfilteredVariables)
+  }
+}
+
+@MainActor struct QueueStoreTeamAuthorFilterTests {
+  // In the fixture, the only open web-core request is on a Dependabot PR. rui's PR #412 asks the viewer directly.
+  @Test func teamFilterChangesTheReviewRowsAtOnceAndKeepsThemForTheNextLaunch() async throws {
+    let cacheDirectory = temporaryDirectory()
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    await store.refresh()
+    #expect(reviewItems(store).contains { !$0.children.isEmpty })
+
+    store.teamAuthorLogins = ["acme/web-core": ["ana"]]
+    #expect(reviewItems(store).map(\.id) == ["pr:ui-kit#412"])
+
+    let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    relaunchedStore.loadCache()
+    #expect(relaunchedStore.teamAuthorLogins == ["acme/web-core": ["ana"]])
+    #expect(reviewItems(relaunchedStore).map(\.id) == ["pr:ui-kit#412"])
+  }
+
+  @Test func filteredTeamStaysListedWithNoOpenRequest() async throws {
+    let store = makeStore(transport: try routingTransport())
+    await store.refresh()
+    #expect(store.filterableTeamSlugs == ["acme/web-core"])
+    store.teamAuthorLogins = ["acme/platform": []]
+    #expect(store.filterableTeamSlugs == ["acme/platform", "acme/web-core"])
+  }
+
+  @Test func teamFromACacheWithoutOrganizationsIsNotListed() async throws {
+    let cacheDirectory = temporaryDirectory()
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    await store.refresh()
+    let cacheFile = cacheDirectory.appendingPathComponent("github.json")
+    let cachedText = try String(contentsOf: cacheFile, encoding: .utf8)
+    // JSONEncoder writes "/" as "\/".
+    try cachedText.replacingOccurrences(of: #"acme\/web-core"#, with: "web-core")
+      .write(to: cacheFile, atomically: true, encoding: .utf8)
+
+    let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    relaunchedStore.loadCache()
+    #expect(relaunchedStore.githubSnapshot?.reviewRequests.contains { $0.requestedTeamSlugs == ["web-core"] } == true)
+    #expect(relaunchedStore.filterableTeamSlugs.isEmpty)
+  }
+}
+
+@MainActor struct QueueStoreReviewRequestScopeTests {
+  @Test func directOnlyHidesTeamRequestsAtOnceAndKeepsTheChoiceForTheNextLaunch() async throws {
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: try routingTransport(), defaults: defaults)
+    await store.refresh()
+    #expect(reviewItems(store).contains { !$0.children.isEmpty })
+
+    store.reviewRequestScope = .directOnly
+    #expect(reviewItems(store).map(\.id) == ["pr:ui-kit#412"])
+    let relaunchedStore = makeStore(transport: try routingTransport(), defaults: defaults)
+    #expect(relaunchedStore.reviewRequestScope == .directOnly)
+  }
+
+  @Test func demoModeDoesNotSaveTheScope() {
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: StubTransport { _ in (Data(), 200) }, defaults: defaults)
+    store.demoScenario = DemoScenario(name: .typical, now: .now)
+    store.reviewRequestScope = .directOnly
+    #expect(defaults.string(forKey: GitHubSettingsKeys.reviewRequestScope) == nil)
+  }
+
+  @Test func directOnlyRefreshAsksForRequestsThatNameTheViewer() async throws {
+    let transport = try routingTransport()
+    let store = makeStore(transport: transport)
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    let githubBodies = transport.requests.filter { $0.url?.host() == "api.github.com" }
+      .map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+    #expect(githubBodies.contains { $0.contains("is:pr is:open user-review-requested:@me archived:false") })
+  }
+
+  @Test func directOnlyRefreshKeepsTheDismissalOfATeamRequest() async throws {
+    let store = makeStore(transport: try routingTransport())
+    await store.refresh()
+    let botGroup = try #require(reviewItems(store).first { !$0.children.isEmpty })
+    store.dismiss(try #require(botGroup.children.first))
+    let dismissedPullRequests = store.dismissedPullRequests
+
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    #expect(store.dismissedPullRequests == dismissedPullRequests)
+    store.reviewRequestScope = .directAndTeam
+    await store.refresh()
+    #expect(!reviewItems(store).contains { $0.id == botGroup.id })
   }
 }
