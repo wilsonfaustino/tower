@@ -330,6 +330,10 @@ struct PanelInputTests {
     (.downArrow, false, false, .closePopoverAndMoveSelection(.offset(1))),
     (.downArrow, true, true, .closePopoverAndMoveSelection(.offset(1))),
     (.downArrow, false, true, .closePopoverAndMoveSelection(.offset(1))),
+    (.commandUpArrow, true, false, .closePopoverAndMoveSelection(.first)),
+    (.commandUpArrow, false, true, .closePopoverAndMoveSelection(.first)),
+    (.commandDownArrow, true, false, .closePopoverAndMoveSelection(.last)),
+    (.commandDownArrow, false, true, .closePopoverAndMoveSelection(.last)),
     (.copy, true, false, .copyLink),
     (.copy, false, false, .ignore),
     (.copy, true, true, .copyLink),
@@ -385,10 +389,10 @@ struct PanelInputTests {
 }
 
 struct PanelKeyOutcomeTests {
-  @Test func moveClosesThePopoverAndMovesTheSelection() {
-    let outcome = panelKeyOutcome(
-      for: .closePopoverAndMoveSelection(.offset(-1)), selectedItemId: "a", popoverItemId: "a")
-    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionMove: .offset(-1)))
+  @Test(arguments: [SelectionMove.offset(-1), .first, .last])
+  func moveClosesThePopoverAndMovesTheSelection(move: SelectionMove) {
+    let outcome = panelKeyOutcome(for: .closePopoverAndMoveSelection(move), selectedItemId: "a", popoverItemId: "a")
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionMove: move))
   }
 
   @Test func showPopoverOpensItOnTheSelectedRow() {
@@ -683,5 +687,25 @@ struct StatusFilterTests {
   @Test func switchPanelViewClosesThePopoverAndKeepsTheSelection() {
     let outcome = panelKeyOutcome(for: .switchPanelView, selectedItemId: "a", popoverItemId: "a")
     #expect(outcome == PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true))
+  }
+}
+
+struct PanelKeyInputTests {
+  @Test(arguments: [EventModifiers(), .shift, .option, [.numericPad, .function]])
+  func arrowsMoveOneRowWithoutCommand(modifiers: EventModifiers) {
+    #expect(panelInput(for: .upArrow, modifiers: modifiers) == .upArrow)
+    #expect(panelInput(for: .downArrow, modifiers: modifiers) == .downArrow)
+  }
+
+  // Arrow key events also carry the numeric pad and function flags.
+  @Test(arguments: [EventModifiers.command, [.command, .numericPad, .function], [.command, .shift]])
+  func commandArrowsGoToTheEnds(modifiers: EventModifiers) {
+    #expect(panelInput(for: .upArrow, modifiers: modifiers) == .commandUpArrow)
+    #expect(panelInput(for: .downArrow, modifiers: modifiers) == .commandDownArrow)
+  }
+
+  @Test func otherKeysGiveNoInput() {
+    #expect(panelInput(for: "x", modifiers: []) == nil)
+    #expect(panelInput(for: .leftArrow, modifiers: .command) == nil)
   }
 }

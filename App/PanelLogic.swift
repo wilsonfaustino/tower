@@ -216,9 +216,19 @@ func swipeOutcome(
     isSlid: isSlid)
 }
 
-enum PanelInput: Sendable {
+enum PanelInput: Equatable, Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
-  case switchPanelView
+  case switchPanelView, commandUpArrow, commandDownArrow
+}
+
+// The arrows act with any modifiers. With Command they go to the first or last row.
+func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput? {
+  let hasCommand = modifiers.contains(.command)
+  switch key {
+  case .upArrow: return hasCommand ? .commandUpArrow : .upArrow
+  case .downArrow: return hasCommand ? .commandDownArrow : .downArrow
+  default: return nil
+  }
 }
 
 enum PanelAction: Equatable, Sendable {
@@ -241,6 +251,8 @@ func panelAction(
   case .escape: return isPopoverOpen ? .closePopover : .closePanel
   case .upArrow: return .closePopoverAndMoveSelection(.offset(-1))
   case .downArrow: return .closePopoverAndMoveSelection(.offset(1))
+  case .commandUpArrow: return .closePopoverAndMoveSelection(.first)
+  case .commandDownArrow: return .closePopoverAndMoveSelection(.last)
   case .copy: return selectedItemHasDetails ? .copyLink : .ignore
   case .rightClick: return selectedItemHasDetails || selectedItemIsDismissible ? .showContextMenu : .ignore
   case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore

@@ -21,6 +21,7 @@ func shortcutRecordOutcome(
 // The fixed panel keys, for reference. They cannot be changed.
 private let panelKeyHelp: [(keys: String, text: String)] = [
   ("↑ ↓", "Move the selection"),
+  ("⌘↑ ⌘↓", "Select the first or last row"),
   ("↩", "Open the row, or open and close a group"),
   ("⌘↩", "Open the row and keep the panel open"),
   ("← →", "Show Dismiss, or open and close a group"),

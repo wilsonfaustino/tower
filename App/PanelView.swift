@@ -133,8 +133,8 @@ struct PanelView: View {
       if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
       scrollMonitor = nil
     }
-    .onKeyPress(.downArrow) { handleSlide(.downArrow) ?? handle(.downArrow) }
-    .onKeyPress(.upArrow) { handleSlide(.upArrow) ?? handle(.upArrow) }
+    .onKeyPress(keys: [.downArrow]) { press in handleSlide(.downArrow) ?? handleKey(press) }
+    .onKeyPress(keys: [.upArrow]) { press in handleSlide(.upArrow) ?? handleKey(press) }
     .onKeyPress(.return) {
       if let result = handleSlide(.returnKey) { return result }
       guard let item = selectableItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
@@ -431,6 +431,11 @@ struct PanelView: View {
     }
     if let move = outcome.selectionMove { return moveSelection(move) }
     return outcome.isHandled ? .handled : .ignored
+  }
+
+  private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+    guard let input = panelInput(for: press.key, modifiers: press.modifiers) else { return .ignored }
+    return handle(input)
   }
 
   // Nil lets the key do what it does today.
