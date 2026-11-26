@@ -19,7 +19,8 @@ public struct TeamAuthorFilters: Hashable, Sendable {
     }
   }
 
-  // Tower does not know which teams the viewer is on, so a team with no entry allows every author.
+  // Tower does not know which teams the viewer is on, so a team with no entry has no say. A PR with no filtered
+  // team shows.
   // A PR that asks several filtered teams shows if any of them allows its author.
   func allows(_ pullRequest: PullRequest) -> Bool {
     let filters = pullRequest.requestedTeamSlugs.compactMap { allowedAuthorsByTeam[$0] }
