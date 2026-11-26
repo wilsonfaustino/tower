@@ -704,6 +704,24 @@ struct PanelKeyInputTests {
     #expect(panelInput(for: .downArrow, modifiers: modifiers) == .commandDownArrow)
   }
 
+  @Test(arguments: [EventModifiers.command, [.command, .capsLock]])
+  func commandRAloneRefreshes(modifiers: EventModifiers) {
+    #expect(panelInput(for: "r", modifiers: modifiers) == .refresh)
+  }
+
+  @Test(arguments: [EventModifiers(), .shift, [.command, .shift], [.command, .option], [.command, .control]])
+  func otherRCombosDoNotRefresh(modifiers: EventModifiers) {
+    #expect(panelInput(for: "r", modifiers: modifiers) == nil)
+  }
+
+  @Test(arguments: [false, true])
+  func refreshAlwaysActsAndKeepsThePopover(isPopoverOpen: Bool) {
+    #expect(panelAction(for: .refresh, selectedItemHasDetails: true, isPopoverOpen: isPopoverOpen) == .refresh)
+    let popoverItemId = isPopoverOpen ? "a" : nil
+    let outcome = panelKeyOutcome(for: .refresh, selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true))
+  }
+
   @Test func otherKeysGiveNoInput() {
     #expect(panelInput(for: "x", modifiers: []) == nil)
     #expect(panelInput(for: .leftArrow, modifiers: .command) == nil)

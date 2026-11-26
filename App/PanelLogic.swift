@@ -218,22 +218,27 @@ func swipeOutcome(
 
 enum PanelInput: Equatable, Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
-  case switchPanelView, commandUpArrow, commandDownArrow
+  case switchPanelView, commandUpArrow, commandDownArrow, refresh
 }
 
+// The keys that `panelInput` reads by the character they type, as Cmd-C does, so they follow the keyboard layout.
+let panelCharacterKeys: Set<KeyEquivalent> = ["r"]
+
 // The arrows act with any modifiers. With Command they go to the first or last row.
+// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does.
 func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput? {
   let hasCommand = modifiers.contains(.command)
   switch key {
   case .upArrow: return hasCommand ? .commandUpArrow : .upArrow
   case .downArrow: return hasCommand ? .commandDownArrow : .downArrow
+  case "r": return modifiers.subtracting(.capsLock) == .command ? .refresh : nil
   default: return nil
   }
 }
 
 enum PanelAction: Equatable, Sendable {
   case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(SelectionMove)
-  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView
+  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView, refresh
 }
 
 // Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
@@ -258,6 +263,7 @@ func panelAction(
   case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore
   case .undo: return canUndo ? .undo : .ignore
   case .switchPanelView: return .switchPanelView
+  case .refresh: return .refresh
   }
 }
 
@@ -268,6 +274,7 @@ struct PanelKeyOutcome: Equatable {
   var dismissesSelectedItem = false
   var undoesLastDismissal = false
   var switchesPanelView = false
+  var refreshes = false
   var isHandled = true
 }
 
@@ -290,6 +297,9 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
   // The list changes under the popover, so it closes. The selection stays while its row is still listed.
   case .switchPanelView:
     return PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true)
+  // The store ignores a refresh while one runs.
+  case .refresh:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }

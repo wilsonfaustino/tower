@@ -30,6 +30,7 @@ private let panelKeyHelp: [(keys: String, text: String)] = [
   ("⌘C", "Copy the link"),
   ("⌘⌫", "Dismiss the row"),
   ("⌘Z", "Undo the dismissal"),
+  ("⌘R", "Refresh"),
   ("⌘,", "Open Settings"),
   ("Esc ⌘.", "Close the panel"),
 ]

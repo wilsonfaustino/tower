@@ -163,6 +163,7 @@ struct PanelView: View {
     .onKeyPress(phases: .down) { _ in
       isSwitchPanelViewKey(NSApp.currentEvent) ? handle(.switchPanelView) : .ignored
     }
+    .onKeyPress(keys: panelCharacterKeys) { handleKey($0) }
     .onKeyPress(keys: ["z"]) { press in
       // Only Cmd (Caps Lock aside), so Shift-Cmd-Z (redo) does not undo.
       guard press.modifiers.subtracting(.capsLock) == .command else { return .ignored }
@@ -424,6 +425,7 @@ struct PanelView: View {
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
     if outcome.dismissesSelectedItem, let selectedItem { dismiss(selectedItem) }
     if outcome.undoesLastDismissal { store.undoLastDismissal() }
+    if outcome.refreshes { Task { await store.refresh() } }
     // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
     if outcome.switchesPanelView {
       chosenStatusFilter = nil

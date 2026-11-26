@@ -146,8 +146,8 @@ private let panelKeysWithAnyModifiers: Set<UInt16> = [
 // Tower matches these by the character the key types in the current layout, so the check uses the same character.
 // Whenever Command is down: Cmd-1 and Cmd-2 tabs, Cmd-C copy.
 private let charactersWithCommand: Set<String> = ["1", "2", "c"]
-// Only with Command alone: Cmd-Z undoes, Cmd-period closes the panel, Cmd-comma opens Settings.
-private let charactersWithCommandAlone: Set<String> = ["z", ".", ","]
+// Only with Command alone: Cmd-Z undoes, Cmd-R refreshes, Cmd-period closes the panel, Cmd-comma opens Settings.
+private let charactersWithCommandAlone: Set<String> = ["z", "r", ".", ","]
 
 // Nil means the combo is valid for the action.
 public func validateShortcut(

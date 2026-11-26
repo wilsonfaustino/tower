@@ -58,7 +58,7 @@ struct PullRequestPopoverView: View {
       isTitleAccessibilityFocused = true
     }
     .onKeyPress(.space) { handleInput(.space) }
-    .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+    .onKeyPress(keys: panelCharacterKeys.union([.upArrow, .downArrow])) { press in
       panelInput(for: press.key, modifiers: press.modifiers).map(handleInput) ?? .ignored
     }
     // Left (Right in right-to-left) slides the row under the popover and closes the popover.
