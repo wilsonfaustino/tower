@@ -57,29 +57,40 @@ private let items = [item("a"), item("b"), item("c")]
 
 struct SelectionMovementTests {
   @Test func noItemsSelectNothing() {
-    #expect(nextSelectedItemId(in: [], after: nil, offset: 1) == nil)
+    #expect(nextSelectedItemId(in: [], after: nil, move: .offset(1)) == nil)
   }
 
   @Test func firstDownPicksTheFirstRow() {
-    #expect(nextSelectedItemId(in: items, after: nil, offset: 1) == "a")
+    #expect(nextSelectedItemId(in: items, after: nil, move: .offset(1)) == "a")
   }
 
   @Test func firstUpPicksTheLastRow() {
-    #expect(nextSelectedItemId(in: items, after: nil, offset: -1) == "c")
+    #expect(nextSelectedItemId(in: items, after: nil, move: .offset(-1)) == "c")
   }
 
   @Test func selectionThatLeftTheListStartsOver() {
-    #expect(nextSelectedItemId(in: items, after: "gone", offset: 1) == "a")
+    #expect(nextSelectedItemId(in: items, after: "gone", move: .offset(1)) == "a")
   }
 
   @Test func downAndUpMoveOneRow() {
-    #expect(nextSelectedItemId(in: items, after: "a", offset: 1) == "b")
-    #expect(nextSelectedItemId(in: items, after: "c", offset: -1) == "b")
+    #expect(nextSelectedItemId(in: items, after: "a", move: .offset(1)) == "b")
+    #expect(nextSelectedItemId(in: items, after: "c", move: .offset(-1)) == "b")
   }
 
   @Test func selectionStaysAtTheEnds() {
-    #expect(nextSelectedItemId(in: items, after: "c", offset: 1) == "c")
-    #expect(nextSelectedItemId(in: items, after: "a", offset: -1) == "a")
+    #expect(nextSelectedItemId(in: items, after: "c", move: .offset(1)) == "c")
+    #expect(nextSelectedItemId(in: items, after: "a", move: .offset(-1)) == "a")
+  }
+
+  @Test(arguments: [nil, "a", "b", "c", "gone"])
+  func firstAndLastPickTheEndRowsFromAnySelection(selectedItemId: String?) {
+    #expect(nextSelectedItemId(in: items, after: selectedItemId, move: .first) == "a")
+    #expect(nextSelectedItemId(in: items, after: selectedItemId, move: .last) == "c")
+  }
+
+  @Test(arguments: [SelectionMove.first, .last, .offset(1), .offset(-1)])
+  func noItemsSelectNothingForAnyMove(move: SelectionMove) {
+    #expect(nextSelectedItemId(in: [], after: "a", move: move) == nil)
   }
 }
 
@@ -223,7 +234,7 @@ struct SlideOutcomeTests {
 
   @Test func upFromTheFirstChildStillReachesTheGroup() {
     let rows = selectableRows(in: tabSections, layout: .split, tab: .needsYou, expandedItemIds: ["bot"])
-    #expect(nextSelectedItemId(in: rows, after: "bot-1", offset: -1) == "bot")
+    #expect(nextSelectedItemId(in: rows, after: "bot-1", move: .offset(-1)) == "bot")
   }
 }
 
@@ -311,14 +322,14 @@ struct PanelInputTests {
     (.escape, false, false, .closePanel),
     (.escape, true, true, .closePopover),
     (.escape, false, true, .closePopover),
-    (.upArrow, true, false, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, false, false, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, true, true, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, false, true, .closePopoverAndMoveSelection(offset: -1)),
-    (.downArrow, true, false, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, false, false, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, true, true, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, false, true, .closePopoverAndMoveSelection(offset: 1)),
+    (.upArrow, true, false, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, false, false, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, true, true, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, false, true, .closePopoverAndMoveSelection(.offset(-1))),
+    (.downArrow, true, false, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, false, false, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, true, true, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, false, true, .closePopoverAndMoveSelection(.offset(1))),
     (.copy, true, false, .copyLink),
     (.copy, false, false, .ignore),
     (.copy, true, true, .copyLink),
@@ -376,8 +387,8 @@ struct PanelInputTests {
 struct PanelKeyOutcomeTests {
   @Test func moveClosesThePopoverAndMovesTheSelection() {
     let outcome = panelKeyOutcome(
-      for: .closePopoverAndMoveSelection(offset: -1), selectedItemId: "a", popoverItemId: "a")
-    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionOffset: -1))
+      for: .closePopoverAndMoveSelection(.offset(-1)), selectedItemId: "a", popoverItemId: "a")
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionMove: .offset(-1)))
   }
 
   @Test func showPopoverOpensItOnTheSelectedRow() {

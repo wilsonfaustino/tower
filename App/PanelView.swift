@@ -392,8 +392,8 @@ struct PanelView: View {
     isListFocused = true
   }
 
-  private func moveSelection(by offset: Int) -> KeyPress.Result {
-    guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, offset: offset) else {
+  private func moveSelection(_ move: SelectionMove) -> KeyPress.Result {
+    guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, move: move) else {
       return .ignored
     }
     selectedItemId = nextItemId
@@ -429,7 +429,7 @@ struct PanelView: View {
       chosenStatusFilter = nil
       layout = layout.toggled
     }
-    if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
+    if let move = outcome.selectionMove { return moveSelection(move) }
     return outcome.isHandled ? .handled : .ignored
   }
 

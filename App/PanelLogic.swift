@@ -41,16 +41,22 @@ func currentSentence(sources: [(name: String, status: SourceStatus)]) -> String 
   return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
 }
 
-// The first press picks the first row (Down) or the last row (Up). At either end the selection stays.
-func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, offset: Int) -> String? {
-  guard !items.isEmpty else { return nil }
-  let nextIndex: Int
-  if let currentIndex = items.firstIndex(where: { $0.id == selectedItemId }) {
-    nextIndex = min(max(currentIndex + offset, 0), items.count - 1)
-  } else {
-    nextIndex = offset > 0 ? 0 : items.count - 1
+enum SelectionMove: Equatable, Sendable {
+  case offset(Int), first, last
+}
+
+// The first offset press picks the first row (Down) or the last row (Up). At either end the selection stays.
+func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, move: SelectionMove) -> String? {
+  guard let firstItem = items.first, let lastItem = items.last else { return nil }
+  switch move {
+  case .first: return firstItem.id
+  case .last: return lastItem.id
+  case .offset(let offset):
+    guard let currentIndex = items.firstIndex(where: { $0.id == selectedItemId }) else {
+      return offset > 0 ? firstItem.id : lastItem.id
+    }
+    return items[min(max(currentIndex + offset, 0), items.count - 1)].id
   }
-  return items[nextIndex].id
 }
 
 // A group counts as its children, so the label matches the rows the owner can expand to.
@@ -216,7 +222,7 @@ enum PanelInput: Sendable {
 }
 
 enum PanelAction: Equatable, Sendable {
-  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
+  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(SelectionMove)
   case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView
 }
 
@@ -233,8 +239,8 @@ func panelAction(
     if isPopoverOpen { return .closePopover }
     return selectedItemHasDetails ? .showPopover : .ignore
   case .escape: return isPopoverOpen ? .closePopover : .closePanel
-  case .upArrow: return .closePopoverAndMoveSelection(offset: -1)
-  case .downArrow: return .closePopoverAndMoveSelection(offset: 1)
+  case .upArrow: return .closePopoverAndMoveSelection(.offset(-1))
+  case .downArrow: return .closePopoverAndMoveSelection(.offset(1))
   case .copy: return selectedItemHasDetails ? .copyLink : .ignore
   case .rightClick: return selectedItemHasDetails || selectedItemIsDismissible ? .showContextMenu : .ignore
   case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore
@@ -245,7 +251,7 @@ func panelAction(
 
 struct PanelKeyOutcome: Equatable {
   var popoverItemId: String?
-  var selectionOffset: Int?
+  var selectionMove: SelectionMove?
   var copiesSelectedLink = false
   var dismissesSelectedItem = false
   var undoesLastDismissal = false
@@ -256,8 +262,8 @@ struct PanelKeyOutcome: Equatable {
 // Esc with no popover is not handled, so it goes on to PanelWindow.cancelOperation, which closes the panel.
 func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverItemId: String?) -> PanelKeyOutcome {
   switch action {
-  case .closePopoverAndMoveSelection(let offset):
-    return PanelKeyOutcome(popoverItemId: nil, selectionOffset: offset)
+  case .closePopoverAndMoveSelection(let move):
+    return PanelKeyOutcome(popoverItemId: nil, selectionMove: move)
   case .showPopover:
     return PanelKeyOutcome(popoverItemId: selectedItemId)
   case .closePopover:
