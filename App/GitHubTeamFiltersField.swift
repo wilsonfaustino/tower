@@ -65,7 +65,6 @@ struct GitHubTeamFiltersField: View {
     Button {
       typedLogin = ""
       addingTeamSlug = teamSlug
-      isLoginFieldFocused = true
     } label: {
       Text("+ Add")
         .foregroundStyle(Theme.textSecondary)
@@ -86,7 +85,7 @@ struct GitHubTeamFiltersField: View {
       .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.cardStroke))
       .onSubmit { addTypedLogin(to: teamSlug) }
       .onExitCommand { addingTeamSlug = nil }
-      .onAppear { isLoginFieldFocused = true }
+      .task { isLoginFieldFocused = true }
   }
 
   // An invalid login keeps the field and its text so the user can fix it.
