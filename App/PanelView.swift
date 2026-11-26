@@ -6,10 +6,12 @@ struct PanelView: View {
   let store: QueueStore
   let updateChecker: UpdateChecker
   let close: () -> Void
-  let openSettings: () -> Void
+  // Nil opens Settings on the last tab shown.
+  let openSettings: (SettingsTab?) -> Void
   // The global shortcut opens the panel with the first row selected. A click opens it with no selection.
   var selectsFirstRow = false
   @State private var hasSelectedFirstRow = false
+  @State private var selectionScrollRequest = 0
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
   @State private var selectedTab = PanelTab.needsYou
@@ -55,6 +57,9 @@ struct PanelView: View {
         .overlay(alignment: .bottom) { undoBar }
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
+        }
+        .onChange(of: selectionScrollRequest) {
+          if let selectedItemId { proxy.scrollTo(selectedItemId) }
         }
         // The kept selection can sit lower in the other view, so the list scrolls to it again. The scroll waits a
         // main actor turn, so the rows of the new view are laid out first.
@@ -133,8 +138,8 @@ struct PanelView: View {
       if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
       scrollMonitor = nil
     }
-    .onKeyPress(.downArrow) { handleSlide(.downArrow) ?? handle(.downArrow) }
-    .onKeyPress(.upArrow) { handleSlide(.upArrow) ?? handle(.upArrow) }
+    .onKeyPress(keys: [.downArrow]) { press in handleSlide(.downArrow) ?? handleKey(press) }
+    .onKeyPress(keys: [.upArrow]) { press in handleSlide(.upArrow) ?? handleKey(press) }
     .onKeyPress(.return) {
       if let result = handleSlide(.returnKey) { return result }
       guard let item = selectableItems.first(where: { $0.id == selectedItemId }) else { return .ignored }
@@ -163,6 +168,7 @@ struct PanelView: View {
     .onKeyPress(phases: .down) { _ in
       isSwitchPanelViewKey(NSApp.currentEvent) ? handle(.switchPanelView) : .ignored
     }
+    .onKeyPress(keys: panelCharacterKeys) { handleKey($0) }
     .onKeyPress(keys: ["z"]) { press in
       // Only Cmd (Caps Lock aside), so Shift-Cmd-Z (redo) does not undo.
       guard press.modifiers.subtracting(.capsLock) == .command else { return .ignored }
@@ -214,7 +220,7 @@ struct PanelView: View {
       .help("Refresh")
       .accessibilityLabel("Refresh")
       .accessibilityValue(store.isRefreshing ? "Refreshing…" : "")
-      Button(action: showSettings) {
+      Button { showSettings() } label: {
         Image(PanelSymbol.settings.rawValue)
       }
       .buttonStyle(.borderless)
@@ -313,14 +319,15 @@ struct PanelView: View {
       if store.jiraStatus == .failed(.authentication) {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           AuthBannerView(
-            title: "Jira sign-in expired", message: store.jiraBannerMessage(now: context.date), reconnect: showSettings)
+            title: "Jira sign-in expired", message: store.jiraBannerMessage(now: context.date),
+            reconnect: { showSettings() })
         }
       }
       if store.circleciStatus == .failed(.authentication) {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           AuthBannerView(
             title: "CircleCI token expired", message: store.circleciBannerMessage(now: context.date),
-            actionTitle: "Open Settings", reconnect: showSettings)
+            actionTitle: "Open Settings", reconnect: { showSettings() })
         }
       }
       switch panelState {
@@ -346,9 +353,9 @@ struct PanelView: View {
     }
   }
 
-  private func showSettings() {
+  private func showSettings(tab: SettingsTab? = nil) {
     close()
-    openSettings()
+    openSettings(tab)
   }
 
   private func subtitle(now: Date) -> String {
@@ -392,10 +399,12 @@ struct PanelView: View {
     isListFocused = true
   }
 
-  private func moveSelection(by offset: Int) -> KeyPress.Result {
-    guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, offset: offset) else {
+  private func moveSelection(_ move: SelectionMove) -> KeyPress.Result {
+    guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, move: move) else {
       return .ignored
     }
+    // The row can be selected but scrolled out of view, so a move that keeps it still scrolls to it.
+    if nextItemId == selectedItemId { selectionScrollRequest += 1 }
     selectedItemId = nextItemId
     return .handled
   }
@@ -418,19 +427,30 @@ struct PanelView: View {
     let selectedItem = selectableItems.first(where: { $0.id == selectedItemId })
     let action = panelAction(
       for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil,
-      selectedItemIsDismissible: selectedItem?.dismissal != nil, canUndo: store.lastDismissal != nil)
+      selectedItemIsDismissible: selectedItem?.dismissal != nil, canUndo: store.lastDismissal != nil,
+      statusFilter: statusFilter, legendStatuses: legendStatusList)
     let outcome = panelKeyOutcome(for: action, selectedItemId: selectedItemId, popoverItemId: popoverItemId)
     popoverItemId = outcome.popoverItemId
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
     if outcome.dismissesSelectedItem, let selectedItem { dismiss(selectedItem) }
     if outcome.undoesLastDismissal { store.undoLastDismissal() }
+    if outcome.refreshes { Task { await store.refresh() } }
+    if let step = outcome.statusFilterStep {
+      chosenStatusFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatusList)
+    }
+    if outcome.opensShortcutSettings { showSettings(tab: .shortcuts) }
     // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
     if outcome.switchesPanelView {
       chosenStatusFilter = nil
       layout = layout.toggled
     }
-    if let offset = outcome.selectionOffset { return moveSelection(by: offset) }
+    if let move = outcome.selectionMove { return moveSelection(move) }
     return outcome.isHandled ? .handled : .ignored
+  }
+
+  private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+    guard let input = panelInput(for: press.key, modifiers: press.modifiers) else { return .ignored }
+    return handle(input)
   }
 
   // Nil lets the key do what it does today.

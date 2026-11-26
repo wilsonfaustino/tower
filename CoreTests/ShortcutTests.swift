@@ -123,6 +123,7 @@ struct ShortcutValidationTests {
     KeyCombo(keyCode: 19, key: "2", modifiers: [.control, .command]),
     KeyCombo(keyCode: 8, key: "C", modifiers: [.command]),
     KeyCombo(keyCode: 6, key: "Z", modifiers: [.command]),
+    KeyCombo(keyCode: 15, key: "R", modifiers: [.command]),
     KeyCombo(keyCode: 51, key: "", modifiers: [.command]),
     KeyCombo(keyCode: 36, key: "\r", modifiers: [.command]),
     KeyCombo(keyCode: 125, key: "", modifiers: [.control]),
@@ -136,6 +137,12 @@ struct ShortcutValidationTests {
   // The panel undoes only on Cmd-Z alone, so other Z combos stay free.
   @Test func controlCommandZIsFree() {
     let combo = KeyCombo(keyCode: 6, key: "Z", modifiers: [.control, .command])
+    #expect(validateShortcut(combo, for: .switchPanelView, current: defaultShortcuts) == nil)
+  }
+
+  // The panel refreshes only on Cmd-R alone.
+  @Test func controlCommandRIsFree() {
+    let combo = KeyCombo(keyCode: 15, key: "R", modifiers: [.control, .command])
     #expect(validateShortcut(combo, for: .switchPanelView, current: defaultShortcuts) == nil)
   }
 
@@ -184,6 +191,12 @@ struct ShortcutLayoutValidationTests {
 
   @Test func commandCommaOpensSettingsSoItIsReserved() {
     let combo = KeyCombo(keyCode: 43, key: ",", modifiers: [.command])
+    #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByTower)
+  }
+
+  // On Dvorak, R sits on the US O key.
+  @Test func commandROnAnotherPhysicalKeyIsReserved() {
+    let combo = KeyCombo(keyCode: 31, key: "r", modifiers: [.command])
     #expect(validateShortcut(combo, for: .openPanel, current: defaultShortcuts) == .reservedByTower)
   }
 

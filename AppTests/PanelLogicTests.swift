@@ -57,29 +57,40 @@ private let items = [item("a"), item("b"), item("c")]
 
 struct SelectionMovementTests {
   @Test func noItemsSelectNothing() {
-    #expect(nextSelectedItemId(in: [], after: nil, offset: 1) == nil)
+    #expect(nextSelectedItemId(in: [], after: nil, move: .offset(1)) == nil)
   }
 
   @Test func firstDownPicksTheFirstRow() {
-    #expect(nextSelectedItemId(in: items, after: nil, offset: 1) == "a")
+    #expect(nextSelectedItemId(in: items, after: nil, move: .offset(1)) == "a")
   }
 
   @Test func firstUpPicksTheLastRow() {
-    #expect(nextSelectedItemId(in: items, after: nil, offset: -1) == "c")
+    #expect(nextSelectedItemId(in: items, after: nil, move: .offset(-1)) == "c")
   }
 
   @Test func selectionThatLeftTheListStartsOver() {
-    #expect(nextSelectedItemId(in: items, after: "gone", offset: 1) == "a")
+    #expect(nextSelectedItemId(in: items, after: "gone", move: .offset(1)) == "a")
   }
 
   @Test func downAndUpMoveOneRow() {
-    #expect(nextSelectedItemId(in: items, after: "a", offset: 1) == "b")
-    #expect(nextSelectedItemId(in: items, after: "c", offset: -1) == "b")
+    #expect(nextSelectedItemId(in: items, after: "a", move: .offset(1)) == "b")
+    #expect(nextSelectedItemId(in: items, after: "c", move: .offset(-1)) == "b")
   }
 
   @Test func selectionStaysAtTheEnds() {
-    #expect(nextSelectedItemId(in: items, after: "c", offset: 1) == "c")
-    #expect(nextSelectedItemId(in: items, after: "a", offset: -1) == "a")
+    #expect(nextSelectedItemId(in: items, after: "c", move: .offset(1)) == "c")
+    #expect(nextSelectedItemId(in: items, after: "a", move: .offset(-1)) == "a")
+  }
+
+  @Test(arguments: [nil, "a", "b", "c", "gone"])
+  func firstAndLastPickTheEndRowsFromAnySelection(selectedItemId: String?) {
+    #expect(nextSelectedItemId(in: items, after: selectedItemId, move: .first) == "a")
+    #expect(nextSelectedItemId(in: items, after: selectedItemId, move: .last) == "c")
+  }
+
+  @Test(arguments: [SelectionMove.first, .last, .offset(1), .offset(-1)])
+  func noItemsSelectNothingForAnyMove(move: SelectionMove) {
+    #expect(nextSelectedItemId(in: [], after: "a", move: move) == nil)
   }
 }
 
@@ -223,7 +234,7 @@ struct SlideOutcomeTests {
 
   @Test func upFromTheFirstChildStillReachesTheGroup() {
     let rows = selectableRows(in: tabSections, layout: .split, tab: .needsYou, expandedItemIds: ["bot"])
-    #expect(nextSelectedItemId(in: rows, after: "bot-1", offset: -1) == "bot")
+    #expect(nextSelectedItemId(in: rows, after: "bot-1", move: .offset(-1)) == "bot")
   }
 }
 
@@ -311,14 +322,18 @@ struct PanelInputTests {
     (.escape, false, false, .closePanel),
     (.escape, true, true, .closePopover),
     (.escape, false, true, .closePopover),
-    (.upArrow, true, false, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, false, false, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, true, true, .closePopoverAndMoveSelection(offset: -1)),
-    (.upArrow, false, true, .closePopoverAndMoveSelection(offset: -1)),
-    (.downArrow, true, false, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, false, false, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, true, true, .closePopoverAndMoveSelection(offset: 1)),
-    (.downArrow, false, true, .closePopoverAndMoveSelection(offset: 1)),
+    (.upArrow, true, false, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, false, false, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, true, true, .closePopoverAndMoveSelection(.offset(-1))),
+    (.upArrow, false, true, .closePopoverAndMoveSelection(.offset(-1))),
+    (.downArrow, true, false, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, false, false, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, true, true, .closePopoverAndMoveSelection(.offset(1))),
+    (.downArrow, false, true, .closePopoverAndMoveSelection(.offset(1))),
+    (.commandUpArrow, true, false, .closePopoverAndMoveSelection(.first)),
+    (.commandUpArrow, false, true, .closePopoverAndMoveSelection(.first)),
+    (.commandDownArrow, true, false, .closePopoverAndMoveSelection(.last)),
+    (.commandDownArrow, false, true, .closePopoverAndMoveSelection(.last)),
     (.copy, true, false, .copyLink),
     (.copy, false, false, .ignore),
     (.copy, true, true, .copyLink),
@@ -374,10 +389,10 @@ struct PanelInputTests {
 }
 
 struct PanelKeyOutcomeTests {
-  @Test func moveClosesThePopoverAndMovesTheSelection() {
-    let outcome = panelKeyOutcome(
-      for: .closePopoverAndMoveSelection(offset: -1), selectedItemId: "a", popoverItemId: "a")
-    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionOffset: -1))
+  @Test(arguments: [SelectionMove.offset(-1), .first, .last])
+  func moveClosesThePopoverAndMovesTheSelection(move: SelectionMove) {
+    let outcome = panelKeyOutcome(for: .closePopoverAndMoveSelection(move), selectedItemId: "a", popoverItemId: "a")
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, selectionMove: move))
   }
 
   @Test func showPopoverOpensItOnTheSelectedRow() {
@@ -581,6 +596,66 @@ struct StatusFilterTests {
     #expect(chosenStatus == nil)
   }
 
+  @Test func nextGoesThroughTheLegendThenBackToNoFilter() {
+    let legend: [StatusDot] = [.failing, .urgent, .pending]
+    var filter: StatusDot?
+    var seen: [StatusDot?] = []
+    for _ in 0..<4 {
+      filter = steppedStatusFilter(filter, step: .next, legendStatuses: legend)
+      seen.append(filter)
+    }
+    #expect(seen == [.failing, .urgent, .pending, nil])
+  }
+
+  @Test func previousGoesThroughTheLegendBackwardsThenBackToNoFilter() {
+    let legend: [StatusDot] = [.failing, .urgent, .pending]
+    var filter: StatusDot?
+    var seen: [StatusDot?] = []
+    for _ in 0..<4 {
+      filter = steppedStatusFilter(filter, step: .previous, legendStatuses: legend)
+      seen.append(filter)
+    }
+    #expect(seen == [.pending, .urgent, .failing, nil])
+  }
+
+  @Test(arguments: [nil, StatusDot.urgent, .pending])
+  func clearGivesNoFilter(current: StatusDot?) {
+    #expect(steppedStatusFilter(current, step: .clear, legendStatuses: [.urgent, .pending]) == nil)
+  }
+
+  @Test(arguments: [StatusFilterStep.next, .previous, .clear])
+  func aLegendThatDoesNotFilterGivesNoFilter(step: StatusFilterStep) {
+    #expect(steppedStatusFilter(nil, step: step, legendStatuses: [.pending]) == nil)
+    #expect(steppedStatusFilter(.pending, step: step, legendStatuses: [.pending]) == nil)
+    #expect(steppedStatusFilter(nil, step: step, legendStatuses: []) == nil)
+  }
+
+  // A chosen status that left the legend counts as no filter, so next starts from the first status.
+  @Test func aStatusThatLeftTheLegendStepsFromNoFilter() {
+    #expect(steppedStatusFilter(.failing, step: .next, legendStatuses: [.urgent, .pending]) == .urgent)
+    #expect(steppedStatusFilter(.failing, step: .previous, legendStatuses: [.urgent, .pending]) == .pending)
+  }
+
+  @Test func legendKeysActOnlyWhenTheyChangeTheFilter() {
+    func action(_ step: StatusFilterStep, filter: StatusDot?, legend: [StatusDot]) -> PanelAction {
+      panelAction(
+        for: .stepStatusFilter(step), selectedItemHasDetails: false, isPopoverOpen: false, statusFilter: filter,
+        legendStatuses: legend)
+    }
+    #expect(action(.next, filter: nil, legend: [.urgent, .pending]) == .stepStatusFilter(.next))
+    #expect(action(.previous, filter: .urgent, legend: [.urgent, .pending]) == .stepStatusFilter(.previous))
+    #expect(action(.clear, filter: .urgent, legend: [.urgent, .pending]) == .stepStatusFilter(.clear))
+    #expect(action(.clear, filter: nil, legend: [.urgent, .pending]) == .ignore)
+    #expect(action(.next, filter: nil, legend: [.pending]) == .ignore)
+    #expect(action(.previous, filter: nil, legend: []) == .ignore)
+  }
+
+  @Test(arguments: [nil, "a"])
+  func aLegendStepKeepsThePopover(popoverItemId: String?) {
+    let outcome = panelKeyOutcome(for: .stepStatusFilter(.next), selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: popoverItemId, statusFilterStep: .next))
+  }
+
   @Test func noFilterKeepsTheSections() {
     #expect(filteredSections(filterSections, status: nil) == filterSections)
   }
@@ -672,5 +747,77 @@ struct StatusFilterTests {
   @Test func switchPanelViewClosesThePopoverAndKeepsTheSelection() {
     let outcome = panelKeyOutcome(for: .switchPanelView, selectedItemId: "a", popoverItemId: "a")
     #expect(outcome == PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true))
+  }
+}
+
+struct PanelKeyInputTests {
+  @Test(arguments: [EventModifiers(), .shift, .option, [.numericPad, .function]])
+  func arrowsMoveOneRowWithoutCommand(modifiers: EventModifiers) {
+    #expect(panelInput(for: .upArrow, modifiers: modifiers) == .upArrow)
+    #expect(panelInput(for: .downArrow, modifiers: modifiers) == .downArrow)
+  }
+
+  // Arrow key events also carry the numeric pad and function flags.
+  @Test(arguments: [EventModifiers.command, [.command, .numericPad, .function], [.command, .shift]])
+  func commandArrowsGoToTheEnds(modifiers: EventModifiers) {
+    #expect(panelInput(for: .upArrow, modifiers: modifiers) == .commandUpArrow)
+    #expect(panelInput(for: .downArrow, modifiers: modifiers) == .commandDownArrow)
+  }
+
+  @Test(arguments: [EventModifiers.command, [.command, .capsLock]])
+  func commandRAloneRefreshes(modifiers: EventModifiers) {
+    #expect(panelInput(for: "r", modifiers: modifiers) == .refresh)
+  }
+
+  @Test(arguments: [EventModifiers(), .shift, [.command, .shift], [.command, .option], [.command, .control]])
+  func otherRCombosDoNotRefresh(modifiers: EventModifiers) {
+    #expect(panelInput(for: "r", modifiers: modifiers) == nil)
+  }
+
+  @Test(arguments: [false, true])
+  func refreshAlwaysActsAndKeepsThePopover(isPopoverOpen: Bool) {
+    #expect(panelAction(for: .refresh, selectedItemHasDetails: true, isPopoverOpen: isPopoverOpen) == .refresh)
+    let popoverItemId = isPopoverOpen ? "a" : nil
+    let outcome = panelKeyOutcome(for: .refresh, selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true))
+  }
+
+  @Test(arguments: [EventModifiers(), .shift, .capsLock, .numericPad])
+  func legendKeysStepTheFilterWithoutCommandControlOrOption(modifiers: EventModifiers) {
+    #expect(panelInput(for: "]", modifiers: modifiers) == .stepStatusFilter(.next))
+    #expect(panelInput(for: "[", modifiers: modifiers) == .stepStatusFilter(.previous))
+    #expect(panelInput(for: "0", modifiers: modifiers) == .stepStatusFilter(.clear))
+  }
+
+  @Test(arguments: [EventModifiers.command, .control, .option])
+  func legendKeysWithCommandControlOrOptionGiveNoInput(modifiers: EventModifiers) {
+    #expect(panelInput(for: "]", modifiers: modifiers) == nil)
+    #expect(panelInput(for: "[", modifiers: modifiers) == nil)
+    #expect(panelInput(for: "0", modifiers: modifiers) == nil)
+  }
+
+  // On a US layout ? is Shift-slash.
+  @Test(arguments: [EventModifiers(), .shift, [.shift, .capsLock]])
+  func questionMarkOpensTheShortcutSettings(modifiers: EventModifiers) {
+    #expect(panelInput(for: "?", modifiers: modifiers) == .openShortcutSettings)
+  }
+
+  @Test(arguments: [EventModifiers.command, [.command, .shift], .control, .option])
+  func questionMarkWithCommandControlOrOptionGivesNoInput(modifiers: EventModifiers) {
+    #expect(panelInput(for: "?", modifiers: modifiers) == nil)
+  }
+
+  @Test(arguments: [nil, "a"])
+  func shortcutSettingsAlwaysOpenAndClosePopover(popoverItemId: String?) {
+    #expect(
+      panelAction(for: .openShortcutSettings, selectedItemHasDetails: false, isPopoverOpen: popoverItemId != nil)
+        == .openShortcutSettings)
+    let outcome = panelKeyOutcome(for: .openShortcutSettings, selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: nil, opensShortcutSettings: true))
+  }
+
+  @Test func otherKeysGiveNoInput() {
+    #expect(panelInput(for: "x", modifiers: []) == nil)
+    #expect(panelInput(for: .leftArrow, modifiers: .command) == nil)
   }
 }

@@ -41,16 +41,22 @@ func currentSentence(sources: [(name: String, status: SourceStatus)]) -> String 
   return " \(names.joined(separator: " and ")) \(names.count == 1 ? "is" : "are") current."
 }
 
-// The first press picks the first row (Down) or the last row (Up). At either end the selection stays.
-func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, offset: Int) -> String? {
-  guard !items.isEmpty else { return nil }
-  let nextIndex: Int
-  if let currentIndex = items.firstIndex(where: { $0.id == selectedItemId }) {
-    nextIndex = min(max(currentIndex + offset, 0), items.count - 1)
-  } else {
-    nextIndex = offset > 0 ? 0 : items.count - 1
+enum SelectionMove: Equatable, Sendable {
+  case offset(Int), first, last
+}
+
+// The first offset press picks the first row (Down) or the last row (Up). At either end the selection stays.
+func nextSelectedItemId(in items: [QueueItem], after selectedItemId: String?, move: SelectionMove) -> String? {
+  guard let firstItem = items.first, let lastItem = items.last else { return nil }
+  switch move {
+  case .first: return firstItem.id
+  case .last: return lastItem.id
+  case .offset(let offset):
+    guard let currentIndex = items.firstIndex(where: { $0.id == selectedItemId }) else {
+      return offset > 0 ? firstItem.id : lastItem.id
+    }
+    return items[min(max(currentIndex + offset, 0), items.count - 1)].id
   }
-  return items[nextIndex].id
 }
 
 // A group counts as its children, so the label matches the rows the owner can expand to.
@@ -133,6 +139,22 @@ func effectiveStatusFilter(_ chosenStatus: StatusDot?, legendStatuses: [StatusDo
   return chosenStatus
 }
 
+enum StatusFilterStep: Equatable, Sendable {
+  case next, previous, clear
+}
+
+// Next and previous go round the legend order with "no filter" in the cycle: none, first, ..., last, none.
+func steppedStatusFilter(_ current: StatusDot?, step: StatusFilterStep, legendStatuses: [StatusDot]) -> StatusDot? {
+  guard legendStatuses.count > 1 else { return nil }
+  let cycle: [StatusDot?] = [nil] + legendStatuses
+  let currentIndex = cycle.firstIndex(of: effectiveStatusFilter(current, legendStatuses: legendStatuses)) ?? 0
+  switch step {
+  case .next: return cycle[(currentIndex + 1) % cycle.count]
+  case .previous: return cycle[(currentIndex + cycle.count - 1) % cycle.count]
+  case .clear: return nil
+  }
+}
+
 // A matching group keeps all its children. A section with no matching rows leaves the list.
 func filteredSections(_ sections: [QueueSection], status: StatusDot?) -> [QueueSection] {
   guard let status else { return sections }
@@ -210,21 +232,45 @@ func swipeOutcome(
     isSlid: isSlid)
 }
 
-enum PanelInput: Sendable {
+enum PanelInput: Equatable, Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
-  case switchPanelView
+  case switchPanelView, commandUpArrow, commandDownArrow, refresh, stepStatusFilter(StatusFilterStep)
+  case openShortcutSettings
+}
+
+// The keys that `panelInput` reads by the character they type, as Cmd-C does, so they follow the keyboard layout.
+let panelCharacterKeys: Set<KeyEquivalent> = ["r", "]", "[", "0", "?"]
+
+// The arrows act with any modifiers. With Command they go to the first or last row.
+// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does. The legend keys and ? need no Control, Option or
+// Command. ? types with Shift on most layouts, so Shift is allowed.
+func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput? {
+  let hasCommand = modifiers.contains(.command)
+  let isPlain = modifiers.isDisjoint(with: [.control, .option, .command])
+  switch key {
+  case .upArrow: return hasCommand ? .commandUpArrow : .upArrow
+  case .downArrow: return hasCommand ? .commandDownArrow : .downArrow
+  case "r": return modifiers.subtracting(.capsLock) == .command ? .refresh : nil
+  case "]": return isPlain ? .stepStatusFilter(.next) : nil
+  case "[": return isPlain ? .stepStatusFilter(.previous) : nil
+  case "0": return isPlain ? .stepStatusFilter(.clear) : nil
+  case "?": return isPlain ? .openShortcutSettings : nil
+  default: return nil
+  }
 }
 
 enum PanelAction: Equatable, Sendable {
-  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(offset: Int)
-  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView
+  case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(SelectionMove)
+  case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView, refresh
+  case stepStatusFilter(StatusFilterStep), openShortcutSettings
 }
 
 // Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
 // Cmd-Delete acts only on dismissible rows (failed pipelines, single review requests). Right-click acts on both kinds.
+// The legend keys act only when they change the filter, so they do nothing while the legend does not filter.
 func panelAction(
   for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool, selectedItemIsDismissible: Bool = false,
-  canUndo: Bool = false
+  canUndo: Bool = false, statusFilter: StatusDot? = nil, legendStatuses: [StatusDot] = []
 ) -> PanelAction {
   switch input {
   case .click, .returnKey: return .openAndClosePanel
@@ -233,31 +279,41 @@ func panelAction(
     if isPopoverOpen { return .closePopover }
     return selectedItemHasDetails ? .showPopover : .ignore
   case .escape: return isPopoverOpen ? .closePopover : .closePanel
-  case .upArrow: return .closePopoverAndMoveSelection(offset: -1)
-  case .downArrow: return .closePopoverAndMoveSelection(offset: 1)
+  case .upArrow: return .closePopoverAndMoveSelection(.offset(-1))
+  case .downArrow: return .closePopoverAndMoveSelection(.offset(1))
+  case .commandUpArrow: return .closePopoverAndMoveSelection(.first)
+  case .commandDownArrow: return .closePopoverAndMoveSelection(.last)
   case .copy: return selectedItemHasDetails ? .copyLink : .ignore
   case .rightClick: return selectedItemHasDetails || selectedItemIsDismissible ? .showContextMenu : .ignore
   case .dismiss: return selectedItemIsDismissible ? .dismiss : .ignore
   case .undo: return canUndo ? .undo : .ignore
   case .switchPanelView: return .switchPanelView
+  case .refresh: return .refresh
+  case .stepStatusFilter(let step):
+    let changesFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatuses) != statusFilter
+    return changesFilter ? .stepStatusFilter(step) : .ignore
+  case .openShortcutSettings: return .openShortcutSettings
   }
 }
 
 struct PanelKeyOutcome: Equatable {
   var popoverItemId: String?
-  var selectionOffset: Int?
+  var selectionMove: SelectionMove?
   var copiesSelectedLink = false
   var dismissesSelectedItem = false
   var undoesLastDismissal = false
   var switchesPanelView = false
+  var refreshes = false
+  var statusFilterStep: StatusFilterStep?
+  var opensShortcutSettings = false
   var isHandled = true
 }
 
 // Esc with no popover is not handled, so it goes on to PanelWindow.cancelOperation, which closes the panel.
 func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverItemId: String?) -> PanelKeyOutcome {
   switch action {
-  case .closePopoverAndMoveSelection(let offset):
-    return PanelKeyOutcome(popoverItemId: nil, selectionOffset: offset)
+  case .closePopoverAndMoveSelection(let move):
+    return PanelKeyOutcome(popoverItemId: nil, selectionMove: move)
   case .showPopover:
     return PanelKeyOutcome(popoverItemId: selectedItemId)
   case .closePopover:
@@ -272,6 +328,15 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
   // The list changes under the popover, so it closes. The selection stays while its row is still listed.
   case .switchPanelView:
     return PanelKeyOutcome(popoverItemId: nil, switchesPanelView: true)
+  // The store ignores a refresh while one runs.
+  case .refresh:
+    return PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true)
+  // As with a legend click, the popover closes only when the filter hides its row.
+  case .stepStatusFilter(let step):
+    return PanelKeyOutcome(popoverItemId: popoverItemId, statusFilterStep: step)
+  // The panel closes before Settings opens, so the popover closes with it.
+  case .openShortcutSettings:
+    return PanelKeyOutcome(popoverItemId: nil, opensShortcutSettings: true)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }

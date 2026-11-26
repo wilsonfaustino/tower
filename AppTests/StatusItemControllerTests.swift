@@ -25,7 +25,7 @@ private struct UnusedTransport: HTTPTransport {
 @MainActor private func withController(_ body: (StatusItemController, ActionRecorder) -> Void) {
   let recorder = ActionRecorder()
   let controller = StatusItemController(
-    store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: { recorder.refreshCount += 1 }, openSettings: { recorder.settingsCount += 1 },
+    store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: { recorder.refreshCount += 1 }, openSettings: { _ in recorder.settingsCount += 1 },
     quit: { recorder.quitCount += 1 })
   body(controller, recorder)
   NSStatusBar.system.removeStatusItem(controller.statusItem)
@@ -75,7 +75,7 @@ private struct UnusedTransport: HTTPTransport {
       cacheDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tower-menu-\(UUID().uuidString)"),
       loadJiraSettings: { nil }, loadCircleCISettings: { nil }, loadGitHubOrganizations: { [] },
       defaults: UserDefaults(suiteName: "tower-menu-\(UUID().uuidString)")!)
-    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
+    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: { _ in }, quit: {})
     defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
     let menu = controller.contextMenu
     let refreshItem = menu.items[0]
@@ -188,7 +188,7 @@ private struct UnusedTransport: HTTPTransport {
 
   @Test func buttonFollowsStoreChanges() async {
     let store = QueueStore()
-    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
+    let controller = StatusItemController(store: store, updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: { _ in }, quit: {})
     store.menuBarState = .failing(count: 3)
     // The observation re-arms on the next main actor turn.
     for _ in 0..<10 where controller.statusItem.button?.title != "3" { await Task.yield() }
@@ -202,7 +202,7 @@ private struct UnusedTransport: HTTPTransport {
   @Test func newerVersionOpensThePanelWithTheNotice() async {
     let updateChecker = makeOfflineUpdateChecker { _ in "0.5.0" }
     let controller = StatusItemController(
-      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: { _ in }, quit: {})
     defer {
       controller.closePanel()
       NSStatusBar.system.removeStatusItem(controller.statusItem)
@@ -223,7 +223,7 @@ private struct UnusedTransport: HTTPTransport {
       return "0.5.0"
     }
     let controller = StatusItemController(
-      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: {}, quit: {})
+      store: QueueStore(), updateChecker: updateChecker, refresh: {}, openSettings: { _ in }, quit: {})
     defer {
       controller.closePanel()
       NSStatusBar.system.removeStatusItem(controller.statusItem)
@@ -249,7 +249,7 @@ private struct UnusedTransport: HTTPTransport {
 }
 
 @MainActor private func withPopover(_ body: (StatusItemController, NSWindow) async -> Void) async {
-  let controller = StatusItemController(store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: {}, quit: {})
+  let controller = StatusItemController(store: QueueStore(), updateChecker: makeOfflineUpdateChecker(), refresh: {}, openSettings: { _ in }, quit: {})
   controller.showPanel()
   let popover = NSWindow(
     contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.titled], backing: .buffered, defer: true)

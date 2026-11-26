@@ -38,7 +38,7 @@ import SwiftUI
     guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
     statusItemController = StatusItemController(
       store: store, updateChecker: updateChecker, refresh: { [store] in Task { await store.refresh() } },
-      openSettings: { [weak self] in self?.showSettings() }, quit: { NSApp.terminate(nil) })
+      openSettings: { [weak self] in self?.showSettings(tab: $0) }, quit: { NSApp.terminate(nil) })
     globalHotKey.onPress = { [weak self] in self?.statusItemController?.toggleFromHotKey() }
     globalHotKey.start()
     // macOS shows the prompt only once. Later calls return the saved answer.
@@ -47,7 +47,12 @@ import SwiftUI
     updateChecker.start()
   }
 
-  func showSettings() {
+  // An open window keeps its tab controller, so a requested tab is selected there too.
+  func showSettings(tab: SettingsTab? = nil) {
+    if let tab {
+      settingsTab = tab
+      (settingsWindowController.window?.contentViewController as? SettingsTabViewController)?.select(tab)
+    }
     settingsWindowController.show()
   }
 

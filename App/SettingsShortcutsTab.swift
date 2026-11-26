@@ -21,15 +21,20 @@ func shortcutRecordOutcome(
 // The fixed panel keys, for reference. They cannot be changed.
 private let panelKeyHelp: [(keys: String, text: String)] = [
   ("↑ ↓", "Move the selection"),
+  ("⌘↑ ⌘↓", "Select the first or last row"),
   ("↩", "Open the row, or open and close a group"),
   ("⌘↩", "Open the row and keep the panel open"),
   ("← →", "Show Dismiss, or open and close a group"),
   ("Space", "Show PR details"),
   ("⌘1 ⌘2", "Show the Needs you or Waiting tab"),
+  ("[ ]", "Filter by the previous or next status"),
+  ("0", "Show all statuses"),
   ("⌘C", "Copy the link"),
   ("⌘⌫", "Dismiss the row"),
   ("⌘Z", "Undo the dismissal"),
+  ("⌘R", "Refresh"),
   ("⌘,", "Open Settings"),
+  ("?", "Show these keys"),
   ("Esc ⌘.", "Close the panel"),
 ]
 

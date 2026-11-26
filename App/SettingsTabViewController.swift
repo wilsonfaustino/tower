@@ -53,12 +53,16 @@ enum SettingsTab: Hashable, CaseIterable {
     addTab(.jira, content: SettingsJiraTab(store: store))
     addTab(.circleci, content: SettingsCircleCITab(store: store))
     addTab(.about, content: SettingsAboutTab(updateChecker: updateChecker))
-    selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: initialTab) ?? 0
+    select(initialTab)
   }
 
   @available(*, unavailable)
   required init?(coder: NSCoder) {
     fatalError("init(coder:) is not supported")
+  }
+
+  func select(_ tab: SettingsTab) {
+    selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: tab) ?? 0
   }
 
   private var selectedTab: SettingsTab? {
