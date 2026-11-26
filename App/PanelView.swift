@@ -11,6 +11,7 @@ struct PanelView: View {
   // The global shortcut opens the panel with the first row selected. A click opens it with no selection.
   var selectsFirstRow = false
   @State private var hasSelectedFirstRow = false
+  @State private var selectionScrollRequest = 0
   @State private var selectedItemId: String?
   @State private var popoverItemId: String?
   @State private var selectedTab = PanelTab.needsYou
@@ -56,6 +57,9 @@ struct PanelView: View {
         .overlay(alignment: .bottom) { undoBar }
         .onChange(of: selectedItemId) { _, newValue in
           if let newValue { proxy.scrollTo(newValue) }
+        }
+        .onChange(of: selectionScrollRequest) {
+          if let selectedItemId { proxy.scrollTo(selectedItemId) }
         }
         // The kept selection can sit lower in the other view, so the list scrolls to it again. The scroll waits a
         // main actor turn, so the rows of the new view are laid out first.
@@ -399,6 +403,8 @@ struct PanelView: View {
     guard let nextItemId = nextSelectedItemId(in: selectableItems, after: selectedItemId, move: move) else {
       return .ignored
     }
+    // The row can be selected but scrolled out of view, so a move that keeps it still scrolls to it.
+    if nextItemId == selectedItemId { selectionScrollRequest += 1 }
     selectedItemId = nextItemId
     return .handled
   }
