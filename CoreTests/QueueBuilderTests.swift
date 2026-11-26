@@ -77,13 +77,14 @@ private func pipeline(
 private func queue(
   authored: [PullRequest] = [], reviewRequests: [PullRequest] = [], tickets: [JiraTicket] = [], pipelines: [Pipeline] = [],
   dismissedPipelines: Set<PipelineDismissal> = [], dismissedPullRequests: Set<PullRequestDismissal> = [],
-  merged: [MergedPullRequest] = [], teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
+  merged: [MergedPullRequest] = [], teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(),
+  reviewRequestScope: ReviewRequestScope = .directAndTeam
 ) -> [QueueSection] {
   buildQueue(
     QueueInput(
       viewerLogin: "me", authoredPullRequests: authored, reviewRequests: reviewRequests, jiraTickets: tickets,
       pipelines: pipelines, dismissedPipelines: dismissedPipelines, dismissedPullRequests: dismissedPullRequests,
-      mergedPullRequests: merged, teamAuthorFilters: teamAuthorFilters),
+      mergedPullRequests: merged, teamAuthorFilters: teamAuthorFilters, reviewRequestScope: reviewRequestScope),
     now: now)
 }
 
@@ -1254,5 +1255,17 @@ struct TeamAuthorFilterTests {
       reviewRequests: [pullRequest(author: "Ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
       teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
     #expect(items(sections, .review).count == 1)
+  }
+}
+
+struct ReviewRequestScopeTests {
+  @Test func directOnlyHidesTeamRequestsAndKeepsDirectOnes() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(number: 1, requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 2),
+        pullRequest(number: 2, requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2),
+      ],
+      reviewRequestScope: .directOnly)
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#1"])
   }
 }

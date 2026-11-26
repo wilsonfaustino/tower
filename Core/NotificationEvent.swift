@@ -34,7 +34,7 @@ public struct NotificationEvent: Equatable, Sendable {
 // Events between two successful GitHub fetches. A PR that is new in the current snapshot counts as running before.
 public func notificationEvents(
   previous: GitHubSnapshot, current: GitHubSnapshot, dismissedPullRequests: Set<PullRequestDismissal>,
-  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
+  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(), reviewRequestScope: ReviewRequestScope = .directAndTeam
 ) -> [NotificationEvent] {
   var events: [NotificationEvent] = []
   let previousAuthoredByURL = Dictionary(previous.authoredPullRequests.map { ($0.url, $0) }) { first, _ in first }
@@ -58,7 +58,9 @@ public func notificationEvents(
     first, _ in first
   }
   for pullRequest in current.reviewRequests
-  where isOpenReviewRequest(pullRequest, viewerLogin: current.viewerLogin, teamAuthorFilters: teamAuthorFilters)
+  where isOpenReviewRequest(
+    pullRequest, viewerLogin: current.viewerLogin, teamAuthorFilters: teamAuthorFilters,
+    reviewRequestScope: reviewRequestScope)
     && !dismissedPullRequests.contains(pullRequest.dismissal)
   {
     // On a known PR only a request to the viewer that is newer than every request the previous fetch saw counts.

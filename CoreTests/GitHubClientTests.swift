@@ -159,6 +159,17 @@ struct GitHubClientTests {
     #expect(authored["authoredQuery"] as? String == "is:pr is:open author:@me archived:false")
   }
 
+  @Test func directOnlyAsksForRequestsThatNameTheViewer() async throws {
+    let fixtureData = try fixture("github-search.json")
+    let transport = StubTransport { _ in (fixtureData, 200) }
+    let directOnlyClient = GitHubClient(
+      tokenProvider: StubTokenProvider(result: .success("secret-token")), transport: transport, owners: ["acme"],
+      reviewRequestScope: .directOnly)
+    _ = try await directOnlyClient.fetch(now: now)
+    let summary = try variables(containing: "requestedQuery", in: transport)
+    #expect(summary["requestedQuery"] as? String == "is:pr is:open user-review-requested:@me archived:false org:acme")
+  }
+
   @Test func authoredSearchAsksForASmallPage() async throws {
     let fixtureData = try fixture("github-search.json")
     let transport = StubTransport { _ in (fixtureData, 200) }

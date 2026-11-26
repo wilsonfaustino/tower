@@ -76,10 +76,15 @@ public struct GitHubClient: Sendable {
   private let tokenProvider: GitHubTokenProvider
   private let transport: HTTPTransport
   private let ownerQualifiers: String
+  private let reviewRequestScope: ReviewRequestScope
 
-  public init(tokenProvider: GitHubTokenProvider, transport: HTTPTransport, owners: [String] = []) {
+  public init(
+    tokenProvider: GitHubTokenProvider, transport: HTTPTransport, owners: [String] = [],
+    reviewRequestScope: ReviewRequestScope = .directAndTeam
+  ) {
     self.tokenProvider = tokenProvider
     self.transport = transport
+    self.reviewRequestScope = reviewRequestScope
     ownerQualifiers = owners
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter(isValidGitHubLogin)
@@ -94,7 +99,7 @@ public struct GitHubClient: Sendable {
     let recentlyMergedStart = Calendar.current.date(byAdding: .day, value: -recentlyMergedDays, to: now) ?? now
     let recentlyMergedSince = Self.timestampFormatter.string(from: Calendar.current.startOfDay(for: recentlyMergedStart))
     let summaryVariables = [
-      "requestedQuery": "is:pr is:open review-requested:@me archived:false\(ownerQualifiers)",
+      "requestedQuery": "is:pr is:open \(reviewRequestScope.searchQualifier) archived:false\(ownerQualifiers)",
       "reviewedQuery": "is:pr reviewed-by:@me -author:@me updated:>=\(today)\(ownerQualifiers)",
       "mergedQuery": "is:pr author:@me merged:>=\(today)\(ownerQualifiers)",
       "recentlyMergedQuery": "is:pr author:@me is:merged merged:>=\(recentlyMergedSince) sort:updated-desc\(ownerQualifiers)",

@@ -10,12 +10,13 @@ public struct QueueInput: Sendable {
   public var dismissedPullRequests: Set<PullRequestDismissal>
   public var mergedPullRequests: [MergedPullRequest]
   public var teamAuthorFilters: TeamAuthorFilters
+  public var reviewRequestScope: ReviewRequestScope
 
   public init(
     viewerLogin: String, authoredPullRequests: [PullRequest], reviewRequests: [PullRequest], jiraTickets: [JiraTicket],
     pipelines: [Pipeline], dismissedPipelines: Set<PipelineDismissal> = [],
     dismissedPullRequests: Set<PullRequestDismissal> = [], mergedPullRequests: [MergedPullRequest] = [],
-    teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
+    teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(), reviewRequestScope: ReviewRequestScope = .directAndTeam
   ) {
     self.viewerLogin = viewerLogin
     self.authoredPullRequests = authoredPullRequests
@@ -26,6 +27,7 @@ public struct QueueInput: Sendable {
     self.dismissedPullRequests = dismissedPullRequests
     self.mergedPullRequests = mergedPullRequests
     self.teamAuthorFilters = teamAuthorFilters
+    self.reviewRequestScope = reviewRequestScope
   }
 }
 
@@ -57,7 +59,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   }
 
   let openReviewRequests = input.reviewRequests.filter {
-    isOpenReviewRequest($0, viewerLogin: input.viewerLogin, teamAuthorFilters: input.teamAuthorFilters)
+    isOpenReviewRequest(
+      $0, viewerLogin: input.viewerLogin, teamAuthorFilters: input.teamAuthorFilters,
+      reviewRequestScope: input.reviewRequestScope)
       && !input.dismissedPullRequests.contains($0.dismissal)
   }
   for pullRequest in openReviewRequests where !pullRequest.authorIsBot {
@@ -113,9 +117,13 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
 }
 
 // The search also matches team requests, which stay after the viewer approves. A direct request always shows.
-func isOpenReviewRequest(_ pullRequest: PullRequest, viewerLogin: String, teamAuthorFilters: TeamAuthorFilters) -> Bool {
+func isOpenReviewRequest(
+  _ pullRequest: PullRequest, viewerLogin: String, teamAuthorFilters: TeamAuthorFilters,
+  reviewRequestScope: ReviewRequestScope
+) -> Bool {
   pullRequest.requestedReviewerLogins.contains(viewerLogin)
-    || (pullRequest.viewerLatestReviewState != .approved && teamAuthorFilters.allows(pullRequest))
+    || (reviewRequestScope == .directAndTeam && pullRequest.viewerLatestReviewState != .approved
+      && teamAuthorFilters.allows(pullRequest))
 }
 
 extension PullRequest {

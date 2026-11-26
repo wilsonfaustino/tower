@@ -35,10 +35,11 @@ private func snapshot(authored: [PullRequest] = [], reviewRequests: [PullRequest
 
 private func githubEvents(
   previous: GitHubSnapshot, current: GitHubSnapshot, dismissed: Set<PullRequestDismissal> = [],
-  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters()
+  teamAuthorFilters: TeamAuthorFilters = TeamAuthorFilters(), reviewRequestScope: ReviewRequestScope = .directAndTeam
 ) -> [NotificationEvent] {
   notificationEvents(
-    previous: previous, current: current, dismissedPullRequests: dismissed, teamAuthorFilters: teamAuthorFilters)
+    previous: previous, current: current, dismissedPullRequests: dismissed, teamAuthorFilters: teamAuthorFilters,
+    reviewRequestScope: reviewRequestScope)
 }
 
 private func pipeline(
@@ -179,6 +180,13 @@ struct ReviewRequestEventTests {
     let events = githubEvents(
       previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]),
       teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
+    #expect(events.isEmpty)
+  }
+
+  @Test func teamRequestUnderDirectOnlyGivesNoEvent() {
+    let teamRequest = pullRequest(requestedReviewerLogins: [], requestedTeamSlugs: ["web"])
+    let events = githubEvents(
+      previous: snapshot(), current: snapshot(reviewRequests: [teamRequest]), reviewRequestScope: .directOnly)
     #expect(events.isEmpty)
   }
 
