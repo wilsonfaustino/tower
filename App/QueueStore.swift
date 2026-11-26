@@ -58,7 +58,7 @@ enum GitHubSettingsKeys {
   // Returns the sorted logins with the typed login added, or nil when the typed text is not a valid login.
   static func logins(_ logins: [String], adding typedLogin: String) -> [String]? {
     let login = typedLogin.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard isValidGitHubLogin(login) else { return nil }
+    guard isValidGitHubUserLogin(login) else { return nil }
     return Set(logins).union([login]).sorted()
   }
 }

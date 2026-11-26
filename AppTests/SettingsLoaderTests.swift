@@ -93,9 +93,13 @@ struct GitHubSettingsLoaderTests {
     #expect(GitHubSettingsKeys.logins(["rui"], adding: "  Ana-2 \n") == ["ana-2", "rui"])
   }
 
-  @Test(arguments: ["", "   ", "bad login", "evil:qualifier", "under_score"])
+  @Test(arguments: ["", "   ", "bad login", "evil:qualifier"])
   func addingInvalidLoginReturnsNil(typedLogin: String) {
     #expect(GitHubSettingsKeys.logins(["rui"], adding: typedLogin) == nil)
+  }
+
+  @Test func addingManagedUserLoginKeepsTheUnderscore() {
+    #expect(GitHubSettingsKeys.logins([], adding: "ana_acme") == ["ana_acme"])
   }
 
   @Test func addingKnownLoginKeepsOneCopy() {

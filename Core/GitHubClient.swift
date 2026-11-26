@@ -59,9 +59,14 @@ public struct GitHubSnapshot: Codable, Sendable, Equatable {
   }
 }
 
-// A user or organization login. It also keeps search qualifiers out of a query built from it.
+// An organization login. It also keeps search qualifiers out of a query built from it.
 public func isValidGitHubLogin(_ text: String) -> Bool {
   !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+}
+
+// A user login. Enterprise Managed User logins add "_" and a short code, for example "ana_acme".
+public func isValidGitHubUserLogin(_ text: String) -> Bool {
+  !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
 }
 
 public struct GitHubClient: Sendable {
