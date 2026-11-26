@@ -285,6 +285,10 @@ struct UndoableDismissal: Equatable {
     async let circleciResult = Result { () async throws(SourceFailure) -> [Pipeline] in try await circleciClient.fetch(now: now) }
 
     switch await githubResult {
+    case .success where self.reviewRequestScope != reviewRequestScope:
+      // The scope changed during the fetch, so this result is out of date. It must not replace the cache, prune
+      // dismissals or post. The queued refresh fetches the new scope.
+      break
     case .success(let snapshot):
       githubSnapshot = snapshot
       githubFetchedAt = now
@@ -299,10 +303,7 @@ struct UndoableDismissal: Equatable {
         dismissedPullRequests = keptPullRequestDismissals
         DismissalKeys.save(keptPullRequestDismissals, key: DismissalKeys.dismissedPullRequests, defaults: defaults)
       }
-      if self.reviewRequestScope != reviewRequestScope {
-        // The scope changed during the fetch. The next refresh sets a new baseline for the new scope.
-        githubNotificationBaseline = nil
-      } else if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
+      if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
         baseline.reviewRequestScope == reviewRequestScope, baseline.snapshot.viewerLogin == snapshot.viewerLogin
       {
         post(

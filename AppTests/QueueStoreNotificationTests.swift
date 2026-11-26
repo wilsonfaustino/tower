@@ -72,8 +72,10 @@ private final class GatedGitHubTransport: HTTPTransport, @unchecked Sendable {
   private let gate: AsyncStream<Void>
   let openGate: AsyncStream<Void>.Continuation
   private let dataWithoutReviewRequests: Data
+  private let failsFollowUpFetch: Bool
 
-  init() throws {
+  init(failsFollowUpFetch: Bool = false) throws {
+    self.failsFollowUpFetch = failsFollowUpFetch
     (gate, openGate) = AsyncStream<Void>.makeStream()
     var response = try #require(try JSONSerialization.jsonObject(with: fixture("github-search.json")) as? [String: Any])
     var data = try #require(response["data"] as? [String: Any])
@@ -98,6 +100,7 @@ private final class GatedGitHubTransport: HTTPTransport, @unchecked Sendable {
     if summaryCount == 2 && body.contains("requestedQuery") {
       for await _ in gate {}
     }
+    if summaryCount >= 3 && failsFollowUpFetch { throw URLError(.notConnectedToInternet) }
     return (try githubFixture(answering: request), response)
   }
 }
@@ -334,6 +337,20 @@ private final class SettingsBox: @unchecked Sendable {
     #expect(transport.summaryBodies.count == 3)
     #expect(transport.summaryBodies.last?.contains("user-review-requested:@me") == true)
     #expect(notifier.postedEvents.isEmpty)
+  }
+
+  @Test func fetchForAnOldScopeDoesNotReplaceTheSnapshotWhenTheFollowUpFails() async throws {
+    let transport = try GatedGitHubTransport(failsFollowUpFetch: true)
+    let store = makeStore(transport: transport, notifier: FakeNotifier())
+    await store.refresh()
+    let staleRefresh = Task { await store.refresh() }
+    for _ in 0..<200 where transport.summaryBodies.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    transport.openGate.finish()
+    await staleRefresh.value
+    #expect(transport.summaryBodies.count == 3)
+    #expect(store.githubSnapshot?.reviewRequests.isEmpty == true)
   }
 
   @Test func pullRequestMissingFromOneResponsePostsNothingWhenItReturns() async throws {
