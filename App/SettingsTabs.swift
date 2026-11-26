@@ -131,6 +131,8 @@ struct SettingsGitHubTab: View {
       }
       SettingsDivider()
       GitHubOrganizationsField()
+      SettingsDivider()
+      GitHubTeamFiltersField(store: store)
     }
   }
 }
