@@ -145,7 +145,7 @@ private struct DemoFactory {
   var typicalReviews: [PullRequest] {
     [
       pullRequest("demo-org/api", 128, "Add keychain migration for Jira token", author: "alice", hoursAgo: 30, reviewers: [DemoScenario.viewerLogin]),
-      pullRequest("demo-org/web", 301, "Move settings into a sheet", author: "bruno", hoursAgo: 3, reviewers: [], teams: ["frontend"]),
+      pullRequest("demo-org/web", 301, "Move settings into a sheet", author: "bruno", hoursAgo: 3, reviewers: [], teams: ["demo-org/frontend"]),
       pullRequest("demo-org/api", 501, "build(deps): bump flask from 2.3.3 to 3.1.3", author: "dependabot[bot]", isBot: true, hoursAgo: 200, reviewers: [DemoScenario.viewerLogin]),
       pullRequest("demo-org/web", 502, "build(deps): bump vite from 5.4.0 to 6.0.1", author: "dependabot[bot]", isBot: true, hoursAgo: 120, reviewers: [DemoScenario.viewerLogin]),
       pullRequest("demo-org/infra", 503, "chore(deps): bump urllib3 from 2.0.7 to 2.7.0", author: "dependabot[bot]", isBot: true, hoursAgo: 90, reviewers: [DemoScenario.viewerLogin]),
@@ -164,7 +164,7 @@ private struct DemoFactory {
   var manyTeamReviews: [PullRequest] {
     let titles = ["Split the sync worker", "Add retry budget to the HTTP client", "Log slow GraphQL queries", "Remove the legacy importer", "Show stale data age in the header", "Paginate Jira search", "Batch keychain reads", "Trim the release notes script"]
     return titles.enumerated().map { index, title in
-      pullRequest("demo-org/platform", 700 + index, title, author: "carol", hoursAgo: Double(2 + index * 3), reviewers: [], teams: ["platform"])
+      pullRequest("demo-org/platform", 700 + index, title, author: "carol", hoursAgo: Double(2 + index * 3), reviewers: [], teams: ["demo-org/platform"])
     }
   }
 

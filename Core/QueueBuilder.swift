@@ -179,10 +179,11 @@ private func reviewItem(_ pullRequest: PullRequest, viewerLogin: String, now: Da
     isDirectRequest && waitingSeconds >= urgentReviewAge
     ? Badge(text: "Waiting \(Int(waitingSeconds / 86400))d", variant: .urgent)
     : nil
-  let teamSlug = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first
+  // The row is short, so it drops the "org/" part of the team key.
+  let teamName = isDirectRequest ? nil : pullRequest.requestedTeamSlugs.first?.split(separator: "/").last
   return QueueItem(
     id: pullRequest.itemId, title: pullRequest.title, tag: pullRequest.repository,
-    meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamSlug.map { "team \($0)" },
+    meta: "\(pullRequest.author) · \(shortAge(from: requestedAt, now: now))", metaTeam: teamName.map { "team \($0)" },
     url: pullRequest.url, symbol: .review, badge: badge, sortDate: requestedAt, reference: "#\(pullRequest.number)",
     details: pullRequest.details, dismissal: .pullRequest(pullRequest.dismissal))
 }

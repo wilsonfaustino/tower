@@ -261,7 +261,7 @@ struct QueueBuilderTests {
 
   @Test func teamReviewRequestShowsTeamInMeta() {
     let sections = queue(reviewRequests: [
-      pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)
+      pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["acme/web-core"], reviewRequestedHoursAgo: 30)
     ])
     #expect(items(sections, .review).first?.meta == "app-web · Ana · 1d · team web-core")
   }
@@ -270,7 +270,7 @@ struct QueueBuilderTests {
   @Test func pullRequestRowsSplitRepoAndTeamFromRestOfMeta() {
     let sections = queue(
       authored: [pullRequest(repository: "app-api", number: 45, updatedHoursAgo: 3, reviewDecision: .reviewRequired, checkState: nil)],
-      reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["web-core"], reviewRequestedHoursAgo: 30)])
+      reviewRequests: [pullRequest(number: 2179, author: "Ana", requestedTeamSlugs: ["acme/web-core"], reviewRequestedHoursAgo: 30)])
     let authoredItem = items(sections, .waiting).first
     let reviewItem = items(sections, .review).first
     #expect(authoredItem?.tag == "app-api")
@@ -1248,6 +1248,16 @@ struct TeamAuthorFilterTests {
       ],
       teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": []]))
     #expect(items(sections, .review).isEmpty)
+  }
+
+  @Test func filterOnATeamHidesOnlyThatOrganizationsTeamOfTheSameName() {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(owner: "acme", number: 1, author: "rui", requestedTeamSlugs: ["acme/frontend"], reviewRequestedHoursAgo: 2),
+        pullRequest(owner: "globex", number: 2, author: "rui", requestedTeamSlugs: ["globex/frontend"], reviewRequestedHoursAgo: 2),
+      ],
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["acme/frontend": ["ana"]]))
+    #expect(items(sections, .review).map(\.id) == ["pr:app-web#2"])
   }
 
   @Test func loginMatchIgnoresCase() {

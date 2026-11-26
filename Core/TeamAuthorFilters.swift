@@ -1,6 +1,6 @@
 import Foundation
 
-// Team slug to the PR authors whose team review requests show. A team with no entry has no filter.
+// Team, as "org/team", to the PR authors whose team review requests show. A team with no entry has no filter.
 public struct TeamAuthorFilters: Hashable, Sendable {
   // Logins are lowercased.
   public var allowedAuthorsByTeam: [String: Set<String>]

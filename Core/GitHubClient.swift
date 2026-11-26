@@ -252,11 +252,11 @@ private let pullRequestFieldsFragment = """
     author { __typename login }
     commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 1) {
       checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
-    reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
+    reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { combinedSlug } } } }
     reviews(first: 1) { totalCount }
     viewerLatestReview { state }
     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 25) { nodes { ... on ReviewRequestedEvent {
-      createdAt requestedReviewer { ... on User { login } ... on Team { slug } } } } }
+      createdAt requestedReviewer { ... on User { login } ... on Team { combinedSlug } } } } }
   }
   """
 
@@ -348,7 +348,7 @@ private struct PullRequestNode: Decodable {
   struct ReviewRequest: Decodable { var requestedReviewer: Reviewer? }
   struct Reviewer: Decodable {
     var login: String?
-    var slug: String?
+    var combinedSlug: String?
   }
   struct TotalCount: Decodable { var totalCount: Int }
   // GitHub can return a null event, for example one the token cannot read.
@@ -408,7 +408,7 @@ private struct PullRequestNode: Decodable {
     let viewerRequestEvent = requestEvents.last { event in
       isDirectRequest
         ? event.requestedReviewer?.login == viewerLogin
-        : event.requestedReviewer?.slug.map { reviewers.compactMap(\.slug).contains($0) } == true
+        : event.requestedReviewer?.combinedSlug.map { reviewers.compactMap(\.combinedSlug).contains($0) } == true
     }
     let requiredApprovalCounts = baseRef?.rules?.nodes.compactMap { $0.parameters?.requiredApprovingReviewCount } ?? []
     return PullRequest(
@@ -418,7 +418,7 @@ private struct PullRequestNode: Decodable {
       checkState: rollup.flatMap { CheckState(rawValue: $0.state) },
       failedCheckCount: failedCheckRuns + failedStatusContexts,
       additions: additions ?? 0, deletions: deletions ?? 0,
-      requestedReviewerLogins: reviewers.compactMap(\.login), requestedTeamSlugs: reviewers.compactMap(\.slug),
+      requestedReviewerLogins: reviewers.compactMap(\.login), requestedTeamSlugs: reviewers.compactMap(\.combinedSlug),
       reviewCount: reviews?.totalCount ?? 0, reviewRequestedAt: requestEvents.last?.createdAt,
       unresolvedThreadCount: reviewThreads?.nodes.filter { !$0.isResolved }.count ?? 0,
       hasMoreThreadsThanFetched: (reviewThreads?.totalCount ?? 0) > reviewThreadPageSize,
