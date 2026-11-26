@@ -139,6 +139,22 @@ func effectiveStatusFilter(_ chosenStatus: StatusDot?, legendStatuses: [StatusDo
   return chosenStatus
 }
 
+enum StatusFilterStep: Equatable, Sendable {
+  case next, previous, clear
+}
+
+// Next and previous go round the legend order with "no filter" in the cycle: none, first, ..., last, none.
+func steppedStatusFilter(_ current: StatusDot?, step: StatusFilterStep, legendStatuses: [StatusDot]) -> StatusDot? {
+  guard legendStatuses.count > 1 else { return nil }
+  let cycle: [StatusDot?] = [nil] + legendStatuses
+  let currentIndex = cycle.firstIndex(of: effectiveStatusFilter(current, legendStatuses: legendStatuses)) ?? 0
+  switch step {
+  case .next: return cycle[(currentIndex + 1) % cycle.count]
+  case .previous: return cycle[(currentIndex + cycle.count - 1) % cycle.count]
+  case .clear: return nil
+  }
+}
+
 // A matching group keeps all its children. A section with no matching rows leaves the list.
 func filteredSections(_ sections: [QueueSection], status: StatusDot?) -> [QueueSection] {
   guard let status else { return sections }
@@ -218,20 +234,24 @@ func swipeOutcome(
 
 enum PanelInput: Equatable, Sendable {
   case click, commandClick, returnKey, space, escape, upArrow, downArrow, copy, rightClick, dismiss, undo
-  case switchPanelView, commandUpArrow, commandDownArrow, refresh
+  case switchPanelView, commandUpArrow, commandDownArrow, refresh, stepStatusFilter(StatusFilterStep)
 }
 
 // The keys that `panelInput` reads by the character they type, as Cmd-C does, so they follow the keyboard layout.
-let panelCharacterKeys: Set<KeyEquivalent> = ["r"]
+let panelCharacterKeys: Set<KeyEquivalent> = ["r", "]", "[", "0"]
 
 // The arrows act with any modifiers. With Command they go to the first or last row.
-// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does.
+// Cmd-R needs Command alone (Caps Lock aside), as Cmd-Z does. The legend keys need no Control, Option or Command.
 func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput? {
   let hasCommand = modifiers.contains(.command)
+  let isPlain = modifiers.isDisjoint(with: [.control, .option, .command])
   switch key {
   case .upArrow: return hasCommand ? .commandUpArrow : .upArrow
   case .downArrow: return hasCommand ? .commandDownArrow : .downArrow
   case "r": return modifiers.subtracting(.capsLock) == .command ? .refresh : nil
+  case "]": return isPlain ? .stepStatusFilter(.next) : nil
+  case "[": return isPlain ? .stepStatusFilter(.previous) : nil
+  case "0": return isPlain ? .stepStatusFilter(.clear) : nil
   default: return nil
   }
 }
@@ -239,13 +259,15 @@ func panelInput(for key: KeyEquivalent, modifiers: EventModifiers) -> PanelInput
 enum PanelAction: Equatable, Sendable {
   case openAndClosePanel, openInBackground, showPopover, closePopover, closePopoverAndMoveSelection(SelectionMove)
   case copyLink, showContextMenu, closePanel, ignore, dismiss, undo, switchPanelView, refresh
+  case stepStatusFilter(StatusFilterStep)
 }
 
 // Click, Cmd-click and Return work on every row. Space and Cmd-C act only on rows with PR details.
 // Cmd-Delete acts only on dismissible rows (failed pipelines, single review requests). Right-click acts on both kinds.
+// The legend keys act only when they change the filter, so they do nothing while the legend does not filter.
 func panelAction(
   for input: PanelInput, selectedItemHasDetails: Bool, isPopoverOpen: Bool, selectedItemIsDismissible: Bool = false,
-  canUndo: Bool = false
+  canUndo: Bool = false, statusFilter: StatusDot? = nil, legendStatuses: [StatusDot] = []
 ) -> PanelAction {
   switch input {
   case .click, .returnKey: return .openAndClosePanel
@@ -264,6 +286,9 @@ func panelAction(
   case .undo: return canUndo ? .undo : .ignore
   case .switchPanelView: return .switchPanelView
   case .refresh: return .refresh
+  case .stepStatusFilter(let step):
+    let changesFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatuses) != statusFilter
+    return changesFilter ? .stepStatusFilter(step) : .ignore
   }
 }
 
@@ -275,6 +300,7 @@ struct PanelKeyOutcome: Equatable {
   var undoesLastDismissal = false
   var switchesPanelView = false
   var refreshes = false
+  var statusFilterStep: StatusFilterStep?
   var isHandled = true
 }
 
@@ -300,6 +326,9 @@ func panelKeyOutcome(for action: PanelAction, selectedItemId: String?, popoverIt
   // The store ignores a refresh while one runs.
   case .refresh:
     return PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true)
+  // As with a legend click, the popover closes only when the filter hides its row.
+  case .stepStatusFilter(let step):
+    return PanelKeyOutcome(popoverItemId: popoverItemId, statusFilterStep: step)
   case .closePanel, .ignore, .openAndClosePanel, .openInBackground, .showContextMenu:
     return PanelKeyOutcome(popoverItemId: popoverItemId, isHandled: false)
   }

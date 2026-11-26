@@ -596,6 +596,66 @@ struct StatusFilterTests {
     #expect(chosenStatus == nil)
   }
 
+  @Test func nextGoesThroughTheLegendThenBackToNoFilter() {
+    let legend: [StatusDot] = [.failing, .urgent, .pending]
+    var filter: StatusDot?
+    var seen: [StatusDot?] = []
+    for _ in 0..<4 {
+      filter = steppedStatusFilter(filter, step: .next, legendStatuses: legend)
+      seen.append(filter)
+    }
+    #expect(seen == [.failing, .urgent, .pending, nil])
+  }
+
+  @Test func previousGoesThroughTheLegendBackwardsThenBackToNoFilter() {
+    let legend: [StatusDot] = [.failing, .urgent, .pending]
+    var filter: StatusDot?
+    var seen: [StatusDot?] = []
+    for _ in 0..<4 {
+      filter = steppedStatusFilter(filter, step: .previous, legendStatuses: legend)
+      seen.append(filter)
+    }
+    #expect(seen == [.pending, .urgent, .failing, nil])
+  }
+
+  @Test(arguments: [nil, StatusDot.urgent, .pending])
+  func clearGivesNoFilter(current: StatusDot?) {
+    #expect(steppedStatusFilter(current, step: .clear, legendStatuses: [.urgent, .pending]) == nil)
+  }
+
+  @Test(arguments: [StatusFilterStep.next, .previous, .clear])
+  func aLegendThatDoesNotFilterGivesNoFilter(step: StatusFilterStep) {
+    #expect(steppedStatusFilter(nil, step: step, legendStatuses: [.pending]) == nil)
+    #expect(steppedStatusFilter(.pending, step: step, legendStatuses: [.pending]) == nil)
+    #expect(steppedStatusFilter(nil, step: step, legendStatuses: []) == nil)
+  }
+
+  // A chosen status that left the legend counts as no filter, so next starts from the first status.
+  @Test func aStatusThatLeftTheLegendStepsFromNoFilter() {
+    #expect(steppedStatusFilter(.failing, step: .next, legendStatuses: [.urgent, .pending]) == .urgent)
+    #expect(steppedStatusFilter(.failing, step: .previous, legendStatuses: [.urgent, .pending]) == .pending)
+  }
+
+  @Test func legendKeysActOnlyWhenTheyChangeTheFilter() {
+    func action(_ step: StatusFilterStep, filter: StatusDot?, legend: [StatusDot]) -> PanelAction {
+      panelAction(
+        for: .stepStatusFilter(step), selectedItemHasDetails: false, isPopoverOpen: false, statusFilter: filter,
+        legendStatuses: legend)
+    }
+    #expect(action(.next, filter: nil, legend: [.urgent, .pending]) == .stepStatusFilter(.next))
+    #expect(action(.previous, filter: .urgent, legend: [.urgent, .pending]) == .stepStatusFilter(.previous))
+    #expect(action(.clear, filter: .urgent, legend: [.urgent, .pending]) == .stepStatusFilter(.clear))
+    #expect(action(.clear, filter: nil, legend: [.urgent, .pending]) == .ignore)
+    #expect(action(.next, filter: nil, legend: [.pending]) == .ignore)
+    #expect(action(.previous, filter: nil, legend: []) == .ignore)
+  }
+
+  @Test(arguments: [nil, "a"])
+  func aLegendStepKeepsThePopover(popoverItemId: String?) {
+    let outcome = panelKeyOutcome(for: .stepStatusFilter(.next), selectedItemId: "a", popoverItemId: popoverItemId)
+    #expect(outcome == PanelKeyOutcome(popoverItemId: popoverItemId, statusFilterStep: .next))
+  }
+
   @Test func noFilterKeepsTheSections() {
     #expect(filteredSections(filterSections, status: nil) == filterSections)
   }
@@ -720,6 +780,20 @@ struct PanelKeyInputTests {
     let popoverItemId = isPopoverOpen ? "a" : nil
     let outcome = panelKeyOutcome(for: .refresh, selectedItemId: "a", popoverItemId: popoverItemId)
     #expect(outcome == PanelKeyOutcome(popoverItemId: popoverItemId, refreshes: true))
+  }
+
+  @Test(arguments: [EventModifiers(), .shift, .capsLock, .numericPad])
+  func legendKeysStepTheFilterWithoutCommandControlOrOption(modifiers: EventModifiers) {
+    #expect(panelInput(for: "]", modifiers: modifiers) == .stepStatusFilter(.next))
+    #expect(panelInput(for: "[", modifiers: modifiers) == .stepStatusFilter(.previous))
+    #expect(panelInput(for: "0", modifiers: modifiers) == .stepStatusFilter(.clear))
+  }
+
+  @Test(arguments: [EventModifiers.command, .control, .option])
+  func legendKeysWithCommandControlOrOptionGiveNoInput(modifiers: EventModifiers) {
+    #expect(panelInput(for: "]", modifiers: modifiers) == nil)
+    #expect(panelInput(for: "[", modifiers: modifiers) == nil)
+    #expect(panelInput(for: "0", modifiers: modifiers) == nil)
   }
 
   @Test func otherKeysGiveNoInput() {

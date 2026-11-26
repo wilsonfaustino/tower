@@ -419,13 +419,17 @@ struct PanelView: View {
     let selectedItem = selectableItems.first(where: { $0.id == selectedItemId })
     let action = panelAction(
       for: input, selectedItemHasDetails: selectedItem?.details != nil, isPopoverOpen: popoverItemId != nil,
-      selectedItemIsDismissible: selectedItem?.dismissal != nil, canUndo: store.lastDismissal != nil)
+      selectedItemIsDismissible: selectedItem?.dismissal != nil, canUndo: store.lastDismissal != nil,
+      statusFilter: statusFilter, legendStatuses: legendStatusList)
     let outcome = panelKeyOutcome(for: action, selectedItemId: selectedItemId, popoverItemId: popoverItemId)
     popoverItemId = outcome.popoverItemId
     if outcome.copiesSelectedLink, let selectedItem { writeLink(selectedItem.url, to: .general) }
     if outcome.dismissesSelectedItem, let selectedItem { dismiss(selectedItem) }
     if outcome.undoesLastDismissal { store.undoLastDismissal() }
     if outcome.refreshes { Task { await store.refresh() } }
+    if let step = outcome.statusFilterStep {
+      chosenStatusFilter = steppedStatusFilter(statusFilter, step: step, legendStatuses: legendStatusList)
+    }
     // The filter resets in the same update as the layout, so the old filter cannot hide the selected row.
     if outcome.switchesPanelView {
       chosenStatusFilter = nil
