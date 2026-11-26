@@ -602,6 +602,22 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     store.teamAuthorLogins = ["acme/platform": []]
     #expect(store.filterableTeamSlugs == ["acme/platform", "acme/web-core"])
   }
+
+  @Test func teamFromACacheWithoutOrganizationsIsNotListed() async throws {
+    let cacheDirectory = temporaryDirectory()
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    await store.refresh()
+    let cacheFile = cacheDirectory.appendingPathComponent("github.json")
+    let cachedText = try String(contentsOf: cacheFile, encoding: .utf8)
+    // JSONEncoder writes "/" as "\/".
+    try cachedText.replacingOccurrences(of: #"acme\/web-core"#, with: "web-core")
+      .write(to: cacheFile, atomically: true, encoding: .utf8)
+
+    let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory)
+    relaunchedStore.loadCache()
+    #expect(relaunchedStore.githubSnapshot?.reviewRequests.contains { $0.requestedTeamSlugs == ["web-core"] } == true)
+    #expect(relaunchedStore.filterableTeamSlugs.isEmpty)
+  }
 }
 
 @MainActor struct QueueStoreReviewRequestScopeTests {

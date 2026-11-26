@@ -178,8 +178,9 @@ struct UndoableDismissal: Equatable {
   }
 
   // A team with a filter stays listed when no request for it is open, so its filter can still change.
+  // A cache from before org/team keys holds bare slugs that no filter can match, so they stay out of the list.
   var filterableTeamSlugs: [String] {
-    let requestedTeamSlugs = (githubSnapshot?.reviewRequests ?? []).flatMap(\.requestedTeamSlugs)
+    let requestedTeamSlugs = (githubSnapshot?.reviewRequests ?? []).flatMap(\.requestedTeamSlugs).filter { $0.contains("/") }
     return Set(requestedTeamSlugs).union(teamAuthorLogins.keys).sorted()
   }
 
