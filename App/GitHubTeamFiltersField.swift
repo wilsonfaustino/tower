@@ -8,40 +8,49 @@ struct GitHubTeamFiltersField: View {
 
   var body: some View {
     SettingsRow(label: "Team filters") {
-      let teamSlugs = store.filterableTeamSlugs
-      if teamSlugs.isEmpty {
-        SettingsCaption(text: "Tower lists a team here after it sees a review request for that team.")
-      } else {
-        ForEach(teamSlugs, id: \.self) { teamSlug in
-          VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            HStack {
-              Text(teamSlug).fontWeight(.semibold)
-              Spacer()
-              Picker(teamSlug, selection: isFiltered(teamSlug)) {
-                Text("Everyone").tag(false)
-                Text("Only these people").tag(true)
-              }
-              .labelsHidden()
-              .fixedSize()
+      teamFilters
+        .disabled(isDirectOnly)
+        .opacity(isDirectOnly ? 0.5 : 1)
+    }
+  }
+
+  // Direct only sends no team requests, so team filters have nothing to filter.
+  private var isDirectOnly: Bool { store.reviewRequestScope == .directOnly }
+
+  @ViewBuilder private var teamFilters: some View {
+    let teamSlugs = store.filterableTeamSlugs
+    if teamSlugs.isEmpty {
+      SettingsCaption(text: "Tower lists a team here after it sees a review request for that team.")
+    } else {
+      ForEach(teamSlugs, id: \.self) { teamSlug in
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+          HStack {
+            Text(teamSlug).fontWeight(.semibold)
+            Spacer()
+            Picker(teamSlug, selection: isFiltered(teamSlug)) {
+              Text("Everyone").tag(false)
+              Text("Only these people").tag(true)
             }
-            if let logins = store.teamAuthorLogins[teamSlug] {
-              FlowLayout(spacing: Theme.Spacing.xs) {
-                ForEach(logins, id: \.self) { login in
-                  loginChip(login, teamSlug: teamSlug)
-                }
-                if addingTeamSlug == teamSlug {
-                  loginField(teamSlug: teamSlug)
-                } else {
-                  addLoginButton(teamSlug: teamSlug)
-                }
+            .labelsHidden()
+            .fixedSize()
+          }
+          if let logins = store.teamAuthorLogins[teamSlug] {
+            FlowLayout(spacing: Theme.Spacing.xs) {
+              ForEach(logins, id: \.self) { login in
+                loginChip(login, teamSlug: teamSlug)
+              }
+              if addingTeamSlug == teamSlug {
+                loginField(teamSlug: teamSlug)
+              } else {
+                addLoginButton(teamSlug: teamSlug)
               }
             }
           }
-          .padding(.vertical, Theme.Spacing.xs)
-          Divider()
         }
-        SettingsCaption(text: "Teams come from review requests Tower has seen. Direct requests always show.")
+        .padding(.vertical, Theme.Spacing.xs)
+        Divider()
       }
+      SettingsCaption(text: "Teams come from review requests Tower has seen. Direct requests always show.")
     }
   }
 

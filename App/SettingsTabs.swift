@@ -132,7 +132,26 @@ struct SettingsGitHubTab: View {
       SettingsDivider()
       GitHubOrganizationsField()
       SettingsDivider()
+      SettingsRow(label: "Review requests") {
+        Picker("Review requests", selection: reviewRequestScope) {
+          Text("Direct and team").tag(ReviewRequestScope.directAndTeam)
+          Text("Direct only").tag(ReviewRequestScope.directOnly)
+        }
+        .labelsHidden()
+        .fixedSize()
+        SettingsCaption(text: "Direct only shows PRs that ask you by name. Use it for busy repos.")
+      }
       GitHubTeamFiltersField(store: store)
+    }
+  }
+
+  // A new scope sends a new search, so it refreshes at once.
+  private var reviewRequestScope: Binding<ReviewRequestScope> {
+    Binding {
+      store.reviewRequestScope
+    } set: { scope in
+      store.reviewRequestScope = scope
+      Task { await store.refresh() }
     }
   }
 }
