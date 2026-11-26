@@ -34,20 +34,27 @@ enum CircleCISettingsKeys {
 
 enum GitHubSettingsKeys {
   static let organizations = "githubOrganizations"
-  // The raw Settings text per team slug. Tower parses it when it builds the queue.
+  // JSON for team slug to its allowed PR author logins.
   static let teamAuthorFilters = "githubTeamAuthorFilters"
 
   static func loadOrganizations(defaults: UserDefaults = .standard) -> [String] {
     (defaults.string(forKey: organizations) ?? "").split(whereSeparator: \.isNewline).map(String.init)
   }
 
-  static func loadTeamAuthorFilterText(defaults: UserDefaults) -> [String: String] {
+  static func loadTeamAuthorLogins(defaults: UserDefaults) -> [String: [String]] {
     guard let data = defaults.data(forKey: teamAuthorFilters) else { return [:] }
-    return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    return (try? JSONDecoder().decode([String: [String]].self, from: data)) ?? [:]
   }
 
-  static func saveTeamAuthorFilterText(_ textByTeam: [String: String], defaults: UserDefaults) {
-    defaults.set(try? JSONEncoder().encode(textByTeam), forKey: teamAuthorFilters)
+  static func saveTeamAuthorLogins(_ loginsByTeam: [String: [String]], defaults: UserDefaults) {
+    defaults.set(try? JSONEncoder().encode(loginsByTeam), forKey: teamAuthorFilters)
+  }
+
+  // Returns the sorted logins with the typed login added, or nil when the typed text is not a valid login.
+  static func logins(_ logins: [String], adding typedLogin: String) -> [String]? {
+    let login = typedLogin.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard isValidGitHubLogin(login) else { return nil }
+    return Set(logins).union([login]).sorted()
   }
 }
 
@@ -94,10 +101,11 @@ struct UndoableDismissal: Equatable {
   private(set) var dismissedPipelines: Set<PipelineDismissal>
   private(set) var dismissedPullRequests: Set<PullRequestDismissal>
   private(set) var lastDismissal: UndoableDismissal?
-  // Team slug to the logins typed in Settings. A team with no entry has no filter.
-  var teamAuthorFilterText: [String: String] {
+  // Team slug to sorted, lowercased PR author logins. A team with no entry has no filter. An empty list hides
+  // every request to that team.
+  var teamAuthorLogins: [String: [String]] {
     didSet {
-      saveTeamAuthorFilterText()
+      saveTeamAuthorLogins()
       rebuild()
     }
   }
@@ -151,16 +159,18 @@ struct UndoableDismissal: Equatable {
     self.undoDuration = undoDuration
     dismissedPipelines = DismissalKeys.load(DismissalKeys.dismissedPipelines, defaults: defaults)
     dismissedPullRequests = DismissalKeys.load(DismissalKeys.dismissedPullRequests, defaults: defaults)
-    teamAuthorFilterText = GitHubSettingsKeys.loadTeamAuthorFilterText(defaults: defaults)
+    teamAuthorLogins = GitHubSettingsKeys.loadTeamAuthorLogins(defaults: defaults)
   }
 
   // A team with a filter stays listed when no request for it is open, so its filter can still change.
   var filterableTeamSlugs: [String] {
     let requestedTeamSlugs = (githubSnapshot?.reviewRequests ?? []).flatMap(\.requestedTeamSlugs)
-    return Set(requestedTeamSlugs).union(teamAuthorFilterText.keys).sorted()
+    return Set(requestedTeamSlugs).union(teamAuthorLogins.keys).sorted()
   }
 
-  private var teamAuthorFilters: TeamAuthorFilters { TeamAuthorFilters(rawLoginsByTeam: teamAuthorFilterText) }
+  private var teamAuthorFilters: TeamAuthorFilters {
+    TeamAuthorFilters(allowedAuthorsByTeam: teamAuthorLogins.mapValues(Set.init))
+  }
 
   var todaySummary: (reviews: Int, merges: Int)? {
     githubSnapshot.map { ($0.reviewsSubmittedToday, $0.mergedToday) }
@@ -381,11 +391,11 @@ struct UndoableDismissal: Equatable {
     rebuild()
   }
 
-  private func saveTeamAuthorFilterText() {
+  private func saveTeamAuthorLogins() {
     #if DEBUG
       if demoScenario != nil { return }
     #endif
-    GitHubSettingsKeys.saveTeamAuthorFilterText(teamAuthorFilterText, defaults: defaults)
+    GitHubSettingsKeys.saveTeamAuthorLogins(teamAuthorLogins, defaults: defaults)
   }
 
   #if DEBUG

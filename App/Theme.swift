@@ -75,6 +75,7 @@ enum Theme {
     nsColor: dynamicColor(
       light: .black.withAlphaComponent(0.04), dark: .white.withAlphaComponent(0.05),
       highContrastLight: .black.withAlphaComponent(0.08), highContrastDark: .white.withAlphaComponent(0.10)))
+  static let loginChipFill = Color.accentColor.opacity(0.22)
   static let cardStroke = Color(
     nsColor: dynamicColor(
       light: .black.withAlphaComponent(0.10), dark: .white.withAlphaComponent(0.10),

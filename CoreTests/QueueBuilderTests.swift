@@ -1252,17 +1252,7 @@ struct TeamAuthorFilterTests {
   @Test func loginMatchIgnoresCase() {
     let sections = queue(
       reviewRequests: [pullRequest(author: "Ana", requestedTeamSlugs: ["web"], reviewRequestedHoursAgo: 2)],
-      teamAuthorFilters: TeamAuthorFilters(rawLoginsByTeam: ["web": "ANA"]))
+      teamAuthorFilters: TeamAuthorFilters(allowedAuthorsByTeam: ["web": ["ana"]]))
     #expect(items(sections, .review).count == 1)
-  }
-
-  @Test func settingsTextDropsBlankAndInvalidLines() {
-    let filters = TeamAuthorFilters(rawLoginsByTeam: ["web": "  Ana  \n\n   \nbad login\nevil:qualifier\nunder_score\nrui-2\n"])
-    #expect(filters.allowedAuthorsByTeam == ["web": ["ana", "rui-2"]])
-  }
-
-  @Test func settingsTextWithNoValidLineKeepsTheTeamFiltered() {
-    let filters = TeamAuthorFilters(rawLoginsByTeam: ["web": "", "platform": " \nnot valid"])
-    #expect(filters.allowedAuthorsByTeam == ["web": [], "platform": []])
   }
 }

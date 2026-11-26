@@ -60,7 +60,7 @@ public struct GitHubSnapshot: Codable, Sendable, Equatable {
 }
 
 // A user or organization login. It also keeps search qualifiers out of a query built from it.
-func isValidGitHubLogin(_ text: String) -> Bool {
+public func isValidGitHubLogin(_ text: String) -> Bool {
   !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
 }
 

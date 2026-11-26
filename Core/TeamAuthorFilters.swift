@@ -9,16 +9,6 @@ public struct TeamAuthorFilters: Hashable, Sendable {
     self.allowedAuthorsByTeam = allowedAuthorsByTeam
   }
 
-  // Parses the Settings text, one login per line. A team keeps its entry when no line is valid, so it hides every request.
-  public init(rawLoginsByTeam: [String: String]) {
-    allowedAuthorsByTeam = rawLoginsByTeam.mapValues { rawLogins in
-      Set(
-        rawLogins.split(whereSeparator: \.isNewline)
-          .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-          .filter(isValidGitHubLogin))
-    }
-  }
-
   // Tower does not know which teams the viewer is on, so a team with no entry has no say. A PR with no filtered
   // team shows.
   // A PR that asks several filtered teams shows if any of them allows its author.

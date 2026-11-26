@@ -587,12 +587,12 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     await store.refresh()
     #expect(reviewItems(store).contains { !$0.children.isEmpty })
 
-    store.teamAuthorFilterText = ["web-core": "ana"]
+    store.teamAuthorLogins = ["web-core": ["ana"]]
     #expect(reviewItems(store).map(\.id) == ["pr:ui-kit#412"])
 
     let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
     relaunchedStore.loadCache()
-    #expect(relaunchedStore.teamAuthorFilterText == ["web-core": "ana"])
+    #expect(relaunchedStore.teamAuthorLogins == ["web-core": ["ana"]])
     #expect(reviewItems(relaunchedStore).map(\.id) == ["pr:ui-kit#412"])
   }
 
@@ -600,7 +600,7 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     let store = makeStore(transport: try routingTransport())
     await store.refresh()
     #expect(store.filterableTeamSlugs == ["web-core"])
-    store.teamAuthorFilterText = ["platform": ""]
+    store.teamAuthorLogins = ["platform": []]
     #expect(store.filterableTeamSlugs == ["platform", "web-core"])
   }
 }
