@@ -619,6 +619,16 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     #expect(relaunchedStore.reviewRequestScope == .directOnly)
   }
 
+  @Test func demoModeDoesNotSaveTheScope() {
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: StubTransport { _ in (Data(), 200) }, defaults: defaults)
+    store.demoScenario = DemoScenario(name: .typical, now: .now)
+    store.reviewRequestScope = .directOnly
+    #expect(defaults.string(forKey: GitHubSettingsKeys.reviewRequestScope) == nil)
+  }
+
   @Test func directOnlyRefreshAsksForRequestsThatNameTheViewer() async throws {
     let transport = try routingTransport()
     let store = makeStore(transport: transport)
