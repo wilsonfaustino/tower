@@ -45,6 +45,9 @@ struct GitHubTeamFiltersField: View {
                 addLoginButton(teamSlug: teamSlug)
               }
             }
+            if logins.isEmpty {
+              SettingsCaption(text: "No one added yet, so Tower hides this team's requests.")
+            }
           }
         }
         .padding(.vertical, Theme.Spacing.xs)
