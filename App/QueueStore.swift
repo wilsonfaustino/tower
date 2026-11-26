@@ -36,9 +36,14 @@ enum GitHubSettingsKeys {
   static let organizations = "githubOrganizations"
   // JSON for team slug to its allowed PR author logins.
   static let teamAuthorFilters = "githubTeamAuthorFilters"
+  static let reviewRequestScope = "githubReviewRequestScope"
 
   static func loadOrganizations(defaults: UserDefaults = .standard) -> [String] {
     (defaults.string(forKey: organizations) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+  }
+
+  static func loadReviewRequestScope(defaults: UserDefaults) -> ReviewRequestScope {
+    defaults.string(forKey: reviewRequestScope).flatMap(ReviewRequestScope.init(rawValue:)) ?? .directAndTeam
   }
 
   static func loadTeamAuthorLogins(defaults: UserDefaults) -> [String: [String]] {
@@ -109,6 +114,13 @@ struct UndoableDismissal: Equatable {
       rebuild()
     }
   }
+  // The next refresh sends the search for the new scope. Until then the cached requests are filtered to it.
+  var reviewRequestScope: ReviewRequestScope {
+    didSet {
+      saveReviewRequestScope()
+      rebuild()
+    }
+  }
   let undoDuration: Duration
   private var undoExpiryTask: Task<Void, Never>?
 
@@ -122,7 +134,8 @@ struct UndoableDismissal: Equatable {
   private let loadEnabledNotificationKinds: () -> Set<NotificationEventKind>
   // Set only by a successful fetch in this app run, never by the cache, so launch does not post old changes.
   // Each baseline keeps the settings it was fetched with. New settings start a new baseline that posts nothing.
-  private var githubNotificationBaseline: (snapshot: GitHubSnapshot, organizations: [String])?
+  private var githubNotificationBaseline:
+    (snapshot: GitHubSnapshot, organizations: [String], reviewRequestScope: ReviewRequestScope)?
   private var circleciNotificationBaseline: (pipelines: [Pipeline], settings: CircleCISettings?)?
   private let defaults: UserDefaults
   private var pollingTask: Task<Void, Never>?
@@ -160,6 +173,7 @@ struct UndoableDismissal: Equatable {
     dismissedPipelines = DismissalKeys.load(DismissalKeys.dismissedPipelines, defaults: defaults)
     dismissedPullRequests = DismissalKeys.load(DismissalKeys.dismissedPullRequests, defaults: defaults)
     teamAuthorLogins = GitHubSettingsKeys.loadTeamAuthorLogins(defaults: defaults)
+    reviewRequestScope = GitHubSettingsKeys.loadReviewRequestScope(defaults: defaults)
   }
 
   // A team with a filter stays listed when no request for it is open, so its filter can still change.
@@ -247,8 +261,11 @@ struct UndoableDismissal: Equatable {
     defer { isRefreshing = false }
     let now = Date()
     let githubOrganizations = loadGitHubOrganizations()
+    let reviewRequestScope = reviewRequestScope
     let circleciSettings = loadCircleCISettings()
-    let githubClient = GitHubClient(tokenProvider: tokenProvider, transport: transport, owners: githubOrganizations)
+    let githubClient = GitHubClient(
+      tokenProvider: tokenProvider, transport: transport, owners: githubOrganizations,
+      reviewRequestScope: reviewRequestScope)
     let jiraClient = JiraClient(settings: loadJiraSettings(), transport: transport)
     let circleciClient = CircleCIClient(settings: circleciSettings, transport: transport)
     async let githubResult = Result { () async throws(SourceFailure) -> GitHubSnapshot in try await githubClient.fetch(now: now) }
@@ -261,22 +278,27 @@ struct UndoableDismissal: Equatable {
       githubFetchedAt = now
       githubStatus = .ok
       try? cache.save(Cached(value: snapshot, fetchedAt: now), name: "github")
-      // Only a successful fetch prunes, so a failed one does not drop every dismissal.
-      let keptPullRequestDismissals = prunedDismissals(dismissedPullRequests, reviewRequests: snapshot.reviewRequests)
+      // Only a successful fetch prunes, so a failed one does not drop every dismissal. A direct only fetch leaves out
+      // team requests, so it does not prune either.
+      let keptPullRequestDismissals =
+        reviewRequestScope == .directAndTeam
+        ? prunedDismissals(dismissedPullRequests, reviewRequests: snapshot.reviewRequests) : dismissedPullRequests
       if keptPullRequestDismissals != dismissedPullRequests {
         dismissedPullRequests = keptPullRequestDismissals
         DismissalKeys.save(keptPullRequestDismissals, key: DismissalKeys.dismissedPullRequests, defaults: defaults)
       }
       if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
-        baseline.snapshot.viewerLogin == snapshot.viewerLogin
+        baseline.reviewRequestScope == reviewRequestScope, baseline.snapshot.viewerLogin == snapshot.viewerLogin
       {
         post(
           notificationEvents(
             previous: baseline.snapshot, current: snapshot, dismissedPullRequests: dismissedPullRequests,
-            teamAuthorFilters: teamAuthorFilters))
-        githubNotificationBaseline = (keepingMissingPullRequests(of: baseline.snapshot, in: snapshot), githubOrganizations)
+            teamAuthorFilters: teamAuthorFilters, reviewRequestScope: reviewRequestScope))
+        githubNotificationBaseline = (
+          keepingMissingPullRequests(of: baseline.snapshot, in: snapshot), githubOrganizations, reviewRequestScope
+        )
       } else {
-        githubNotificationBaseline = (snapshot, githubOrganizations)
+        githubNotificationBaseline = (snapshot, githubOrganizations, reviewRequestScope)
       }
     case .failure(let failure):
       githubStatus = .failed(failure)
@@ -398,6 +420,13 @@ struct UndoableDismissal: Equatable {
     GitHubSettingsKeys.saveTeamAuthorLogins(teamAuthorLogins, defaults: defaults)
   }
 
+  private func saveReviewRequestScope() {
+    #if DEBUG
+      if demoScenario != nil { return }
+    #endif
+    defaults.set(reviewRequestScope.rawValue, forKey: GitHubSettingsKeys.reviewRequestScope)
+  }
+
   #if DEBUG
     // The notify scenario shows its changed data from the first refresh on. Only that refresh posts.
     private func applyDemoChanges(_ scenario: DemoScenario) {
@@ -409,7 +438,7 @@ struct UndoableDismissal: Equatable {
         post(
           notificationEvents(
             previous: previousSnapshot, current: changedSnapshot, dismissedPullRequests: dismissedPullRequests,
-            teamAuthorFilters: teamAuthorFilters))
+            teamAuthorFilters: teamAuthorFilters, reviewRequestScope: reviewRequestScope))
         post(notificationEvents(previous: previousPipelines, current: changedPipelines, dismissedPipelines: dismissedPipelines))
       }
       githubSnapshot = changedSnapshot
@@ -440,7 +469,8 @@ struct UndoableDismissal: Equatable {
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
       jiraTickets: jiraTickets ?? [],
       pipelines: pipelines ?? [], dismissedPipelines: dismissedPipelines, dismissedPullRequests: dismissedPullRequests,
-      mergedPullRequests: githubSnapshot?.recentlyMergedPullRequests ?? [], teamAuthorFilters: teamAuthorFilters)
+      mergedPullRequests: githubSnapshot?.recentlyMergedPullRequests ?? [], teamAuthorFilters: teamAuthorFilters,
+      reviewRequestScope: reviewRequestScope)
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }

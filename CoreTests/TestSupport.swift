@@ -35,3 +35,19 @@ func localStartOfDayTimestamp(_ date: Date) -> String {
   formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
   return formatter.string(from: Calendar.current.startOfDay(for: date))
 }
+
+// The GitHub fixture as the search in this request returns it. In the fixture only #412 asks the viewer by name, so a
+// direct only search leaves out the other review requests.
+func githubFixture(answering request: URLRequest) throws -> Data {
+  let fixtureData = try fixture("github-search.json")
+  guard let body = request.httpBody, String(decoding: body, as: UTF8.self).contains("user-review-requested:@me") else {
+    return fixtureData
+  }
+  var response = try JSONSerialization.jsonObject(with: fixtureData) as! [String: Any]
+  var data = response["data"] as! [String: Any]
+  var requested = data["requested"] as! [String: Any]
+  requested["nodes"] = (requested["nodes"] as! [[String: Any]]).filter { $0["number"] as? Int == 412 }
+  data["requested"] = requested
+  response["data"] = data
+  return try JSONSerialization.data(withJSONObject: response)
+}

@@ -30,11 +30,10 @@ private func temporaryDefaults(suiteName: String = "tower-store-\(UUID().uuidStr
 
 // Answers each source by host, so one stub serves the whole refresh.
 private func routingTransport(github: Int = 200, jira: Int = 200, circleci: Int = 200) throws -> StubTransport {
-  let githubData = try fixture("github-search.json")
   let jiraData = try fixture("jira-search.json")
   return StubTransport { request in
     switch request.url?.host() {
-    case "api.github.com": (githubData, github)
+    case "api.github.com": (try githubFixture(answering: request), github)
     case "acme.atlassian.net": (jiraData, jira)
     default: (Data(#"{"items":[]}"#.utf8), circleci)
     }
@@ -602,5 +601,46 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     #expect(store.filterableTeamSlugs == ["web-core"])
     store.teamAuthorLogins = ["platform": []]
     #expect(store.filterableTeamSlugs == ["platform", "web-core"])
+  }
+}
+
+@MainActor struct QueueStoreReviewRequestScopeTests {
+  @Test func directOnlyHidesTeamRequestsAtOnceAndKeepsTheChoiceForTheNextLaunch() async throws {
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: try routingTransport(), defaults: defaults)
+    await store.refresh()
+    #expect(reviewItems(store).contains { !$0.children.isEmpty })
+
+    store.reviewRequestScope = .directOnly
+    #expect(reviewItems(store).map(\.id) == ["pr:ui-kit#412"])
+    let relaunchedStore = makeStore(transport: try routingTransport(), defaults: defaults)
+    #expect(relaunchedStore.reviewRequestScope == .directOnly)
+  }
+
+  @Test func directOnlyRefreshAsksForRequestsThatNameTheViewer() async throws {
+    let transport = try routingTransport()
+    let store = makeStore(transport: transport)
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    let githubBodies = transport.requests.filter { $0.url?.host() == "api.github.com" }
+      .map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+    #expect(githubBodies.contains { $0.contains("is:pr is:open user-review-requested:@me archived:false") })
+  }
+
+  @Test func directOnlyRefreshKeepsTheDismissalOfATeamRequest() async throws {
+    let store = makeStore(transport: try routingTransport())
+    await store.refresh()
+    let botGroup = try #require(reviewItems(store).first { !$0.children.isEmpty })
+    store.dismiss(try #require(botGroup.children.first))
+    let dismissedPullRequests = store.dismissedPullRequests
+
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    #expect(store.dismissedPullRequests == dismissedPullRequests)
+    store.reviewRequestScope = .directAndTeam
+    await store.refresh()
+    #expect(!reviewItems(store).contains { $0.id == botGroup.id })
   }
 }

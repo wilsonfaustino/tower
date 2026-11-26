@@ -264,6 +264,23 @@ private final class SettingsBox: @unchecked Sendable {
     #expect(notifier.postedEvents.isEmpty)
   }
 
+  // A direct only fetch leaves out team requests, so the next fetch for every request would see them as new.
+  @Test func newReviewRequestScopeStartsANewBaseline() async throws {
+    let transport = StubTransport { request in
+      request.url?.host() == "api.github.com"
+        ? (try githubFixture(answering: request), 200) : (Data(#"{"items":[]}"#.utf8), 200)
+    }
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: transport, notifier: notifier)
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    store.reviewRequestScope = .directAndTeam
+    await store.refresh()
+    await store.refresh()
+    #expect(store.githubSnapshot?.reviewRequests.count == 3)
+    #expect(notifier.postedEvents.isEmpty)
+  }
+
   @Test func pullRequestMissingFromOneResponsePostsNothingWhenItReturns() async throws {
     let fullBody = try githubData(approvals: 1)
     var response = try #require(try JSONSerialization.jsonObject(with: fullBody) as? [String: Any])
