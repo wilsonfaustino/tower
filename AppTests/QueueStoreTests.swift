@@ -575,3 +575,32 @@ private func cacheDirectoryWithFailedPipeline() throws -> URL {
     #expect(variables == unfilteredVariables)
   }
 }
+
+@MainActor struct QueueStoreTeamAuthorFilterTests {
+  // In the fixture, the only open web-core request is on a Dependabot PR. rui's PR #412 asks the viewer directly.
+  @Test func teamFilterChangesTheReviewRowsAtOnceAndKeepsThemForTheNextLaunch() async throws {
+    let cacheDirectory = temporaryDirectory()
+    let suiteName = "tower-store-\(UUID().uuidString)"
+    let defaults = temporaryDefaults(suiteName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    await store.refresh()
+    #expect(reviewItems(store).contains { !$0.children.isEmpty })
+
+    store.teamAuthorFilterText = ["web-core": "ana"]
+    #expect(reviewItems(store).map(\.id) == ["pr:ui-kit#412"])
+
+    let relaunchedStore = makeStore(transport: try routingTransport(), cacheDirectory: cacheDirectory, defaults: defaults)
+    relaunchedStore.loadCache()
+    #expect(relaunchedStore.teamAuthorFilterText == ["web-core": "ana"])
+    #expect(reviewItems(relaunchedStore).map(\.id) == ["pr:ui-kit#412"])
+  }
+
+  @Test func filteredTeamStaysListedWithNoOpenRequest() async throws {
+    let store = makeStore(transport: try routingTransport())
+    await store.refresh()
+    #expect(store.filterableTeamSlugs == ["web-core"])
+    store.teamAuthorFilterText = ["platform": ""]
+    #expect(store.filterableTeamSlugs == ["platform", "web-core"])
+  }
+}

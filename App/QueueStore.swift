@@ -34,9 +34,20 @@ enum CircleCISettingsKeys {
 
 enum GitHubSettingsKeys {
   static let organizations = "githubOrganizations"
+  // The raw Settings text per team slug. Tower parses it when it builds the queue.
+  static let teamAuthorFilters = "githubTeamAuthorFilters"
 
   static func loadOrganizations(defaults: UserDefaults = .standard) -> [String] {
     (defaults.string(forKey: organizations) ?? "").split(whereSeparator: \.isNewline).map(String.init)
+  }
+
+  static func loadTeamAuthorFilterText(defaults: UserDefaults) -> [String: String] {
+    guard let data = defaults.data(forKey: teamAuthorFilters) else { return [:] }
+    return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+  }
+
+  static func saveTeamAuthorFilterText(_ textByTeam: [String: String], defaults: UserDefaults) {
+    defaults.set(try? JSONEncoder().encode(textByTeam), forKey: teamAuthorFilters)
   }
 }
 
@@ -83,6 +94,13 @@ struct UndoableDismissal: Equatable {
   private(set) var dismissedPipelines: Set<PipelineDismissal>
   private(set) var dismissedPullRequests: Set<PullRequestDismissal>
   private(set) var lastDismissal: UndoableDismissal?
+  // Team slug to the logins typed in Settings. A team with no entry has no filter.
+  var teamAuthorFilterText: [String: String] {
+    didSet {
+      saveTeamAuthorFilterText()
+      rebuild()
+    }
+  }
   let undoDuration: Duration
   private var undoExpiryTask: Task<Void, Never>?
 
@@ -133,7 +151,16 @@ struct UndoableDismissal: Equatable {
     self.undoDuration = undoDuration
     dismissedPipelines = DismissalKeys.load(DismissalKeys.dismissedPipelines, defaults: defaults)
     dismissedPullRequests = DismissalKeys.load(DismissalKeys.dismissedPullRequests, defaults: defaults)
+    teamAuthorFilterText = GitHubSettingsKeys.loadTeamAuthorFilterText(defaults: defaults)
   }
+
+  // A team with a filter stays listed when no request for it is open, so its filter can still change.
+  var filterableTeamSlugs: [String] {
+    let requestedTeamSlugs = (githubSnapshot?.reviewRequests ?? []).flatMap(\.requestedTeamSlugs)
+    return Set(requestedTeamSlugs).union(teamAuthorFilterText.keys).sorted()
+  }
+
+  private var teamAuthorFilters: TeamAuthorFilters { TeamAuthorFilters(rawLoginsByTeam: teamAuthorFilterText) }
 
   var todaySummary: (reviews: Int, merges: Int)? {
     githubSnapshot.map { ($0.reviewsSubmittedToday, $0.mergedToday) }
@@ -233,7 +260,10 @@ struct UndoableDismissal: Equatable {
       if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
         baseline.snapshot.viewerLogin == snapshot.viewerLogin
       {
-        post(notificationEvents(previous: baseline.snapshot, current: snapshot, dismissedPullRequests: dismissedPullRequests))
+        post(
+          notificationEvents(
+            previous: baseline.snapshot, current: snapshot, dismissedPullRequests: dismissedPullRequests,
+            teamAuthorFilters: teamAuthorFilters))
         githubNotificationBaseline = (keepingMissingPullRequests(of: baseline.snapshot, in: snapshot), githubOrganizations)
       } else {
         githubNotificationBaseline = (snapshot, githubOrganizations)
@@ -351,6 +381,13 @@ struct UndoableDismissal: Equatable {
     rebuild()
   }
 
+  private func saveTeamAuthorFilterText() {
+    #if DEBUG
+      if demoScenario != nil { return }
+    #endif
+    GitHubSettingsKeys.saveTeamAuthorFilterText(teamAuthorFilterText, defaults: defaults)
+  }
+
   #if DEBUG
     // The notify scenario shows its changed data from the first refresh on. Only that refresh posts.
     private func applyDemoChanges(_ scenario: DemoScenario) {
@@ -359,7 +396,10 @@ struct UndoableDismissal: Equatable {
       else { return }
       if !hasPostedDemoChanges {
         hasPostedDemoChanges = true
-        post(notificationEvents(previous: previousSnapshot, current: changedSnapshot, dismissedPullRequests: dismissedPullRequests))
+        post(
+          notificationEvents(
+            previous: previousSnapshot, current: changedSnapshot, dismissedPullRequests: dismissedPullRequests,
+            teamAuthorFilters: teamAuthorFilters))
         post(notificationEvents(previous: previousPipelines, current: changedPipelines, dismissedPipelines: dismissedPipelines))
       }
       githubSnapshot = changedSnapshot
@@ -390,7 +430,7 @@ struct UndoableDismissal: Equatable {
       reviewRequests: githubSnapshot?.reviewRequests ?? [],
       jiraTickets: jiraTickets ?? [],
       pipelines: pipelines ?? [], dismissedPipelines: dismissedPipelines, dismissedPullRequests: dismissedPullRequests,
-      mergedPullRequests: githubSnapshot?.recentlyMergedPullRequests ?? [])
+      mergedPullRequests: githubSnapshot?.recentlyMergedPullRequests ?? [], teamAuthorFilters: teamAuthorFilters)
     sections = buildQueue(input, now: Date())
     menuBarState = MenuBarState(sections: sections)
   }
