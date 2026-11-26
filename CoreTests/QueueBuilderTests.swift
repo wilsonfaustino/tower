@@ -225,6 +225,17 @@ struct QueueBuilderTests {
     #expect(allItems.allSatisfy { $0.details == nil })
   }
 
+  @Test func botRowUnderDirectOnlyOpensADirectOnlySearch() throws {
+    let sections = queue(
+      reviewRequests: [
+        pullRequest(repository: "api-config", number: 9, author: "dependabot", authorIsBot: true,
+                    requestedReviewerLogins: ["me"], reviewRequestedHoursAgo: 30)
+      ],
+      reviewRequestScope: .directOnly)
+    let botItem = try #require(items(sections, .review).first { $0.id == "bots:dependabot" })
+    #expect(botItem.url == URL(string: "https://github.com/pulls?q=is%3Apr%20is%3Aopen%20user-review-requested%3A%40me%20author%3Aapp%2Fdependabot"))
+  }
+
   @Test func botReviewRequestsCollapseIntoOneRow() throws {
     let sections = queue(reviewRequests: [
       pullRequest(repository: "api-notifier", number: 7, author: "dependabot", authorIsBot: true,

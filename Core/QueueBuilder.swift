@@ -70,7 +70,9 @@ public func buildQueue(_ input: QueueInput, now: Date) -> [QueueSection] {
   let botPullRequestsByAuthor = Dictionary(grouping: openReviewRequests.filter(\.authorIsBot), by: \.author)
   for (botLogin, pullRequests) in botPullRequestsByAuthor {
     itemsByKind[.review, default: []].append(
-      botReviewItem(botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin, now: now))
+      botReviewItem(
+        botLogin: botLogin, pullRequests: pullRequests, viewerLogin: input.viewerLogin,
+        reviewRequestScope: input.reviewRequestScope, now: now))
   }
   if !waitingRows.isEmpty {
     itemsByKind[.waiting] = groupedByRepository(waitingRows, authoredPullRequests: input.authoredPullRequests, now: now)
@@ -195,7 +197,9 @@ private func gitHubPullsSearchURL(_ searchQuery: String) -> URL {
 }
 
 // Bot PRs (Dependabot, Renovate) collapse into one row per bot that opens a GitHub search.
-private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewerLogin: String, now: Date) -> QueueItem {
+private func botReviewItem(
+  botLogin: String, pullRequests: [PullRequest], viewerLogin: String, reviewRequestScope: ReviewRequestScope, now: Date
+) -> QueueItem {
   let oldestRequest = pullRequests.map { $0.reviewRequestedAt ?? $0.updatedAt }.min() ?? now
   let repositoryCount = Set(pullRequests.map(\.repository)).count
   let displayName = botLogin.replacingOccurrences(of: "[bot]", with: "").capitalized
@@ -204,7 +208,7 @@ private func botReviewItem(botLogin: String, pullRequests: [PullRequest], viewer
     id: "bots:\(botLogin)",
     title: "\(pullRequests.count) \(displayName) \(pullRequests.count == 1 ? "PR" : "PRs")", tag: "bot",
     meta: "\(repositoryCount) \(repositoryCount == 1 ? "repo" : "repos") · \(shortAge(from: oldestRequest, now: now))",
-    url: gitHubPullsSearchURL("is:pr is:open review-requested:@me author:app/\(botLogin)"),
+    url: gitHubPullsSearchURL("is:pr is:open \(reviewRequestScope.searchQualifier) author:app/\(botLogin)"),
     symbol: .review, badge: nil, sortDate: oldestRequest, children: children)
 }
 
