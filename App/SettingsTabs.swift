@@ -145,7 +145,7 @@ struct SettingsGitHubTab: View {
     }
   }
 
-  // A new scope sends a new search, so it refreshes at once.
+  // A new scope sends a new search, so it refreshes now, or right after the refresh that is running.
   private var reviewRequestScope: Binding<ReviewRequestScope> {
     Binding {
       store.reviewRequestScope

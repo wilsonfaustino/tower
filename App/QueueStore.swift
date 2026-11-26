@@ -101,6 +101,7 @@ struct UndoableDismissal: Equatable {
   private(set) var jiraFetchedAt: Date?
   private(set) var circleciFetchedAt: Date?
   private(set) var isRefreshing = false
+  private var isRefreshQueued = false
   private(set) var jiraTickets: [JiraTicket]?
   private(set) var pipelines: [Pipeline]?
   private(set) var dismissedPipelines: Set<PipelineDismissal>
@@ -256,9 +257,20 @@ struct UndoableDismissal: Equatable {
         return
       }
     #endif
-    guard !isRefreshing else { return }
+    // A refresh asked for during a fetch can carry new settings, so it runs once that fetch ends.
+    guard !isRefreshing else {
+      isRefreshQueued = true
+      return
+    }
     isRefreshing = true
     defer { isRefreshing = false }
+    repeat {
+      isRefreshQueued = false
+      await fetchSources()
+    } while isRefreshQueued
+  }
+
+  private func fetchSources() async {
     let now = Date()
     let githubOrganizations = loadGitHubOrganizations()
     let reviewRequestScope = reviewRequestScope
@@ -287,7 +299,10 @@ struct UndoableDismissal: Equatable {
         dismissedPullRequests = keptPullRequestDismissals
         DismissalKeys.save(keptPullRequestDismissals, key: DismissalKeys.dismissedPullRequests, defaults: defaults)
       }
-      if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
+      if self.reviewRequestScope != reviewRequestScope {
+        // The scope changed during the fetch. The next refresh sets a new baseline for the new scope.
+        githubNotificationBaseline = nil
+      } else if let baseline = githubNotificationBaseline, baseline.organizations == githubOrganizations,
         baseline.reviewRequestScope == reviewRequestScope, baseline.snapshot.viewerLogin == snapshot.viewerLogin
       {
         post(

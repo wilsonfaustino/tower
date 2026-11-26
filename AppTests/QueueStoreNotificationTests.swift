@@ -64,6 +64,44 @@ private func circleciTransport(_ response: CircleCIResponse) throws -> StubTrans
   }
 }
 
+// The first summary request gets no review requests. The second waits until the test opens the gate. Only that request
+// reads the gate, because two readers of one AsyncStream crash the test process.
+private final class GatedGitHubTransport: HTTPTransport, @unchecked Sendable {
+  private let lock = NSLock()
+  private var recordedSummaryBodies: [String] = []
+  private let gate: AsyncStream<Void>
+  let openGate: AsyncStream<Void>.Continuation
+  private let dataWithoutReviewRequests: Data
+
+  init() throws {
+    (gate, openGate) = AsyncStream<Void>.makeStream()
+    var response = try #require(try JSONSerialization.jsonObject(with: fixture("github-search.json")) as? [String: Any])
+    var data = try #require(response["data"] as? [String: Any])
+    var requested = try #require(data["requested"] as? [String: Any])
+    requested["nodes"] = [Any]()
+    data["requested"] = requested
+    response["data"] = data
+    dataWithoutReviewRequests = try JSONSerialization.data(withJSONObject: response)
+  }
+
+  var summaryBodies: [String] { lock.withLock { recordedSummaryBodies } }
+
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    guard request.url?.host() == "api.github.com" else { return (Data(#"{"items":[]}"#.utf8), response) }
+    let body = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+    let summaryCount = lock.withLock {
+      if body.contains("requestedQuery") { recordedSummaryBodies.append(body) }
+      return recordedSummaryBodies.count
+    }
+    if summaryCount == 1 { return (dataWithoutReviewRequests, response) }
+    if summaryCount == 2 && body.contains("requestedQuery") {
+      for await _ in gate {}
+    }
+    return (try githubFixture(answering: request), response)
+  }
+}
+
 // The test changes the values only between refreshes, so no lock is needed.
 private final class SettingsBox: @unchecked Sendable {
   var organizations: [String] = []
@@ -71,7 +109,7 @@ private final class SettingsBox: @unchecked Sendable {
 }
 
 @MainActor private func makeStore(
-  transport: StubTransport, notifier: FakeNotifier, cacheDirectory: URL? = nil,
+  transport: HTTPTransport, notifier: FakeNotifier, cacheDirectory: URL? = nil,
   enabledKinds: Set<NotificationEventKind> = Set(NotificationEventKind.allCases), settings: SettingsBox = SettingsBox()
 ) -> QueueStore {
   QueueStore(
@@ -278,6 +316,23 @@ private final class SettingsBox: @unchecked Sendable {
     await store.refresh()
     await store.refresh()
     #expect(store.githubSnapshot?.reviewRequests.count == 3)
+    #expect(notifier.postedEvents.isEmpty)
+  }
+
+  // Without the scope check, the fetch for the old scope would post the requests that were not in the first fetch.
+  @Test func scopeChangeDuringAFetchRefreshesAgainWithTheNewScopeAndPostsNothing() async throws {
+    let transport = try GatedGitHubTransport()
+    let notifier = FakeNotifier()
+    let store = makeStore(transport: transport, notifier: notifier)
+    await store.refresh()
+    let staleRefresh = Task { await store.refresh() }
+    for _ in 0..<200 where transport.summaryBodies.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
+    store.reviewRequestScope = .directOnly
+    await store.refresh()
+    transport.openGate.finish()
+    await staleRefresh.value
+    #expect(transport.summaryBodies.count == 3)
+    #expect(transport.summaryBodies.last?.contains("user-review-requested:@me") == true)
     #expect(notifier.postedEvents.isEmpty)
   }
 
